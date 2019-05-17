@@ -13,8 +13,8 @@ with the names of routing_olsr-inria.h and routing_olsr-inria.cpp,
 located in .\qualnet\5.0\libraries\wireless\src\
 should be modifed:
 
-usloteorc/code/original/  the codes before modification
+usloteorc/code/original/ --  the codes before modification
 
-usloteorc/code/modified/  the codes after modification
+usloteorc/code/modified/ --  the codes after modification
 
 the detailed modification, or the implementation of the proposed new algorithm, can be studied by comparing these two folders
