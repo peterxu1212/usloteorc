@@ -16,3 +16,5 @@ usloteorc/code/original/ --  the codes before modification
 usloteorc/code/modified/ --  the codes after modification
 
 the detailed modification, or the implementation of the proposed new algorithm, can be studied by comparing these two folders
+
+usloteorc/code/for_compare/ -- can be used to compare the code diff
