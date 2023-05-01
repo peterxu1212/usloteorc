@@ -24,17 +24,17 @@
  *                          Anis.Laouiti@inria.fr, INRIA Rocquencourt.
  *
  * Ce logiciel informatique est disponible aux conditions
- * usuelles dans la recherche, c'est-à-dire qu'il peut
- * être utilisé, copié, modifié, distribué à l'unique
- * condition que ce texte soit conservé afin que
+ * usuelles dans la recherche, c'est-?dire qu'il peut
+ * être utilis? copi? modifi? distribu??l'unique
+ * condition que ce texte soit conserv?afin que
  * l'origine de ce logiciel soit reconnue.
  * Le nom de l'Institut National de Recherche en Informatique
  * et en Automatique (INRIA), ou d'une personne morale
- * ou physique ayant participé à l'élaboration de ce logiciel ne peut
- * être utilisé sans son accord préalable explicite.
+ * ou physique ayant particip??l'élaboration de ce logiciel ne peut
+ * être utilis?sans son accord préalable explicite.
  *
  * Ce logiciel est fourni tel quel sans aucune garantie,
- * support ou responsabilité d'aucune sorte.
+ * support ou responsabilit?d'aucune sorte.
  * Certaines parties de ce logiciel sont dérivées de sources developpees par
  * University of California, Berkeley et ses contributeurs couvertes
  * par des copyrights.
@@ -136,6 +136,25 @@
 #include <string.h>
 #include <limits.h>
 
+//Peter Modified for debug
+//#include "windows.h"
+
+//Peter Add for debug
+#define DEBUG_NODE_ID 0
+#define DEBUG_ENTRY_ID 34
+
+
+#define INFO_SIZE 2048
+#define RT_SIZE (24 * INFO_SIZE)
+
+#define RT_SIZE_THIN (16 * INFO_SIZE)
+
+#define MAX_PATH 260
+#define ZeroMemory(Destination,Length) memset((Destination),0,(Length))
+#define max(x, y) (((x) < (y)) ? (y) : (x))
+#define min(a,b)    (((a) < (b)) ? (a) : (b))
+
+
 #include "api.h"
 #include "app_util.h"
 #include "network_ip.h"
@@ -144,8 +163,456 @@
 
 #include "routing_olsr-inria.h"
 
+//Modified by Peter
 #define DEBUG          0
-#define DEBUG_OUTPUT   0
+#define DEBUG_OUTPUT   1
+
+//Modified by Peter to support disjoint path
+#define _OLSR_DISJOINTPATH
+#define DISJOINT_APPLY_THRESHOLD 4
+
+//total final routers number for every destination
+#define _OLSR_ROUTES_LIMIT 2
+
+
+//temperary router number limitation during algorithm early phase
+#define _OLSR_TEMP_ROUTES_LIMIT 5
+//#define _OLSR_TEMP_2HOP_ROUTES_LIMIT 5
+
+#define MAX_DIFFEERENT_ROUTE_HOP_COUNT_DIFFERENCE 8
+#define MAX_DIFFEERENT_ROUTE_HOP_COUNT_DIFFERENCE_TIMES 1.5
+
+#define MAX_COST 9999
+
+//Peter Added to support symmetric topologylasttable
+
+//SYMMETRIC TOPOLOGY TABLE
+
+extern int SYMMETRIC_TOPOLOGY_TABLE;
+
+//for debug
+int g_iSymmetricDifferentCode = 1;
+int g_iTopologyTableUpdateCount = 1;
+
+//Peter Add: for same route support
+
+int g_iToAchieveSameRoute = 1;
+
+enum RouteEntryType
+{ 
+	NOT_ALLOWED, 
+	//ALLOWED_BUT_NOT_TO_WORKING_SET, 
+	ALLOWED_NORMAL
+};
+
+
+extern int OLSR_FORWARDIND_PATH_DEBUG_TRACE;
+
+extern int FORWARD_WITH_PURE_ROUTE_TABLE;
+
+// Peter Modified and added to suppoer olsr multipath
+extern int _OLSR_MULTIPATH;
+
+extern int _TEST_TIME_COMPLEXITY;
+
+int g_iSimplifiedTimeTest = 1;
+
+int g_iTestRCSimAndRealTime = 0;
+
+extern char * g_szOutputRouteChaseFileName;
+
+int g_iSpecailDebug = 0;
+
+int g_iRunTimeCompare = 0;
+
+int g_iChaseRouteTable = 0;
+int g_iChaseRouteTableSkipRouteLast = 1;
+
+
+int g_iNeighborChangeCnt = -1;
+int g_iTopologyChangeCnt = -1;
+int g_iBothChg = -1;
+
+//for neighbor chg
+int g_iNeighborChgByOlsrInsertMidAlias = -1;
+//int g_iNeighborChgByOlsrUpdateNeighborStatus = -1;
+int g_iNeighborChgByOlsrTimeoutLinkEntry = -1;
+int g_iNeighborChgByOlsrTimeout2HopNeighbors = -1;
+int g_iNeighborChgByOlsrProcessNeighborsInHelloMsg = -1;
+int g_iNeighborChgByOlsrProcessReceivedHello = -1;
+
+
+
+//for topology chg
+
+int g_iTopologyChgByOlsrInsertMidAlias = -1;
+int g_iTopologyChgByOlsrUpdateHnaEntry = -1;
+//int g_iTopologyChgByOlsrUpdateNeighborStatus = -1;
+int g_iTopologyChgByOlsrTimeout2HopNeighbors = -1;
+int g_iTopologyChgByOlsrUpdateLastTable = -1;
+int g_iTopologyChgByOlsrTimeoutTopologyTable = -1;
+int g_iTopologyChgByOlsrProcessNeighborsInHelloMsg = -1;
+int g_iTopologyChgByOlsrProcessReceivedHello = -1;
+int g_iTopologyChgByOlsrProcessReceivedMid = -1;
+int g_iTopologyChgByOlsrProcessReceivedTc = -1;
+
+int g_iTopologyChgByOlsrProcessReceivedTcAddNew = -1;
+int g_iTopologyChgByOlsrProcessReceivedTcDeleteOld = -1;
+
+int g_iTopologyChgApplyARC = -1;
+
+int g_iNeighborhoodChgApplyARC = -1;
+
+int g_iTopologyChgApplyNormal = -1;
+
+int g_iTopologyChgApplyARC_With_Delete = -1;
+int g_iTopologyChgApplyARC_With_Delete_Success = -1;
+int g_iTopologyChgApplyARC_With_Delete_Failed_Cause_Rediscovery = -1;
+
+extern int  g_OverallipOutNoRoutes;
+
+char g_szText[4096];
+
+
+//char g_szTextRTPre[16384];
+
+//char g_szTextRTMiddle[16384];
+
+char g_szTextRT[16384];
+
+
+
+
+/*
+int NODE_ID_FOR_TEST_OUTER_ANGLE = 1 ;
+int NODE_ID_FOR_TEST_OUTER_EDGE = 19 ;
+int NODE_ID_FOR_TEST_MIDDLE_ANGLE = 8 ;
+int NODE_ID_FOR_TEST_MIDDLE_EDGE = 10 ;
+int NODE_ID_FOR_TEST_CENTER = 16 ;
+*/
+
+int NODE_ID_FOR_TEST_START = 0;
+int NODE_ID_FOR_TEST_END = 0;
+char * g_szRoot = NULL;
+
+
+int g_iKeepOrder = 1;
+
+//#define File_Buf_Size  1024 * 1024 * 100
+//char * g_strTxt = NULL;
+
+
+#define VALID_SIMULATE_CHECK_TIME -1
+
+
+extern int g_iAccumulativeRouteCalculation;
+int g_iMobilitySpeed = 0;
+
+
+
+//Peter added
+
+int CmpBreakPoint(Node *node)
+{
+
+	
+
+	//char szTextRT[MAX_STRING_LENGTH];
+	
+
+	char timeStr[MAX_STRING_LENGTH];
+	TIME_PrintClockInSecond(getSimTime(node), timeStr, node);
+
+	double dSimTime = atof(timeStr);
+
+
+
+	RoutingOlsr* olsr = (RoutingOlsr *) node->appData.olsr;
+
+
+	int iNeighborChg = 0;
+
+	if (olsr->changes_neighborhood)
+	{
+		iNeighborChg = 1;
+	}
+
+	int iRTAddOrDelete = 0;
+	if (olsr->recent_add_list != NULL)
+	{
+		iRTAddOrDelete = iRTAddOrDelete + 1;
+	}
+
+	if (olsr->recent_delete_list != NULL)
+	{
+
+		iRTAddOrDelete = iRTAddOrDelete + 2;
+	}
+
+	
+	if (olsr->pszInfo != NULL)
+	{
+		memset(olsr->pszInfo, 0, INFO_SIZE * sizeof(char));
+	
+	
+		//RoutingOlsr* olsr = (RoutingOlsr *) node->appData.olsr;
+
+		tco_node_addr * tco_add_list_tmp = olsr->recent_add_list;
+
+
+		sprintf(olsr->pszInfo, "For node->nodeId = %d, iRTAddOrDelete = %d, olsr->naRecentChangedAddressByTC = %d, iNeighborChg = %d, olsr->bNeighborChgCausedRemoveFromHigherHop = %d, at time %f S: \n", 
+			node->nodeId, iRTAddOrDelete, olsr->naRecentChangedAddressByTC, iNeighborChg, olsr->bNeighborChgCausedRemoveFromHigherHop, dSimTime);
+
+
+		sprintf(olsr->pszInfo, "%sadd_list: ", olsr->pszInfo);
+
+		while (tco_add_list_tmp != NULL)
+		{
+
+			sprintf(olsr->pszInfo, "%s %d;  ", olsr->pszInfo, tco_add_list_tmp->nid);
+
+			tco_add_list_tmp = tco_add_list_tmp->next;
+		}
+
+		sprintf(olsr->pszInfo, "%s\n", olsr->pszInfo);
+
+		tco_node_addr * tco_delete_list_tmp = olsr->recent_delete_list;
+
+
+
+		sprintf(olsr->pszInfo, "%sdelete_list: ", olsr->pszInfo);
+
+		while (tco_delete_list_tmp != NULL)
+		{
+
+			sprintf(olsr->pszInfo, "%s %d;  ", olsr->pszInfo, tco_delete_list_tmp->nid);
+
+			tco_delete_list_tmp = tco_delete_list_tmp->next;
+		}
+	}
+	
+
+	
+
+	if (node->nodeId == DEBUG_NODE_ID && iRTAddOrDelete == 2 && olsr->naRecentChangedAddressByTC == 23 && iNeighborChg == 0 
+		&& olsr->bNeighborChgCausedRemoveFromHigherHop == 0 && dSimTime > 14 && dSimTime < 16)
+	{
+		//DebugBreak();
+		int i = 0;
+		i = i + 2;
+
+		//g_iSpecailDebug = 1;
+
+		//g_iRunTimeCompare = 1;
+
+
+	}
+	else
+	{
+		//g_iSpecailDebug = 0;
+	}
+
+	
+
+
+
+	return iRTAddOrDelete;
+}
+
+void PUSH_BACK_CURRENT_ITEM(RoutingOlsr *olsr, tc_trace_item tti)
+{
+	olsr->iTcItemCnt++;
+	if (olsr->iTcItemCnt > olsr->iTcItemSize)
+	{
+		//reallocate memory
+		int iNewSize = olsr->iTcItemSize * 2;
+		tc_trace_item * ptti = new tc_trace_item[iNewSize];
+		memset(ptti, 0, iNewSize * sizeof(tc_trace_item));
+		memcpy(ptti, olsr->pvt_TTIs, olsr->iTcItemSize * sizeof(tc_trace_item));
+		delete [] olsr->pvt_TTIs;
+		olsr->pvt_TTIs = ptti;
+		olsr->iTcItemSize = iNewSize;
+	}
+	memcpy(&(olsr->pvt_TTIs[olsr->iTcItemCnt - 1]), &tti, sizeof(tc_trace_item));
+}
+
+
+
+
+//bool is_in_tco_node_addr_set(tco_node_addr * tna_set, NodeAddress nodeId)
+
+void insert_into_tco_node_addr_set(tco_node_addr ** ptna_set, NodeAddress nodeId)
+{
+	tco_node_addr * node_addr_new;
+
+	
+	if (*ptna_set == NULL)
+	{
+		//tna_set = node_addr_new;
+		*ptna_set = (tco_node_addr *)MEM_malloc(sizeof(tco_node_addr));
+		memset(*ptna_set, 0, sizeof(tco_node_addr));
+
+		(*ptna_set)->nid = nodeId;
+		(*ptna_set)->next = NULL;
+
+	}
+	else
+	{
+
+		node_addr_new = (tco_node_addr *)MEM_malloc(sizeof(tco_node_addr));
+		memset(node_addr_new, 0, sizeof(tco_node_addr));
+
+		node_addr_new->nid = nodeId;
+		node_addr_new->next = NULL;
+
+		node_addr_new->next = (*ptna_set)->next;
+		(*ptna_set)->next = node_addr_new;
+	}
+
+	
+	
+}
+
+bool remove_from_tco_node_addr_set(tco_node_addr ** ptna_set, NodeAddress nodeId)
+{
+	bool bExist = false;
+	
+	tco_node_addr* dest_list;
+    tco_node_addr* dest_list_tmp;
+
+    
+    dest_list = *ptna_set;
+    *ptna_set = NULL;
+
+    while (dest_list != NULL)
+    {
+		if (dest_list->nid == nodeId)
+        {
+            // address matches, remove from the destination list
+            dest_list_tmp = dest_list;
+            dest_list = dest_list->next;
+            MEM_free(dest_list_tmp);
+
+			bExist = true;
+        }
+        else
+        {
+            dest_list_tmp = dest_list;
+            dest_list = dest_list->next;
+            dest_list_tmp->next = *ptna_set;
+            *ptna_set = dest_list_tmp;
+        }
+    }
+
+	return bExist;
+
+}
+
+
+bool exist_in_tco_node_addr_set(tco_node_addr ** ptna_set, NodeAddress nodeId)
+{
+	bool bExist = false;
+
+	tco_node_addr* dest_list = NULL;
+	//tco_node_addr* dest_list_tmp;
+
+
+	dest_list = *ptna_set;
+	//*ptna_set = NULL;
+
+	while (dest_list != NULL)
+	{
+				
+		if (dest_list->nid == nodeId)
+		{
+			
+
+			bExist = true;
+			break;
+		}
+
+		dest_list = dest_list->next;
+	
+	}
+
+	return bExist;
+
+}
+
+
+
+void clear_tco_node_addr_set(tco_node_addr ** ptna_set)
+{
+	
+    tco_node_addr* node_addr_set_tmp;
+
+    while ((*ptna_set) != NULL)
+    {
+
+		//DebugBreak();
+
+        node_addr_set_tmp = (*ptna_set);
+        (*ptna_set) = (*ptna_set)->next;
+        MEM_free(node_addr_set_tmp);
+    }
+}
+
+//Peter Modified for disjoint path
+//_OLSR_DISJOINTPATH
+static
+void OLSRv1UpdateForwardingTableWithDisjointPath(Node *node, rt_entry* prte)
+{
+
+
+	if (prte->rt_dst.networkType == NETWORK_IPV6)
+	{
+
+		/*
+		Ipv6UpdateForwardingTable(
+		node,
+		GetIPv6Address(prte->rt_dst),
+		128,
+		GetIPv6Address(prte->rt_router),
+		prte->rt_interface,
+		prte->rt_metric,
+		ROUTING_PROTOCOL_OLSR_INRIA);
+		*/
+
+	}
+	else
+	{
+
+                double dDgrWRT = 0.0;
+                double dDtsWRT = 0.0; 
+
+                if (_TEST_TIME_COMPLEXITY)
+                {
+                     dDgrWRT = prte->rt_entry_infos.related_neighbor->neighbor_infos.dDegreeWRTNode;
+                     dDtsWRT = prte->rt_entry_infos.related_neighbor->neighbor_infos.dDistanceWRTNode;
+                }
+                else
+                {
+                     dDgrWRT = prte->rt_entry_infos.rtu_DegreeWRTNode;
+                     dDtsWRT = prte->rt_entry_infos.rtu_DistanceWRTNode;
+                }
+
+                
+
+		NetworkUpdateForwardingTableWithDisjointPath(
+			node,
+			GetIPv4Address(prte->rt_dst),
+			0xffffffff,
+			GetIPv4Address(prte->rt_router),
+			prte->rt_interface,
+			prte->rt_metric,
+			ROUTING_PROTOCOL_OLSR_INRIA,
+			dDgrWRT,
+			dDtsWRT
+                        );
+	}
+
+
+}
 
 // /**
 // FUNCTION   ::  OlsrLookup2HopNeighborTable
@@ -643,7 +1110,13 @@ void OlsrInsertMidAlias(
 
     RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
     olsr->changes_topology = TRUE;
-    olsr->changes_neighborhood = TRUE;
+    
+	//Peter Comment: will never be called under current simulation setting that only one interface for one node
+	
+	olsr->changes_neighborhood = TRUE;
+
+	g_iNeighborChgByOlsrInsertMidAlias++;
+	g_iTopologyChgByOlsrInsertMidAlias++;
 
     return;
 }
@@ -1064,6 +1537,8 @@ void OlsrUpdateHnaEntry(
         net_entry = OlsrAddHnaNet(gw_entry, net, mask);
         olsr->changes_topology = TRUE;
 
+	g_iTopologyChgByOlsrUpdateHnaEntry++;
+
         if (DEBUG)
         {
             printf("Node %u : Adding HNA entry\n", node->nodeId);
@@ -1090,7 +1565,7 @@ void OlsrTimeoutHnaTable(
     RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
     unsigned char index;
 
-    for (index=0; index < HASHSIZE; index++)
+    for (index = 0; index < HASHSIZE; index++)
     {
         hna_entry* tmp_hna = olsr->hna_table[index].next;
         // Check all entrys
@@ -1436,15 +1911,78 @@ Int32 OlsrUpdateNeighborStatus(
             neighbor_2_entry *two_hop_neighbor;
 
             // Delete posible 2 hop entry on this neighbor
+			
+			
 
             if ((two_hop_neighbor = OlsrLookup2HopNeighborTable(node,
                     entry->neighbor_main_addr)) != NULL)
             {
-                OlsrDelete2HopNeighborTable(two_hop_neighbor);
+                
+				//Peter comment: update the delete list here
+				//what is the intention?
+				/*
+				if (SYMMETRIC_TOPOLOGY_TABLE)
+				{
+
+					insert_into_tco_node_addr_set(&olsr->recent_delete_list, entry->neighbor_main_addr.interfaceAddr.ipv4);
+				}
+				*/
+				//DebugBreak();
+				
+				OlsrDelete2HopNeighborTable(two_hop_neighbor);
+
+				if (SYMMETRIC_TOPOLOGY_TABLE)
+				{
+
+					olsr->bNeighborChgCausedRemoveFromHigherHop = TRUE;
+					
+				}
             }
 
-            olsr->changes_neighborhood = true;
+			if (SYMMETRIC_TOPOLOGY_TABLE)
+			{
+
+				rt_entry* rt_tmp = QueryRoutingTableAccordingToNodeId(node, entry->neighbor_main_addr.interfaceAddr.ipv4);
+
+				if (rt_tmp != NULL)
+				{
+
+					//Peter Comment: so this cost could be = 2 or > 2 (even 10 for Speed-20-9x9-low- case) 
+
+
+
+					/*
+					printf("==================NeighborChgCausedRemoveFromHigherHop for node %d with current cost %d \n", node->nodeId, rt_tmp->rt_metric);
+					if (rt_tmp->rt_metric > 2)
+					{
+
+						printf(" it is larger than 2!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! \n");
+					}
+					*/
+
+					olsr->bNeighborChgCausedRemoveFromHigherHop = TRUE;
+				}
+				
+
+			}
+
+            
+			//Peter Comment: may need to deal with ###$$$%%%
+			//regardless of it has been a 2 hop or not
+			//need to partial re-discovery from this neighbor
+
+			if (SYMMETRIC_TOPOLOGY_TABLE)
+			{
+
+				insert_into_tco_node_addr_set(&olsr->recent_add_list, entry->neighbor_main_addr.interfaceAddr.ipv4);
+			}
+			
+			olsr->changes_neighborhood = true;
             olsr->changes_topology = true;
+
+			//g_iNeighborChgByOlsrUpdateNeighborStatus++;
+
+			//g_iTopologyChgByOlsrUpdateNeighborStatus++;
         }
         entry->neighbor_status = SYM;
     }
@@ -1452,8 +1990,22 @@ Int32 OlsrUpdateNeighborStatus(
     {
         if (entry->neighbor_status == SYM)
         {
+
+			//Peter Comment: may need to deal with ###$$$%%%
+			//this can consider as delete of this route, so delete all its descendants as well
+			//delete from route table, or delete by topology table?
+			if (SYMMETRIC_TOPOLOGY_TABLE)
+			{
+
+				insert_into_tco_node_addr_set(&olsr->recent_delete_list, entry->neighbor_main_addr.interfaceAddr.ipv4);
+			}
+
             olsr->changes_neighborhood = true;
             olsr->changes_topology = true;
+
+	                //g_iNeighborChgByOlsrUpdateNeighborStatus++;
+
+			//g_iTopologyChgByOlsrUpdateNeighborStatus++;
         }
         // else N_status is set to NOT_SYM
 
@@ -2048,6 +2600,9 @@ void OlsrTimeoutLinkEntry(
                     tmp_link_set->neighbor->neighbor_linkcount --;
                 }
 
+                          g_iNeighborChgByOlsrTimeoutLinkEntry++;
+
+				////Peter Comment: skip this one, just let it do re-calculation
                 olsr->changes_neighborhood = TRUE;
                 MEM_free(tmp_link_set);
                 tmp_link_set = last_link_entry;
@@ -2083,6 +2638,10 @@ void OlsrTimeoutLinkEntry(
                     tmp_link_set->neighbor->neighbor_linkcount--;
                 }
 
+
+                     g_iNeighborChgByOlsrTimeoutLinkEntry++;
+
+				 //Peter Comment: skip this one, just let it do re-calculation
                 olsr->changes_neighborhood = TRUE;
                 MEM_free(tmp_link_set);
                 tmp_link_set = olsr->link_set;
@@ -2098,6 +2657,10 @@ void OlsrTimeoutLinkEntry(
             OlsrUpdateNeighborStatus(node, tmp_link_set->neighbor,
                     OlsrGetNeighborStatus(node,
                         tmp_link_set->neighbor_iface_addr));
+
+                       g_iNeighborChgByOlsrTimeoutLinkEntry++;
+
+		   //Peter Comment: skip this one, just let it do re-calculation
             olsr->changes_neighborhood = TRUE;
         }
         last_link_entry = tmp_link_set;
@@ -2789,7 +3352,69 @@ void OlsrInsertNeighborTable(
 
     hash_neighbor = &olsr->neighbortable.neighborhash[hash % HASHMASK];
 
-    OlsrInsertList((olsr_qelem *)neighbor, (olsr_qelem *)hash_neighbor);
+        //Peter added for support...
+
+
+	double dDistance = 0.0;
+	double dRWON = ComputeRouterDegreeWRTOriginNode(node, neighbor->neighbor_main_addr.interfaceAddr.ipv4, &dDistance);
+	dRWON = SimulateLocalDirectionOfAoA(node, dRWON);
+	
+	neighbor->neighbor_infos.dDegreeWRTNode = dRWON;
+	neighbor->neighbor_infos.dDistanceWRTNode = dDistance;
+
+
+
+	//hash_neighbor = &olsr->neighbortable.neighborhash[index];
+
+	if (g_iKeepOrder == 1)
+	{
+
+		neighbor_entry* tmp_neighbor = hash_neighbor->neighbor_forw;
+		neighbor_entry* tmp_neighbor_last = (neighbor_entry *) hash_neighbor;
+
+		if (tmp_neighbor != (neighbor_entry *) hash_neighbor)
+		{
+			
+			while (tmp_neighbor != (neighbor_entry *) hash_neighbor)
+			{
+				if (tmp_neighbor->neighbor_hash > neighbor->neighbor_hash)
+				{
+					
+					//OlsrInsertList((olsr_qelem *)neighbor, (olsr_qelem *)tmp_neighbor_last);
+					
+
+					
+					break;
+				}
+				else
+				{
+					tmp_neighbor_last = tmp_neighbor;
+					
+					tmp_neighbor = tmp_neighbor->neighbor_forw;
+				}
+			}
+			
+
+			neighbor->neighbor_back = tmp_neighbor_last;
+			neighbor->neighbor_forw = tmp_neighbor;
+
+			tmp_neighbor_last->neighbor_forw = neighbor;
+
+			tmp_neighbor->neighbor_back = neighbor;
+		}
+		else
+		{
+			OlsrInsertList((olsr_qelem *)neighbor, (olsr_qelem *)hash_neighbor);
+		}
+
+		
+	}
+	else
+	{
+
+		OlsrInsertList((olsr_qelem *)neighbor, (olsr_qelem *)hash_neighbor);
+	}
+
 
 }
 
@@ -2839,6 +3464,188 @@ neighbor_entry* OlsrLookupNeighborTable(
     }
     return NULL;
 }
+
+double LookupSpecificHopDegreeWRTNodeFromNeighborTable(Node* node, NodeAddress specificHop)
+{
+
+	Address aSpeHop;
+
+	SetIPv4AddressInfo(&aSpeHop, specificHop);
+
+	neighbor_entry* neighbor = OlsrLookupNeighborTable(node, aSpeHop);
+
+	return neighbor->neighbor_infos.dDegreeWRTNode;
+
+
+}
+
+NodeAddress GetSuitableThirdPartyNodeForDirectionAdjust(Node* node, NodeAddress ExpectedNextHop, double * dDiff)
+{
+
+	//DebugBreak();
+
+	//printf("GetSuitableThirdPartyNodeForDirectionAdjust start: \n");
+
+	NodeAddress naRet = ANY_IP;
+
+	Address aExpectedNeighbor;
+
+	SetIPv4AddressInfo(&aExpectedNeighbor, ExpectedNextHop);
+
+	neighbor_entry* neighbor = OlsrLookupNeighborTable(node, aExpectedNeighbor);
+
+	if (neighbor == NULL)
+	{
+		return naRet;
+	}
+
+
+	neighbor_2_list_entry* neigh_2_list;
+
+	neigh_2_list = neighbor->neighbor_2_list;
+	while (neigh_2_list != NULL)
+	{
+		Address n2_addr;
+		
+		n2_addr = neigh_2_list->neighbor_2->neighbor_2_addr;
+
+		if (n2_addr.interfaceAddr.ipv4 == node->nodeId)
+		{
+			//continue;
+		}
+		else
+		{
+			
+
+			rt_entry* destination;
+			rthash* routing_hash;
+
+			UInt32 hash;
+
+			RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+
+			OlsrHashing(n2_addr, &hash);
+			routing_hash = &olsr->routingtable[hash % HASHMASK];
+
+
+			for (destination = routing_hash->rt_back;
+				destination != (rt_entry* ) routing_hash;
+				destination = destination->rt_back)
+			{
+				if (destination->rt_hash != hash)
+				{
+
+					continue;
+				}
+
+
+				if (fabs(RadiusDegreeDifference(destination->rt_entry_infos.related_neighbor->neighbor_infos.dDegreeWRTNode, neighbor->neighbor_infos.dDegreeWRTNode)) <= ((double)M_PI / ((double)18))
+					|| fabs(RadiusDegreeDifference(neighbor->neighbor_infos.dDegreeWRTNode + (double)M_PI, destination->rt_entry_infos.related_neighbor->neighbor_infos.dDegreeWRTNode)) <= ((double)M_PI / ((double)18))
+					)
+				{
+
+					break;
+				}
+
+
+				if (destination->rt_entry_infos.rtu_metric == 1)
+				{
+					*dDiff = RadiusDegreeDifference(destination->rt_entry_infos.related_neighbor->neighbor_infos.dDegreeWRTNode, 
+													neighbor->neighbor_infos.dDegreeWRTNode);
+
+					return n2_addr.interfaceAddr.ipv4;
+				}
+
+
+				break;
+			
+
+			}
+
+		}
+		
+		neigh_2_list = neigh_2_list->neighbor_2_next;
+	}
+
+	neigh_2_list = neighbor->neighbor_2_list;
+
+	while (neigh_2_list != NULL)
+	{
+		Address n2_addr;
+
+		n2_addr = neigh_2_list->neighbor_2->neighbor_2_addr;
+
+		if (n2_addr.interfaceAddr.ipv4 == node->nodeId)
+		{
+			//continue;
+		}
+		else
+		{
+
+
+			rt_entry* destination;
+			rthash* routing_hash;
+
+			UInt32 hash;
+
+			RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+
+			OlsrHashing(n2_addr, &hash);
+			routing_hash = &olsr->routingtable[hash % HASHMASK];
+
+
+			for (destination = routing_hash->rt_back;
+				destination != (rt_entry* ) routing_hash;
+				destination = destination->rt_back)
+			{
+				if (destination->rt_hash != hash)
+				{
+
+					continue;
+				}
+
+
+				if (fabs(RadiusDegreeDifference(destination->rt_entry_infos.related_neighbor->neighbor_infos.dDegreeWRTNode, neighbor->neighbor_infos.dDegreeWRTNode)) <= ((double)M_PI / ((double)18))
+					|| fabs(RadiusDegreeDifference(neighbor->neighbor_infos.dDegreeWRTNode + (double)M_PI, destination->rt_entry_infos.related_neighbor->neighbor_infos.dDegreeWRTNode)) <= ((double)M_PI / ((double)18))
+					)
+				{
+					//for rtu_metric == 2, need to check every entry with cost 2, so continue
+					continue;
+				}
+				
+				if (destination->rt_entry_infos.rtu_metric == 1)
+				{
+					//since this case must have already returned for former check
+					continue;
+				}
+				
+				if (destination->rt_entry_infos.rtu_metric == 2)
+				{
+					//prove that both the route and the n2_addr on the same part of the straight between currenthop and nexthop !!!!!!!!
+					*dDiff = RadiusDegreeDifference(destination->rt_entry_infos.related_neighbor->neighbor_infos.dDegreeWRTNode, 
+													neighbor->neighbor_infos.dDegreeWRTNode);
+					
+					return n2_addr.interfaceAddr.ipv4;
+				}
+
+				if (destination->rt_entry_infos.rtu_metric > 2)
+				{
+
+					break;
+				}
+			}
+		}
+
+		neigh_2_list = neigh_2_list->neighbor_2_next;
+
+	}
+
+
+	//printf("GetSuitableThirdPartyNodeForDirectionAdjust end: \n");
+
+	return naRet;
+}
+
 
 // /**
 // FUNCTION   :: OlsrReleaseNeighborTable
@@ -2924,8 +3731,15 @@ void OlsrTimeout2HopNeighbors(
             // This flag is set to TRYE to recalculate the MPR set and the
             // routing table
 
-            olsr->changes_neighborhood = TRUE;
+
+             	g_iNeighborChgByOlsrTimeout2HopNeighbors++;
+
+            
+			//Peter Comment: skip this one, just let it do re-calculation	
+			olsr->changes_neighborhood = TRUE;
             olsr->changes_topology = TRUE;
+
+            g_iTopologyChgByOlsrTimeout2HopNeighbors++;
         }
         else
         {
@@ -2992,7 +3806,30 @@ void OlsrPrintNeighborTable(
 
     RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
 
-    printf("Neighbor List: \n");
+
+
+	if (g_iRunTimeCompare == 1)
+	{
+		sprintf(olsr->pszOtherTables, "Neighbor List: \n");
+	}
+	else
+	{
+		if (g_iChaseRouteTable == 1)
+		{
+			//memset(g_szTextRT, 0, 16384 * sizeof(char));
+
+			sprintf(g_szTextRT, "Neighbor List: \n");
+		}
+		else
+		{
+
+			printf("Neighbor List: \n");
+		}
+	}
+
+	
+
+    
 
     for (index = 0; index < HASHSIZE; index++)
     {
@@ -3006,9 +3843,33 @@ void OlsrPrintNeighborTable(
 
             IO_ConvertIpAddressToString(&neighbor->neighbor_main_addr,
                                         addrString);
-            printf("%-15s %3d [2 hop neighbor: ",
-                    addrString,
-                    neighbor->neighbor_status);
+
+			if (g_iRunTimeCompare == 1)
+			{
+				sprintf(olsr->pszOtherTables, "%s%-15s %3d [2 hop neighbor: ", olsr->pszOtherTables,
+					addrString,
+					neighbor->neighbor_status);
+			}
+			else
+			{
+				if (g_iChaseRouteTable == 1)
+				{
+					sprintf(g_szTextRT, "%s%-15s %3d [2 hop neighbor: ", g_szTextRT,
+						addrString,
+						neighbor->neighbor_status);
+				}
+				else
+				{
+					printf("%-15s %3d [2 hop neighbor: ",
+						addrString,
+						neighbor->neighbor_status);
+				}
+
+			}
+
+
+			
+          
 
             list_2 = neighbor->neighbor_2_list;
             while (list_2 != NULL)
@@ -3017,10 +3878,51 @@ void OlsrPrintNeighborTable(
                     &list_2->neighbor_2->neighbor_2_addr,
                     addrString);
 
-                printf("%s ",addrString);
+
+				if (g_iRunTimeCompare == 1)
+				{
+
+					sprintf(olsr->pszOtherTables, "%s%s ",olsr->pszOtherTables, addrString);
+				}
+				else
+				{
+					if (g_iChaseRouteTable == 1)
+					{ 
+
+						sprintf(g_szTextRT, "%s%s ",g_szTextRT,addrString);
+					}
+					else
+					{
+
+						printf("%s ",addrString);
+					}
+				}
+
+			
+
                 list_2 = list_2->neighbor_2_next;
             }
-            printf("]\n");
+            
+			if (g_iRunTimeCompare == 1)
+			{
+
+				sprintf(olsr->pszOtherTables, "%s]\n", olsr->pszOtherTables);
+			}
+			else
+			{
+
+				if (g_iChaseRouteTable == 1)
+				{
+					sprintf(g_szTextRT, "%s]\n", g_szTextRT);
+				}
+				else
+				{
+					printf("]\n");
+				}
+			}
+
+				
+			
         }
     }
 }
@@ -3041,15 +3943,18 @@ void OlsrDelete2HopNeighborTable(
 {
     neighbor_list_entry* one_hop_list;
     neighbor_entry* one_hop_entry;
-
+ 
     ERROR_Assert(two_hop_neighbor, "Invalid two hop neighbor entry");
 
+	
     // first delete one hop list of this 2 hop neighbor
     one_hop_list = two_hop_neighbor->neighbor_2_nblist;
 
     while (one_hop_list != NULL)
     {
         one_hop_entry = one_hop_list->neighbor;
+
+		
 
         OlsrDeleteNeighbor2Pointer(one_hop_entry,
                 two_hop_neighbor->neighbor_2_addr);
@@ -3201,7 +4106,28 @@ void OlsrPrint2HopNeighborTable(Node *node)
 
     neighbor_list_entry* list_1 = NULL;
 
-    printf("Two Hop Neighbors\n");
+
+	if (g_iRunTimeCompare == 1)
+	{
+		sprintf(olsr->pszOtherTables, "Two Hop Neighbors\n");
+	}
+	else
+	{
+		if (g_iChaseRouteTable == 1)
+		{
+			memset(g_szTextRT, 0, 16384 * sizeof(char));
+
+			sprintf(g_szTextRT, "Two Hop Neighbors\n");
+		}
+		else
+		{
+
+			printf("Two Hop Neighbors\n");
+		}
+	}
+
+	
+
 
     for (index = 0; index < HASHSIZE; index++)
     {
@@ -3215,20 +4141,100 @@ void OlsrPrint2HopNeighborTable(Node *node)
             IO_ConvertIpAddressToString(&neighbor_2->neighbor_2_addr,
                                         addrString);
 
-            printf("%s ",addrString);
+
+			if (g_iRunTimeCompare == 1)
+			{
+				
+				sprintf(olsr->pszOtherTables, "%s%s ", olsr->pszOtherTables, addrString);
+			}
+			else
+			{
+				if (g_iChaseRouteTable == 1)
+				{
+
+					sprintf(g_szTextRT, "%s%s ",g_szTextRT, addrString);
+				}	
+				else
+				{
+
+					printf("%s ",addrString);
+				}
+			}
+			
+
             list_1 = neighbor_2->neighbor_2_nblist;
 
-            printf("pointed by ");
+			
+			if (g_iRunTimeCompare == 1)
+			{
+				sprintf(olsr->pszOtherTables, "%spointed by  ", olsr->pszOtherTables);
+			}
+			else
+			{
+				if (g_iChaseRouteTable == 1)
+				{
+
+					sprintf(g_szTextRT, "%spointed by  ", g_szTextRT);
+				}	
+				else
+				{
+
+					printf("pointed by ");
+				}
+			}
+			
+			
+
+
+            
             while (list_1 != NULL)
             {
                 IO_ConvertIpAddressToString(
                     &list_1->neighbor->neighbor_main_addr,
                     addrString);
 
-                printf("%s ", addrString);
+
+				if (g_iRunTimeCompare == 1)
+				{
+					sprintf(olsr->pszOtherTables, "%s%s ", olsr->pszOtherTables, addrString);
+				}
+				else
+				{
+					if (g_iChaseRouteTable == 1)
+					{
+						sprintf(g_szTextRT, "%s%s ", g_szTextRT, addrString);
+					}
+					else
+					{
+						printf("%s ", addrString);
+					}
+				}
+
+				
+
+                
                 list_1 = list_1->neighbor_next;
             }
-            printf("\n");
+
+
+			if (g_iRunTimeCompare == 1)
+			{
+				sprintf(olsr->pszOtherTables, "%s\n", olsr->pszOtherTables);
+			}
+			else
+			{
+				if (g_iChaseRouteTable == 1)
+				{
+					sprintf(g_szTextRT, "%s\n", g_szTextRT);
+				}
+				else
+				{
+					printf("\n");
+				}
+			}
+			
+
+            
         }
     }
 }
@@ -5186,6 +6192,42 @@ void OlsrGenerateHna(
 /***************************************************************************
  *                   Definition of Topology Table                          *
  ***************************************************************************/
+/*
+//Peter added for combine...
+static
+void OlsrDeleteCombinedListofLast(
+						  topology_last_entry* last_entry,
+						  Address dst)
+{
+	destination_list* dest_list;
+	destination_list* dest_list_tmp;
+
+	ERROR_Assert(last_entry, "Invalid topology entry");
+
+	// get destination list from this topology
+	dest_list = last_entry->topology_list_of_destinations;
+	last_entry->topology_list_of_destinations = NULL;
+
+	while (dest_list != NULL)
+	{
+		if (Address_IsSameAddress(&dest_list->destination_node->
+			topology_destination_dst, &dst))
+		{
+			// address matches, remove from the destination list
+			dest_list_tmp = dest_list;
+			dest_list = dest_list->next;
+			MEM_free(dest_list_tmp);
+		}
+		else
+		{
+			dest_list_tmp = dest_list;
+			dest_list = dest_list->next;
+			dest_list_tmp->next = last_entry->topology_list_of_destinations;
+			last_entry->topology_list_of_destinations = dest_list_tmp;
+		}
+	}
+}
+*/
 
 // /**
 // FUNCTION   :: OlsrDeleteListofLast
@@ -5217,7 +6259,7 @@ void OlsrDeleteListofLast(
         if (Address_IsSameAddress(&dest_list->destination_node->
                 topology_destination_dst, &dst))
         {
-            // address matches, remove from the destination list
+            // address matches, remove from the destination list			
             dest_list_tmp = dest_list;
             dest_list = dest_list->next;
             MEM_free(dest_list_tmp);
@@ -5266,6 +6308,41 @@ void OlsrDeleteDestTopolgyTable(
     }
     OlsrRemoveList((olsr_qelem* ) dest_entry);
     MEM_free((void* ) dest_entry);
+}
+
+//Peter added for combine...
+static
+void OlsrDeleteCombinedDestTopolgyTable(
+								topology_destination_entry* dest_entry)
+{
+	last_list* list_of_last;
+	topology_last_entry* last_entry;
+
+	ERROR_Assert(dest_entry, "Invalid topology entry");
+
+	//dest_entry->topology_destination_list_of_last = NULL;
+	
+	list_of_last = dest_entry->topology_destination_list_of_last;
+
+	while (list_of_last != NULL)
+	{
+		last_entry = list_of_last->last_neighbor;
+		
+		/*
+		OlsrDeleteCombinedListofLast(last_entry,
+			dest_entry->topology_destination_dst);
+		*/
+		//last_entry->topology_last;
+		MEM_free(last_entry);		
+
+		dest_entry->topology_destination_list_of_last = list_of_last->next;
+		MEM_free(list_of_last);
+		list_of_last = dest_entry->topology_destination_list_of_last;
+	}
+	
+
+	OlsrRemoveList((olsr_qelem* ) dest_entry);
+	MEM_free((void* ) dest_entry);
 }
 
 // /**
@@ -5319,6 +6396,243 @@ void OlsrDeleteListofDest(
     }
 }
 
+
+//SYMMETRIC TOPOLOGY TABLE
+
+//this function will only be called by OlsrReleaseTopologyTableSYM,
+//although OlsrReleaseTopologyTableSYM is never called
+static
+void OlsrDeleteLastTopolgyTableSYMInSerial(topology_last_entry* last_entry)
+{
+
+	destination_list* list_of_dest;
+	topology_destination_entry* dest_entry;
+
+	ERROR_Assert(last_entry, "Invalid topology entry");
+
+	list_of_dest = last_entry->topology_list_of_destinations;
+
+	while (list_of_dest != NULL)
+	{
+		dest_entry = list_of_dest->destination_node;
+
+		//The only change is here, compared to OlsrDeleteLastTopolgyTable
+		//OlsrDeleteListofDest(dest_entry, last_entry->topology_last);
+		MEM_free(dest_entry);
+		
+		
+		last_entry->topology_list_of_destinations = list_of_dest->next;
+		MEM_free(list_of_dest);
+		list_of_dest = last_entry->topology_list_of_destinations;
+	}
+
+	OlsrRemoveList((olsr_qelem *)last_entry);
+	MEM_free((void *)last_entry);
+
+}
+
+static
+bool OlsrDeleteLastTopolgyTableSYM(Node* node,
+								topology_last_entry* last_entry, BOOL bDeleteSYM = TRUE)
+{
+
+
+	//printf("OlsrDeleteLastTopolgyTableSYM begin \n");
+
+	bool bDeleteAll = false;
+	/*
+	//if (node->nodeId == 2)
+	{
+		//DebugBreak();
+	}
+	*/
+	
+	RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+
+	destination_list* list_of_dest;
+	topology_destination_entry* dest_entry;
+
+	ERROR_Assert(last_entry, "Invalid topology entry");
+
+	list_of_dest = last_entry->topology_list_of_destinations;
+
+
+	if (g_iSymmetricDifferentCode == 1)
+	//if (g_iSymmetricDifferentCode == 1 && bDeleteSYM)
+	{
+	
+		////////////////////////////////////////////////////////////////////////
+		//for symmetric, first delete the dests of the last entries that similar as the dest nodes of this last entry
+		
+		destination_list* list_of_dest_tmp = last_entry->topology_list_of_destinations;
+		
+		while (list_of_dest_tmp != NULL)
+		{
+			topology_destination_entry* dest_entry_tmp = list_of_dest_tmp->destination_node;
+
+			//if (dest_entry_tmp->topology_destination_info.bAddForNormal)
+			{
+
+				topology_last_entry * t_last_sym = OlsrLookupLastTopologyTableSYM(node, dest_entry_tmp->topology_destination_dst);
+
+				if (t_last_sym != NULL) 
+				{
+					//BOOL bEmpty = TRUE;
+
+					destination_list* topo_dest_sym = OlsrinListDestTopology(t_last_sym, last_entry->topology_last);
+
+
+					if (topo_dest_sym != NULL)
+					{
+						topology_destination_entry* dest_node_tmp = topo_dest_sym->destination_node;
+
+
+						// Peter comment, uncertain whether need to force delete the "symetric" one even if it was added in a "normal" way,
+						// just keep it.
+						
+						//Peter comment: now try to delete anyway
+						//if (dest_node_tmp->topology_destination_info.bAddForSymmetric)
+						{
+
+							dest_node_tmp->topology_destination_info.bAddForSymmetric = FALSE;
+
+							//Peter comment: now try to delete anyway
+							//if (!dest_node_tmp->topology_destination_info.bAddForSymmetric && !dest_node_tmp->topology_destination_info.bAddForNormal)
+							{
+
+								OlsrDeleteListofLast(t_last_sym, last_entry->topology_last);
+
+								if (dest_node_tmp != NULL)
+								{
+									MEM_free(dest_node_tmp);
+									dest_node_tmp = NULL;
+								}
+
+								//if the last entry become empty after delete the specific dest node
+								
+								//Peter ######??????????%%%%%%%%%%% still require further study
+								//if (t_last_sym->topology_list_of_destinations == NULL)
+								if (t_last_sym->topology_list_of_destinations == NULL  && bDeleteSYM)
+								{
+									OlsrRemoveList((olsr_qelem *)t_last_sym);
+									MEM_free((void *)t_last_sym);
+								}
+							}							
+						}
+					}
+					else
+					{
+
+						//this branch should not exist because of the symmetric property
+						//currently just comment it
+						//printf("!!!!!!!!!!!! this branch should not exist because of the symmetric property in OlsrDeleteLastTopolgyTableSYM 1 \n");
+
+						//DebugBreak();
+					}
+
+				}
+				else
+				{
+					//this branch should not exist because of the symmetric property
+					printf("!!!!!!!!!!!! this branch should not exist because of the symmetric property in OlsrDeleteLastTopolgyTableSYM 2 \n");
+
+				}
+			}
+			
+			 
+			list_of_dest_tmp = list_of_dest_tmp->next;
+		}
+
+
+		////////////////////////////////////////////////////////////////////
+	}
+	
+	while (list_of_dest != NULL)
+	{
+		dest_entry = list_of_dest->destination_node;
+
+		//OlsrDeleteListofDest(dest_entry, last_entry->topology_last);
+
+		insert_into_tco_node_addr_set(&(olsr->recent_delete_list), GetIPv4Address(dest_entry->topology_destination_dst));
+
+		MEM_free(dest_entry);
+
+		last_entry->topology_list_of_destinations = list_of_dest->next;
+		MEM_free(list_of_dest);
+
+		list_of_dest = last_entry->topology_list_of_destinations;
+	}
+	
+
+	/*
+	while (list_of_dest != NULL)
+	{
+		dest_entry = list_of_dest->destination_node;
+		list_of_dest = list_of_dest->next;
+
+		//if (dest_entry->topology_destination_info.bAddForNormal)
+		{
+			dest_entry->topology_destination_info.bAddForNormal = FALSE;
+
+			//Peter comment: now try to delete anyway
+			//After comment the following line, that would be bug
+			
+			//if (!dest_entry->topology_destination_info.bAddForNormal && !dest_entry->topology_destination_info.bAddForSymmetric)
+			{
+
+
+				//DebugBreak();
+
+				insert_into_tco_node_addr_set(&(olsr->recent_delete_list), GetIPv4Address(dest_entry->topology_destination_dst));
+				//insert_into_tco_node_addr_set(&(olsr->recent_delete_list), GetIPv4Address(dest_entry->topology_destination_dst)+1);
+				//insert_into_tco_node_addr_set(&(olsr->recent_delete_list), GetIPv4Address(dest_entry->topology_destination_dst)+2);
+				
+				
+				//do not need, since we do create new but do not add the dest to table
+				//OlsrDeleteListofDest(dest_entry, last_entry->topology_last);
+
+				OlsrDeleteListofLast(last_entry, dest_entry->topology_destination_dst);
+				
+				//last_entry->topology_list_of_destinations = list_of_dest->next;
+				//MEM_free(list_of_dest);
+				//list_of_dest = last_entry->topology_list_of_destinations;
+				
+
+				MEM_free(dest_entry);
+
+			}
+
+		}
+		//else
+		{
+			
+		}		
+		
+	}
+	*/
+
+
+	if (last_entry->topology_list_of_destinations == NULL)
+	{
+
+		OlsrRemoveList((olsr_qelem *)last_entry);
+		MEM_free((void *)last_entry);
+
+		//last_entry = NULL;
+		bDeleteAll = true;
+
+	}
+
+
+	//printf("OlsrDeleteLastTopolgyTableSYM end \n");
+
+
+	return bDeleteAll;
+
+}
+
+
+
 // /**
 // FUNCTION   :: OlsrDeleteLastTopolgyTable
 // LAYER      :: APPLICATION
@@ -5354,6 +6668,47 @@ void OlsrDeleteLastTopolgyTable(
 }
 
 
+//SYMMETRIC TOPOLOGY TABLE
+
+static
+void OlsrInsertLastTopologyTableSYM(
+								 Node* node,
+								 //topology_last_entry* last_entry,
+								 tc_message* message)
+{
+
+	// We must insert new entries contained in received message
+	topology_last_entry * t_last_sym = (topology_last_entry *)
+		MEM_malloc(sizeof(topology_last_entry));
+
+	memset(t_last_sym, 0, sizeof(topology_last_entry));
+
+
+	UInt32 hash;
+	topology_last_hash* top_last_hash;
+
+	RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+
+	ERROR_Assert(t_last_sym, "Invalid topology entry");
+	ERROR_Assert(message, "Invalid TC message");
+
+	OlsrHashing(message->originator, &hash);
+	top_last_hash = &olsr->sym_topologylasttable[hash % HASHMASK];
+
+	/* prepare the last entry */
+	t_last_sym->topology_last = message->originator;
+	t_last_sym->topology_list_of_destinations = NULL;
+	t_last_sym->topologylast_hash = hash;
+	t_last_sym->topology_seq = message->ansn;
+
+	t_last_sym->topology_timer = getSimTime(node)
+		+ (clocktype)(message->vtime * SECOND);
+
+	OlsrInsertList((olsr_qelem *)t_last_sym, (olsr_qelem *)top_last_hash);
+}
+
+
+
 // /**
 // FUNCTION   :: OlsrInsertLastTopologyTable
 // LAYER      :: APPLICATION
@@ -5369,29 +6724,43 @@ static
 void OlsrInsertLastTopologyTable(
     Node* node,
     topology_last_entry* last_entry,
-    tc_message* message)
+    tc_message* message, BOOL bApplyForSymmetricAsWell = FALSE)
 {
-    UInt32 hash;
-    topology_last_hash* top_last_hash;
 
-    RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+	//printf("OlsrInsertLastTopologyTable Begin \n");
 
-    ERROR_Assert(last_entry, "Invalid topology entry");
-    ERROR_Assert(message, "Invalid TC message");
+	UInt32 hash;
+	topology_last_hash* top_last_hash;
 
-    OlsrHashing(message->originator, &hash);
-    top_last_hash = &olsr->topologylasttable[hash % HASHMASK];
+	RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
 
-    /* prepare the last entry */
-    last_entry->topology_last = message->originator;
-    last_entry->topology_list_of_destinations = NULL;
-    last_entry->topologylast_hash = hash;
-    last_entry->topology_seq = message->ansn;
+	ERROR_Assert(last_entry, "Invalid topology entry");
+	ERROR_Assert(message, "Invalid TC message");
 
-    last_entry->topology_timer = getSimTime(node)
-                                 + (clocktype)(message->vtime * SECOND);
+	OlsrHashing(message->originator, &hash);
+	top_last_hash = &olsr->topologylasttable[hash % HASHMASK];
 
-    OlsrInsertList((olsr_qelem *)last_entry, (olsr_qelem *)top_last_hash);
+	/* prepare the last entry */
+	last_entry->topology_last = message->originator;
+	last_entry->topology_list_of_destinations = NULL;
+	last_entry->topologylast_hash = hash;
+	last_entry->topology_seq = message->ansn;
+
+	last_entry->topology_timer = getSimTime(node)
+		+ (clocktype)(message->vtime * SECOND);
+
+	OlsrInsertList((olsr_qelem *)last_entry, (olsr_qelem *)top_last_hash);
+
+	if (SYMMETRIC_TOPOLOGY_TABLE && bApplyForSymmetricAsWell)
+	{
+		OlsrInsertLastTopologyTableSYM(node, 
+									//last_entry, 
+									message);
+	}
+
+
+	//printf("OlsrInsertLastTopologyTable End \n");
+
 }
 
 // /**
@@ -5431,6 +6800,70 @@ void OlsrInsertDestTopologyTable(
     OlsrInsertList((olsr_qelem* )dest_entry, (olsr_qelem *)top_dest_hash);
 }
 
+
+static
+void OlsrInsertCombinedTopologyTable(
+								 Node* node,
+								 topology_destination_entry* dest_entry,
+								 Address addr)
+{
+	UInt32 hash;
+	topology_destination_hash* top_dest_hash;
+
+	RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+
+	ERROR_Assert(dest_entry, "Invalid topology entry");
+	
+	//SetIPv4AddressInfo(&dest_entry->topology_destination_dst, addr);
+	
+	OlsrHashing(addr, &hash);
+
+	top_dest_hash = &olsr->combined_topologytable[hash % HASHMASK];	
+
+	dest_entry->topology_destination_dst = addr;
+	dest_entry->topology_destination_list_of_last = NULL;
+	dest_entry->topologydestination_hash = hash;
+
+	OlsrInsertList((olsr_qelem* )dest_entry, (olsr_qelem *)top_dest_hash);
+}
+
+
+//SYMMETRIC TOPOLOGY TABLE
+
+static
+topology_last_entry* OlsrLookupLastTopologyTableSYM(
+	Node* node,
+	Address last)
+{
+	topology_last_entry* top_last;
+	topology_last_hash* top_last_hash;
+	UInt32 hash;
+
+	RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+
+	OlsrHashing(last, &hash);
+
+	top_last_hash = &olsr->sym_topologylasttable[hash % HASHMASK];
+
+	for (top_last = top_last_hash->topology_last_forw;
+		top_last != (topology_last_entry* ) top_last_hash;
+		top_last = top_last->topology_last_forw)
+	{
+		if (top_last->topologylast_hash != hash)
+		{
+			continue;
+		}
+
+		// address matches with the topology last address?
+		if (Address_IsSameAddress(&top_last->topology_last, &last))
+		{
+			return top_last;
+		}
+	}
+	return NULL;
+}
+
+
 // /**
 // FUNCTION   :: OlsrLookupLastTopologyTable
 // LAYER      :: APPLICATION
@@ -5447,32 +6880,34 @@ topology_last_entry* OlsrLookupLastTopologyTable(
     Node* node,
     Address last)
 {
-    topology_last_entry* top_last;
-    topology_last_hash* top_last_hash;
-    UInt32 hash;
 
-    RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
 
-    OlsrHashing(last, &hash);
+	topology_last_entry* top_last;
+	topology_last_hash* top_last_hash;
+	UInt32 hash;
 
-    top_last_hash = &olsr->topologylasttable[hash % HASHMASK];
+	RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
 
-    for (top_last = top_last_hash->topology_last_forw;
-        top_last != (topology_last_entry* ) top_last_hash;
-        top_last = top_last->topology_last_forw)
-    {
-        if (top_last->topologylast_hash != hash)
-        {
-            continue;
-        }
+	OlsrHashing(last, &hash);
 
-        // address matches with the topology last address?
-        if (Address_IsSameAddress(&top_last->topology_last, &last))
-        {
-            return top_last;
-        }
-    }
-    return NULL;
+	top_last_hash = &olsr->topologylasttable[hash % HASHMASK];
+
+	for (top_last = top_last_hash->topology_last_forw;
+		top_last != (topology_last_entry* ) top_last_hash;
+		top_last = top_last->topology_last_forw)
+	{
+		if (top_last->topologylast_hash != hash)
+		{
+			continue;
+		}
+
+		// address matches with the topology last address?
+		if (Address_IsSameAddress(&top_last->topology_last, &last))
+		{
+			return top_last;
+		}
+	}
+	return NULL;   
 }
 
 // /**
@@ -5524,6 +6959,45 @@ topology_destination_entry* OlsrLookupDestTopologyTable(
     return NULL;
 }
 
+//Peter added for combine...
+static
+topology_destination_entry* OlsrLookupCombinedTopologyTable(
+	Node* node,
+	Address dest)
+{
+	topology_destination_entry* top_dest;
+	topology_destination_hash* top_dest_hash;
+	UInt32 hash;
+
+	RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+
+	if (DEBUG)
+	{
+		printf("OlsrLookupCombinedTopologyTable\n");
+	}
+
+	OlsrHashing(dest, &hash);
+
+	top_dest_hash = &olsr->combined_topologytable[hash % HASHMASK];
+
+	for (top_dest = top_dest_hash->topology_destination_forw;
+		top_dest != (topology_destination_entry* ) top_dest_hash;
+		top_dest = top_dest->topology_destination_forw)
+	{
+		if (top_dest->topologydestination_hash != hash)
+		{
+			continue;
+		}
+
+		// matches the address with anyone from destination list
+		if(Address_IsSameAddress(&top_dest->topology_destination_dst, &dest))
+		{
+			return top_dest;
+		}
+	}
+	return NULL;
+}
+
 
 // /**
 // FUNCTION   :: OlsrinListDestTopology
@@ -5568,6 +7042,33 @@ destination_list* OlsrinListDestTopology(
     return NULL;
 }
 
+//Peter Added for combine...
+static
+last_list* OlsrinListLastTopology(
+	last_list* list_of_last,
+	Address address)
+{
+	//last_list* list_of_dest;
+
+	//ERROR_Assert(last_entry, "Invalid topology entry");
+
+	
+
+	while (list_of_last != NULL)
+	{
+	
+		if (Address_IsSameAddress(
+			&list_of_last->last_neighbor->topology_last,
+			&address))
+		{
+			// matches return list of last
+			return list_of_last;
+		}
+		list_of_last = list_of_last->next;
+	}
+	return NULL;
+}
+
 // /**
 // FUNCTION   :: OlsrUpdateLastTable
 // LAYER      :: APPLICATION
@@ -5587,10 +7088,18 @@ void OlsrUpdateLastTable(
     Node* node,
     topology_last_entry* last_entry,
     tc_message* message,
-    Address addr_ip)
+    Address addr_ip, BOOL bFurtherDetermine = FALSE)
 {
      // This function updates time out for the existant pointed by t_last and
      // creates new entries for the new destinations
+	/*
+	if (node->nodeId == 0)
+	{
+		g_iTopologyTableUpdateCount++;
+	}
+	*/
+	
+	//printf("OlsrUpdateLastTable Begin \n");
 
     tc_mpr_addr* mpr;
     destination_list* topo_dest;
@@ -5607,6 +7116,26 @@ void OlsrUpdateLastTable(
     // refresh timer
     last_entry->topology_timer = getSimTime(node)
                                  + (clocktype)(message->vtime * SECOND);
+
+	topology_last_entry* last_entry_for_sym = NULL;
+
+	if (SYMMETRIC_TOPOLOGY_TABLE)
+	{
+		last_entry_for_sym = OlsrLookupLastTopologyTableSYM(node, message->originator);
+		if (last_entry_for_sym != NULL)
+		{
+
+			// refresh timer
+			last_entry_for_sym->topology_timer = getSimTime(node)
+				+ (clocktype)(message->vtime * SECOND);
+		}
+		else
+		{
+			printf("!!!!!!!!!!!! this branch should not exist because of the symmetric property in in OlsrUpdateLastTable 4 \n");
+		}
+	}
+		
+	
 
     if (DEBUG)
     {
@@ -5639,7 +7168,24 @@ void OlsrUpdateLastTable(
                     printf("update last table\n");
                 }
 
-                olsr->changes_topology = TRUE;
+				if (bFurtherDetermine)
+				{
+					bFurtherDetermine = FALSE;
+					
+					olsr->bAddNew = TRUE;
+					
+					g_iTopologyChgByOlsrUpdateLastTable++;
+
+					if (!SYMMETRIC_TOPOLOGY_TABLE)
+					{
+						olsr->changes_topology = TRUE;
+					}
+				}
+
+                //so need to add this dest to the last-entry of the last_topology table, 
+				//since it is not yet in 
+		
+                
 
                 // search in the destination list
                 if ((destination_entry = OlsrLookupDestTopologyTable
@@ -5678,7 +7224,200 @@ void OlsrUpdateLastTable(
                 // linking the last and the dest
                 topo_last->last_neighbor = last_entry;
                 topo_dest->destination_node = destination_entry;
+
+
             }
+
+
+
+			if (SYMMETRIC_TOPOLOGY_TABLE)
+			{
+
+				//olsr->changes_topology = TRUE;
+				
+				/*
+				if (node->nodeId == 1)
+				{
+				DebugBreak();
+				}
+				*/
+
+				destination_list* topo_dest_for_sym;
+
+				if (last_entry_for_sym != NULL)
+				{
+
+					//this branch may certainly happen 
+					//since sym_topologylasttable can be considered as a mirror of the topologylasttable
+
+					topo_dest_for_sym = OlsrinListDestTopology(last_entry_for_sym, mpr->address);
+					if (topo_dest_for_sym == NULL)
+					{
+
+						//this branch may certainly happen 
+						//since sym_topologylasttable can be considered as a mirror of the topologylasttable
+
+						// creating the structure for the linkage
+						topo_dest_for_sym = (destination_list *)
+							MEM_malloc(sizeof(destination_list));
+						memset(topo_dest_for_sym, 0, sizeof(destination_list));
+
+
+						topo_dest_for_sym->next = last_entry_for_sym->topology_list_of_destinations;
+						last_entry_for_sym->topology_list_of_destinations = topo_dest_for_sym;
+
+						//Peter comment: we need the dest_entry, but do not need its last_list anymore
+						topology_destination_entry * destination_entry_for_sym = (topology_destination_entry *)
+							MEM_malloc(sizeof(topology_destination_entry));
+
+						memset(destination_entry_for_sym, 0, sizeof(topology_destination_entry));
+
+						destination_entry_for_sym->topology_destination_dst = mpr->address;
+						destination_entry_for_sym->topology_destination_list_of_last = NULL;
+						
+						destination_entry_for_sym->topology_destination_info.bAddForNormal = TRUE;
+
+
+						UInt32 hash_for_sym;
+
+						OlsrHashing(mpr->address, &hash_for_sym);
+
+						destination_entry_for_sym->topologydestination_hash = hash_for_sym;
+
+						topo_dest_for_sym->destination_node = destination_entry_for_sym;
+
+
+						if (remove_from_tco_node_addr_set(&(olsr->recent_delete_list), GetIPv4Address(mpr->address)))
+						{
+							
+						}
+						else
+						{
+							insert_into_tco_node_addr_set(&(olsr->recent_add_list), GetIPv4Address(mpr->address));
+						}
+						
+					}
+					else
+					{
+						if (!topo_dest_for_sym->destination_node->topology_destination_info.bAddForNormal)
+						{
+							topo_dest_for_sym->destination_node->topology_destination_info.bAddForNormal = TRUE;
+
+							//printf("!!!!!!!!!!!! this branch should not exist because of the symmetric property in OlsrUpdateLastTable 2 for dst = %d \n", topo_dest_for_sym->destination_node->topology_destination_info.topology_dst.interfaceAddr.ipv4);
+						}
+						
+						//this branch should not exist because of the symmetric property
+						
+					}
+				
+				
+					if (g_iSymmetricDifferentCode == 1)
+					{
+
+						//for symmetric, add a last entry with address same as this mpr and dest the same as the address of the last_entry
+						topology_last_entry *t_last_symmetric = NULL;
+
+						t_last_symmetric = OlsrLookupLastTopologyTableSYM(node, mpr->address);
+						if (t_last_symmetric != NULL)
+						{
+							//already exist
+						}
+						else
+						{
+							//create and insert
+							t_last_symmetric = (topology_last_entry *)
+								MEM_malloc(sizeof(topology_last_entry));
+
+							memset(t_last_symmetric, 0, sizeof(topology_last_entry));
+
+
+							UInt32 hash_symmetric;
+							topology_last_hash* top_last_hash_symmetric;
+
+							RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+
+
+							OlsrHashing(mpr->address, &hash_symmetric);
+							top_last_hash_symmetric = &olsr->sym_topologylasttable[hash_symmetric % HASHMASK];
+
+							/* prepare the last entry */
+							t_last_symmetric->topology_last = mpr->address;
+							t_last_symmetric->topology_list_of_destinations = NULL;
+							t_last_symmetric->topologylast_hash = hash_symmetric;
+							//t_last_symmetric->topology_seq = message->ansn;
+
+							/*
+							t_last_symmetric->topology_timer = getSimTime(node)
+							+ (clocktype)(message->vtime * SECOND);
+							*/
+							
+
+							OlsrInsertList((olsr_qelem *)t_last_symmetric, (olsr_qelem *)top_last_hash_symmetric);
+
+						}	
+
+						//check and add the dest with address 
+						destination_list* topo_dest_symmetric = OlsrinListDestTopology(t_last_symmetric, message->originator);
+						if (topo_dest_symmetric == NULL)
+						{
+
+							destination_list * topo_dest_symmetric = (destination_list *)
+								MEM_malloc(sizeof(destination_list));
+							memset(topo_dest_symmetric, 0, sizeof(destination_list));
+
+
+							topo_dest_symmetric->next = t_last_symmetric->topology_list_of_destinations;
+							t_last_symmetric->topology_list_of_destinations = topo_dest_symmetric;
+
+
+							topology_destination_entry * destination_entry_symmetric = (topology_destination_entry *)
+								MEM_malloc(sizeof(topology_destination_entry));
+
+							memset(destination_entry_symmetric, 0, sizeof(topology_destination_entry));
+
+							destination_entry_symmetric->topology_destination_dst = message->originator;
+							destination_entry_symmetric->topology_destination_list_of_last = NULL;
+							
+							destination_entry_symmetric->topology_destination_info.bAddForSymmetric = TRUE;
+
+							UInt32 hash_symmetric;
+
+							OlsrHashing(message->originator, &hash_symmetric);
+
+							destination_entry_symmetric->topologydestination_hash = hash_symmetric;
+
+
+							topo_dest_symmetric->destination_node = destination_entry_symmetric;
+
+						}
+						else
+						{
+							//do not need to add, but this branch may not happen because of the symmetric property
+
+							if (!topo_dest_symmetric->destination_node->topology_destination_info.bAddForSymmetric)
+							{
+								topo_dest_symmetric->destination_node->topology_destination_info.bAddForSymmetric = TRUE;
+
+								//printf("!!!!!!!!!!!! this branch should not exist because of the symmetric property in OlsrUpdateLastTable 2 for dst = %d \n", topo_dest_for_sym->destination_node->topology_destination_info.topology_dst.interfaceAddr.ipv4);
+							}
+							//DebugBreak();
+							//this branch should not exist because of the symmetric property
+							//printf("!!!!!!!!!!!! this branch should not exist because of the symmetric property in OlsrUpdateLastTable 1 \n");
+						}
+					}
+				
+				
+				}
+				else
+				{
+
+
+					//this branch should not exist because of the symmetric property
+					printf("!!!!!!!!!!!! this branch should not exist because of the symmetric property in in OlsrUpdateLastTable 3 \n");
+				}			
+
+			}
+
 
             if (DEBUG)
             {
@@ -5699,6 +7438,49 @@ void OlsrUpdateLastTable(
         }
         mpr = mpr->next;
     }
+
+
+	//printf("OlsrUpdateLastTable End \n");
+}
+
+
+//SYMMETRIC TOPOLOGY TABLE
+
+static
+void OlsrReleaseTopologyTableSYM(
+							  Node* node)
+{
+
+	Int32 index;
+
+	topology_destination_entry* top_dest;
+	topology_destination_entry* top_dest_tmp;
+	topology_destination_hash* top_dest_hash;
+
+	topology_last_entry* top_last;
+	topology_last_entry* top_last_tmp;
+	topology_last_hash* top_last_hash;
+
+	RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+
+	// delete topology last table
+	for (index = 0; index < HASHSIZE; index++)
+	{
+		top_last_hash = &olsr->sym_topologylasttable[index];
+		top_last = top_last_hash->topology_last_forw;
+		while (top_last != (topology_last_entry *) top_last_hash)
+		{
+			top_last_tmp = top_last;
+			top_last = top_last->topology_last_forw;
+			
+			//SYMMETRIC TOPOLOGY TABLE  would be correct
+			//Since Here for release the whole table, OlsrDeleteLastTopolgyTableSYM is not required
+			//note!!!: correct anyway, since the OlsrReleaseTables that call this function is never called. 
+			
+			OlsrDeleteLastTopolgyTableSYMInSerial(top_last_tmp);
+			//OlsrDeleteLastTopolgyTable(top_last_tmp);
+		}
+	}
 }
 
 
@@ -5715,6 +7497,10 @@ static
 void OlsrReleaseTopologyTable(
     Node* node)
 {
+
+
+	//printf("OlsrReleaseTopologyTable Begin \n");
+
     Int32 index;
 
     topology_destination_entry* top_dest;
@@ -5740,6 +7526,15 @@ void OlsrReleaseTopologyTable(
         }
     }
 
+
+
+	if (SYMMETRIC_TOPOLOGY_TABLE)
+	{
+		OlsrReleaseTopologyTableSYM(node);
+	}
+
+
+
     // delete topology last table
     for (index = 0; index < HASHSIZE; index++)
     {
@@ -5752,7 +7547,335 @@ void OlsrReleaseTopologyTable(
             OlsrDeleteLastTopolgyTable(top_last_tmp);
         }
     }
+
+
+	//printf("OlsrReleaseTopologyTable End \n");
+
 }
+
+//Peter added for combine...
+static
+void OlsrReleaseCombinedTopologyTable(
+							  Node* node)
+{
+	Int32 index;
+
+	topology_destination_entry* top_dest;
+	topology_destination_entry* top_dest_tmp;
+	topology_destination_hash* top_dest_hash;
+
+
+	RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+
+	// delete topology destination table
+	for (index = 0; index < HASHSIZE; index++)
+	{
+		top_dest_hash = &olsr->combined_topologytable[index];
+		top_dest = top_dest_hash->topology_destination_forw;
+		while (top_dest != (topology_destination_entry *) top_dest_hash)
+		{
+			top_dest_tmp = top_dest;
+			top_dest = top_dest->topology_destination_forw;
+			OlsrDeleteCombinedDestTopolgyTable(top_dest_tmp);
+		}
+	}
+
+}
+
+/*
+static
+void GenerateCombinedTopologyTable(
+								   Node* node)
+{
+
+	OlsrReleaseCombinedTopologyTable(node);
+
+
+	Int32 index;
+
+	topology_destination_entry* top_dest;
+	topology_destination_entry* top_dest_tmp;
+	topology_destination_hash* top_dest_hash;
+
+
+	RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+
+	// delete topology destination table
+	for (index = 0; index < HASHSIZE; index++)
+	{
+		top_dest_hash = &olsr->topologytable[index];
+		top_dest = top_dest_hash->topology_destination_back;
+		while (top_dest != (topology_destination_entry *) top_dest_hash)
+		{
+
+			top_dest_tmp = top_dest;
+			top_dest = top_dest->topology_destination_back;
+
+			topology_destination_entry* destination_entry = NULL;
+
+			destination_entry = (topology_destination_entry *)
+			MEM_malloc(sizeof(topology_destination_entry));
+
+			memset(destination_entry, 0, sizeof(topology_destination_entry));
+
+			
+			OlsrInsertCombinedTopologyTable(node, destination_entry, top_dest_tmp->topology_destination_dst);
+
+
+			last_list* list_of_last;
+			
+			list_of_last = top_dest_tmp->topology_destination_list_of_last;
+
+			last_list* list_of_last_tmp = NULL;
+
+			while (list_of_last != NULL)
+			{
+
+				topology_last_entry * t_last = (topology_last_entry *)
+				MEM_malloc(sizeof(topology_last_entry));
+
+				memset(t_last, 0, sizeof(topology_last_entry));
+
+				last_list * topo_last = (last_list *) MEM_malloc(sizeof(last_list));
+				memset(topo_last, 0, sizeof(last_list));
+
+				t_last->topology_last = list_of_last->last_neighbor->topology_last; 
+				
+
+				topo_last->last_neighbor = t_last;
+
+				topo_last->next = list_of_last_tmp;
+
+				list_of_last_tmp = topo_last;
+
+				list_of_last = list_of_last->next;
+			}
+
+			
+			
+			topology_last_hash* top_last_hash; 
+			topology_last_entry* top_last;
+
+			top_last_hash = &olsr->topologylasttable[top_dest_tmp->topologydestination_hash % HASHMASK];
+
+			for (top_last = top_last_hash->topology_last_forw;
+				top_last != (topology_last_entry* ) top_last_hash;
+				top_last = top_last->topology_last_forw)
+			{
+				if (top_last->topologylast_hash != top_dest_tmp->topologydestination_hash)
+				{
+					continue;
+				}
+
+				destination_list* top_dest_list;				
+				top_dest_list = top_last->topology_list_of_destinations;
+				while (top_dest_list != NULL)
+				{
+					
+					if (NULL == OlsrinListLastTopology(top_dest_tmp->topology_destination_list_of_last, 
+						top_dest_list->destination_node->topology_destination_dst))
+					{
+
+						
+						topology_last_entry * t_last = (topology_last_entry *)
+						MEM_malloc(sizeof(topology_last_entry));
+
+						memset(t_last, 0, sizeof(topology_last_entry));
+
+						last_list * topo_last = (last_list *) MEM_malloc(sizeof(last_list));
+						memset(topo_last, 0, sizeof(last_list));
+
+						t_last->topology_last = top_dest_list->destination_node->topology_destination_dst;
+
+						topo_last->next = list_of_last_tmp;
+							
+						
+						topo_last->last_neighbor = t_last;
+
+						list_of_last_tmp = topo_last;
+						
+					}
+				
+					top_dest_list = top_dest_list->next;
+				}
+				
+				 
+			}
+			
+
+			destination_entry->topology_destination_list_of_last = list_of_last_tmp;
+		}
+	}
+
+}
+*/
+
+//SYMMETRIC TOPOLOGY TABLE
+
+static
+void OlsrTimeoutTopologyTableSYM(Node* node)
+{
+
+	/*
+	if (node->nodeId == 80)
+	{
+
+		printf("OlsrTimeoutTopologyTableSYM Begin for node %d \n", node->nodeId);
+
+	}
+	*/
+
+	//printf("################################## OlsrTimeoutTopologyTableSYM is called!!!!!!!!!!!!!!!!!!!!!! \n");
+
+	//if (getSimTime(node))
+
+	char timeStr[MAX_STRING_LENGTH];
+	TIME_PrintClockInSecond(getSimTime(node), timeStr, node);
+
+	double dSimTime = atof(timeStr);
+
+
+	BOOL bPrint = FALSE;
+
+	
+	//if (node->nodeId == 17 && iSimTime > 35)
+	
+	if (FALSE)
+	//if (node->nodeId == 18)
+	{
+		
+
+
+		if (dSimTime > 25)
+		{
+			//DebugBreak();
+			printf("Before TO \n");
+			
+			g_iChaseRouteTable = 0;
+			OlsrPrintTopologyTableSYM(node);
+			g_iChaseRouteTable = 1;
+
+			bPrint = TRUE;
+		}
+		
+		
+		printf("current node Id = %d at %f S \n", node->nodeId, dSimTime);
+		
+		
+	}
+	
+
+	
+
+
+	Int32 index;
+	topology_last_entry* top_last;
+	topology_last_entry* top_last_tmp;
+	topology_last_hash* top_last_hash;
+
+	RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+
+	for (index = 0; index < HASHSIZE; index++)
+	{
+
+		/*
+		if (bPrint && index == 29)
+		{
+
+			printf("current index = %d \n", index);
+			DebugBreak();
+		}
+		*/
+
+		top_last_hash = &olsr->sym_topologylasttable[index];
+		top_last = top_last_hash->topology_last_forw;
+		while (top_last != (topology_last_entry *) top_last_hash)
+		{
+			
+			
+			
+			// check each tuple for expiration
+			if (getSimTime(node) >= top_last->topology_timer)
+			{
+
+				//printf("################# nodeId = %d with top_last->topology_last = %d and top_last->topology_timer = %d in OlsrTimeoutTopologyTableSYM \n", node->nodeId, top_last->topology_last.interfaceAddr.ipv4, top_last->topology_timer);
+				
+				if (top_last->topology_timer == 0)
+				{
+					top_last = top_last->topology_last_forw;
+					//printf("################# nodeId = %d with top_last->topology_timer = 0 \n", node->nodeId);
+				}
+				else
+				{
+					top_last_tmp = top_last;
+					top_last = top_last->topology_last_forw;
+
+
+
+					////SYMMETRIC TOPOLOGY TABLE ???
+					
+
+					//the problem may caused by the delete of the top_last_hash, 
+					//so the loop can not terminate
+					//OlsrDeleteLastTopolgyTableSYM(node, top_last_tmp);
+					
+					OlsrDeleteLastTopolgyTableSYM(node, top_last_tmp, FALSE);
+
+
+					if (SYMMETRIC_TOPOLOGY_TABLE)
+					{
+						//the outsider OlsrTimeoutTopologyTable will set olsr->changes_topology,
+						//but if recent_delete_list or recent_add_list is not NULL, then the full RC will not be called.
+						if (olsr->recent_delete_list != NULL)
+						{
+							clear_tco_node_addr_set(&(olsr->recent_delete_list));
+						}
+						
+						if (olsr->recent_add_list != NULL)
+						{
+							clear_tco_node_addr_set(&(olsr->recent_add_list));
+						}
+						
+						
+					}
+
+					//olsr->changes_topology = TRUE;
+
+					
+				}				
+			}
+			else
+			{
+				top_last = top_last->topology_last_forw;
+			}
+		}
+	}
+
+
+	if (bPrint)
+	{
+
+		printf("After TO \n");
+
+		g_iChaseRouteTable = 0;
+		OlsrPrintTopologyTableSYM(node);
+		g_iChaseRouteTable = 1;
+	}
+
+	/*
+	if (node->nodeId == 80)
+	{
+
+		printf("OlsrTimeoutTopologyTableSYM End for node %d \n", node->nodeId);
+
+	}
+	*/
+
+	////SYMMETRIC TOPOLOGY TABLE
+	//May still require to delete the symmetric corresponding dest of entries 
+}
+
+
 
 // /**
 // FUNCTION   :: OlsrTimeoutTopologyTable
@@ -5771,12 +7894,24 @@ void OlsrTimeoutTopologyTable(
     // We only check last table because we didn't include a time out in the
     // dest entries
 
+	//Peter comment: just test 
+	//return;
+
+
+	//printf("OlsrTimeoutTopologyTable Begin \n");
+
     Int32 index;
     topology_last_entry* top_last;
     topology_last_entry* top_last_tmp;
     topology_last_hash* top_last_hash;
 
     RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+
+	if (SYMMETRIC_TOPOLOGY_TABLE)
+	{
+		OlsrTimeoutTopologyTableSYM(node);
+	}
+
 
     for (index = 0; index < HASHSIZE; index++)
     {
@@ -5791,6 +7926,9 @@ void OlsrTimeoutTopologyTable(
                 top_last = top_last->topology_last_forw;
                 OlsrDeleteLastTopolgyTable(top_last_tmp);
                 olsr->changes_topology = TRUE;
+                
+				g_iTopologyChgByOlsrTimeoutTopologyTable++;
+
             }
             else
             {
@@ -5798,7 +7936,140 @@ void OlsrTimeoutTopologyTable(
             }
         }
     }
+
+
+	//printf("OlsrTimeoutTopologyTable End \n");
 }
+
+
+
+//SYMMETRIC TOPOLOGY TABLE
+
+
+static
+void OlsrPrintTopologyTableSYM(
+							Node* node)
+{
+
+	/*
+	if (node->nodeId == 1)
+	{
+		//DebugBreak();
+	}
+	*/
+	
+
+	Int32 index;
+	topology_last_entry* top_last;
+	topology_last_hash* top_last_hash;
+	destination_list* top_dest_list;
+
+	RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+
+
+	if (g_iRunTimeCompare == 1)
+	{
+		sprintf(olsr->pszOtherTables, "SYM Topology Table:\n");
+	}
+	else
+	{
+		if (g_iChaseRouteTable == 1)
+		{
+			memset(g_szTextRT, 0, 16384 * sizeof(char));
+			sprintf(g_szTextRT, "SYM Topology Table:\n");
+		}
+		else
+		{
+			printf("SYM Topology Table:\n");
+		}
+	}
+	
+
+	
+
+	for (index = 0; index < HASHSIZE; index++)
+	{
+		top_last_hash = &olsr->sym_topologylasttable[index];
+		for (top_last = top_last_hash->topology_last_forw;
+			top_last != (topology_last_entry *) top_last_hash;
+			top_last = top_last->topology_last_forw)
+		{
+			char addrString[MAX_STRING_LENGTH];
+
+			IO_ConvertIpAddressToString(&top_last->topology_last,
+				addrString);
+
+
+			if (g_iRunTimeCompare == 1)
+			{
+				sprintf(olsr->pszOtherTables, "%s%-15s: [last_hop_of: ", olsr->pszOtherTables, addrString);
+			}
+			else
+			{
+				if (g_iChaseRouteTable == 1)
+				{
+					sprintf(g_szTextRT, "%s%-15s: [last_hop_of: ",g_szTextRT, addrString);
+				}
+				else
+				{
+					printf("%-15s: [last_hop_of: ",addrString);
+				}
+			}
+			
+
+			
+			top_dest_list = top_last->topology_list_of_destinations;
+
+			while (top_dest_list != NULL)
+			{
+				IO_ConvertIpAddressToString(
+					&top_dest_list->destination_node->
+					topology_destination_dst, addrString);
+
+				//printf("%s (%d %d)", addrString, top_dest_list->destination_node->topology_destination_info.bAddForSymmetric, top_dest_list->destination_node->topology_destination_info.bAddForNormal);
+				
+				if (g_iRunTimeCompare == 1)
+				{
+					sprintf(olsr->pszOtherTables, "%s%s ", olsr->pszOtherTables, addrString);
+				}
+				else
+				{
+					if (g_iChaseRouteTable == 1)
+					{
+						sprintf(g_szTextRT, "%s%s ", g_szTextRT, addrString);
+					}
+					else
+					{
+						printf("%s ", addrString);
+					}
+				}
+								
+				top_dest_list = top_dest_list->next;
+			}
+
+
+			if (g_iRunTimeCompare == 1)
+			{
+				sprintf(olsr->pszOtherTables,"%s]\n", olsr->pszOtherTables);
+			}
+			else
+			{
+				if (g_iChaseRouteTable == 1)
+				{
+					sprintf(g_szTextRT,"%s]\n", g_szTextRT);
+				}
+				else
+				{
+					printf("]\n");
+				}
+			}
+			
+			
+		}
+	}
+
+}
+
 
 
 // /**
@@ -5852,6 +8123,181 @@ void OlsrPrintTopologyTable(
 }
 
 
+// Peter Added for support _OLSR_MULTIPATH
+
+static
+void OlsrPrintDestTopologyTable(
+							Node* node)
+{
+	Int32 index;
+	topology_destination_entry* top_dest;
+	topology_destination_hash* top_dest_hash;
+	UInt32 hash;
+
+	RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+
+	if (DEBUG)
+	{
+		printf("OlsrPrintRealTopologyTable\n");
+	}
+
+	//OlsrHashing(dest, &hash);
+
+	//destination_list* top_dest_list;
+	last_list *list_of_last;
+
+	printf("Dest Topology Table:\n");
+	for (index = 0; index < HASHSIZE; index++)
+	{
+		top_dest_hash = &olsr->topologytable[index];
+		for (top_dest = top_dest_hash->topology_destination_forw;
+			top_dest != (topology_destination_entry *) top_dest_hash;
+			top_dest = top_dest->topology_destination_forw)
+		{
+			printf("%d ", top_dest->topologydestination_hash);
+			
+
+			char addrString[MAX_STRING_LENGTH];
+
+			IO_ConvertIpAddressToString(&top_dest->topology_destination_dst,
+				addrString);
+
+			printf("%-15s: [dest_hop_of: ",addrString);
+
+			list_of_last = top_dest->topology_destination_list_of_last;
+			
+			//top_dest_list = top_last->topology_list_of_destinations;
+
+			while (list_of_last != NULL)
+			{
+				//list_of_last->last_neighbor->		topologylast_hash	
+				//IO_ConvertIpAddressToString(&list_of_last->last_neighbor->topologylast_hash, addrString);
+
+				printf("%d ", list_of_last->last_neighbor->topologylast_hash);
+				list_of_last = list_of_last->next;
+			}
+			//topology_destination_list_of_last
+			printf("\n");
+
+		}
+
+	}
+}
+
+static
+void OlsrPrintCombinedTopologyTable(
+								Node* node)
+{
+	Int32 index;
+	topology_destination_entry* top_dest;
+	topology_destination_hash* top_dest_hash;
+	UInt32 hash;
+
+	RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+
+	if (DEBUG)
+	{
+		printf("OlsrPrintRealTopologyTable\n");
+	}
+
+	last_list *list_of_last;
+
+	printf("Combined Topology Table:\n");
+	for (index = 0; index < HASHSIZE; index++)
+	{
+		top_dest_hash = &olsr->combined_topologytable[index];
+		for (top_dest = top_dest_hash->topology_destination_forw;
+			top_dest != (topology_destination_entry *) top_dest_hash;
+			top_dest = top_dest->topology_destination_forw)
+		{
+			printf("%d ", top_dest->topologydestination_hash);
+
+
+			char addrString[MAX_STRING_LENGTH];
+
+			IO_ConvertIpAddressToString(&top_dest->topology_destination_dst,
+				addrString);
+
+			printf("%-15s: [last_hop_of: ",addrString);
+
+			list_of_last = top_dest->topology_destination_list_of_last;
+
+
+			while (list_of_last != NULL)
+			{
+
+				//memset(addrString, 0, MAX_STRING_LENGTH * sizeof(char));
+
+				//IO_ConvertIpAddressToString(&list_of_last->last_neighbor->topology_last, addrString);
+
+
+				//Address* dsf;
+				//dsf->interfaceAddr.ipv4
+
+				printf("%d ", list_of_last->last_neighbor->topology_last.interfaceAddr.ipv4);
+
+
+				list_of_last = list_of_last->next;
+			}
+
+			printf("\n");
+
+		}
+	}
+}
+
+
+static
+//int 
+void OlsrLookupAndUpdateRoutingCount(
+								 Node* node,
+								 Address dst)
+{
+
+	//Peter Comment: we try to only use the first entry to contain those
+	//infos
+
+	rt_entry* destination;
+	rthash* routing_hash;
+	UInt32 hash;
+
+	RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+
+	OlsrHashing(dst, &hash);
+	routing_hash = &olsr->routingtable[hash % HASHMASK];
+
+
+	//UInt16 iRouteCnt = 0;
+
+	
+	for (destination = routing_hash->rt_back;
+		destination != (rt_entry* ) routing_hash;
+		destination = destination->rt_back)
+	{
+		if (destination->rt_hash != hash)
+		{
+			continue;
+		}
+
+		// search address in the routing table entry
+		if (Address_IsSameAddress(&destination->rt_dst, &dst))
+		{
+
+			destination->rt_entry_infos.oa_total_routes_count++;						
+		}
+
+		//since this is the only case, so break here.
+		break;
+	}
+	
+
+	return;
+	
+	//iRouteCnt++;
+
+	//return iRouteCnt;	
+}
+
 
 /***************************************************************************
  *                   Defination of Routing Table                           *
@@ -5869,7 +8315,7 @@ void OlsrPrintTopologyTable(
 static
 rt_entry* OlsrLookupRoutingTable(
     Node* node,
-    Address dst)
+    Address dst, BOOL bForCompare = FALSE)
 {
     rt_entry* destination;
     rthash* routing_hash;
@@ -5878,7 +8324,17 @@ rt_entry* OlsrLookupRoutingTable(
     RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
 
     OlsrHashing(dst, &hash);
-    routing_hash = &olsr->routingtable[hash % HASHMASK];
+
+	if (bForCompare)
+	{
+		routing_hash = &olsr->mirror_table[hash % HASHMASK];
+	}
+	else
+	{
+		routing_hash = &olsr->routingtable[hash % HASHMASK];
+	}
+
+    
 
     for (destination = routing_hash->rt_forw;
         destination != (rt_entry* ) routing_hash;
@@ -5897,6 +8353,500 @@ rt_entry* OlsrLookupRoutingTable(
     }
     return NULL;
 }
+
+
+static
+rt_entry* OlsrLookupRoutingTableAdv(
+								 Node* node,
+								 Address dst,
+								 Int16 iExpectedCost = MAX_COST)
+{
+	//printf("=========== OlsrLookupRoutingTableAdv Start \n");
+
+	rt_entry* destination;
+	rthash* routing_hash;
+	UInt32 hash;
+
+	RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+
+	OlsrHashing(dst, &hash);
+	routing_hash = &olsr->routingtable[hash % HASHMASK];
+
+	for (destination = routing_hash->rt_forw;
+		destination != (rt_entry* ) routing_hash;
+		destination = destination->rt_forw)
+	{
+		if (destination->rt_hash != hash)
+		{
+			continue;
+		}
+
+		// search address in the routing table entry
+		if (Address_IsSameAddress(&destination->rt_dst, &dst))
+		{
+		
+			if (destination->rt_metric > iExpectedCost)
+			{
+				//remove the current route entry, since its cost is not optimized
+				OlsrDeleteRoutingTable(destination);
+
+				break;
+			}
+			else
+			{
+
+				return destination;
+			}			
+		}
+	}
+
+	//printf("=========== OlsrLookupRoutingTableAdv End \n");
+
+	return NULL;
+}
+
+
+static
+rt_entry* OlsrLookupRoutingTableAdvForLastReplace(
+	Node* node,
+	Address dst,
+	Address lasthop,
+	Address router,
+	Int16 iExpectedCost,
+	BOOL bOnlyCommonLast = FALSE, BOOL bRequireSameRouter = FALSE, rt_entry** ppre = NULL)
+{
+
+	rt_entry* Conclude = NULL;
+	rt_entry* destination;
+	rthash* routing_hash;
+	UInt32 hash;
+
+	RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+
+	OlsrHashing(dst, &hash);
+	routing_hash = &olsr->routingtable[hash % HASHMASK];
+
+	for (destination = routing_hash->rt_back;
+		destination != (rt_entry* ) routing_hash;
+		destination = destination->rt_back)
+	{
+		if (destination->rt_hash != hash)
+		{
+			continue;
+		}
+
+		if (Conclude == NULL)
+		{
+			Conclude = destination;
+
+			if (ppre != NULL)
+			{
+				*ppre = destination;
+			}
+		}
+
+		// search address in the routing table entry	
+		if (Address_IsSameAddress(&destination->rt_dst, &dst))
+		{
+
+			if (bOnlyCommonLast)
+			{
+				if (!bRequireSameRouter && destination->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == lasthop.interfaceAddr.ipv4
+					|| bRequireSameRouter && destination->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == lasthop.interfaceAddr.ipv4 && Address_IsSameAddress(&destination->rt_router, &router)) 
+					//&& (destination->rt_entry_infos.rtu_router.interfaceAddr.ipv4 != router.interfaceAddr.ipv4 
+					//	|| destination->rt_entry_infos.rtu_metric != iExpectedCost))
+				{
+
+					return destination;				
+				}
+				
+			}
+						
+		}		
+	}
+
+	return NULL;
+}
+
+//#ifdef _OLSR_MULTIPATH
+//Peter Modified: this function is used for caculate routing table with supporting multi-path
+/*
+BOOL OlsrTwoRoutersAreNeighbour(Node* node, Address route1, Address route2)
+{
+
+	//Peter comment: search from last table that match with one route,
+	//so as to compare its destination with the other route to see whether one can reach 
+	//the other directly (so that two routes are too near that need to be avoided)
+
+	BOOL bReachable = FALSE;
+
+	topology_last_entry* top_last = NULL;
+	destination_list* top_dest_list = NULL;
+
+	top_last = OlsrLookupLastTopologyTable(node, route1);
+	
+	if (top_last != NULL)
+	{
+		top_dest_list = top_last->topology_list_of_destinations;
+
+		BOOL bReachable = FALSE; 
+		while (top_dest_list != NULL)
+		{
+
+			//skip the route that within 1 hop distance from current route
+			if (Address_IsSameAddress(&top_dest_list->destination_node->topology_destination_dst, &route2))
+			{
+
+				bReachable = TRUE;
+				break;
+			}							
+
+			top_dest_list = top_dest_list->next;
+		}			
+	}
+
+	
+	if (bReachable)
+	{
+
+		return bReachable;
+	}
+
+
+	top_last = NULL;
+	top_dest_list = NULL;
+
+	top_last = OlsrLookupLastTopologyTable(node, route2);
+
+	if (top_last != NULL)
+	{
+		top_dest_list = top_last->topology_list_of_destinations;
+
+		BOOL bReachable = FALSE; 
+		while (top_dest_list != NULL)
+		{
+
+			//skip the route that within 1 hop distance from current route
+			if (Address_IsSameAddress(&top_dest_list->destination_node->topology_destination_dst, &route1))
+			{
+
+				bReachable = TRUE;
+				break;
+			}							
+
+			top_dest_list = top_dest_list->next;
+		}			
+	}
+	
+
+	return bReachable;
+}
+*/
+
+
+RouteEntryType OlsrAdvancedLookupRoutingTable(Node* node, Address dst, Address route, UInt16 expected_metric, double dRouteDegreeWRTOriginNode, UInt16 uiMaxRouterCount, Address last, BOOL bUpdateForAddList = FALSE, rt_entry** pprte = NULL)
+{
+
+	/*
+	char timeStr[MAX_STRING_LENGTH];
+	TIME_PrintClockInSecond(getSimTime(node), timeStr, node);
+
+	int iSimTime = atoi(timeStr);
+
+	if (iSimTime > 20 && node->nodeId == 2 && dst.interfaceAddr.ipv4 == 5)
+	{
+
+		//DebugBreak();
+	}
+	*/
+
+	RouteEntryType ret = ALLOWED_NORMAL;
+
+	if (pprte != NULL)
+	{
+		*pprte = NULL;
+	}
+	
+	//first of all, check the cost limitation
+
+	//Peter comment: two entries with same dest, different router, but the cost of new entry
+	//is not only one hop more than smallest of current exist one, may cause too many paths 
+	//or some unexpected long path in the future, so this condition is also not permitted 
+
+	//For 2 Hop case, the cost should be same uiHopCountDiff == 0 ???
+	//For more than 2 Hop case, uiHopCountDiff >=0
+
+
+	//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+	//Because the Topology table in OLSR is "not always" (worse than never or always, since it is random) symmetric.
+	//For example: in 4x4 topology, node 16 is in node 12's lasttop table, but node 16 itself does not have lasttop table,
+	//so according to routing table calculation, 16 can not reach 12 but 12 can reach 16.
+	
+	//	-- May need check the code to see how was the Topology table generated.
+
+	//	Different entries with same route (nextHop)  is not allowed:
+
+	//(1) cost == min:  allow same lastHop       allow further search (add to working set)
+	//(2) cost > min: disallow same lastHop      do not allow further search (do not add to working set)
+
+	//If the topology table can be modified to support symmetric, we can dis-allow different route & different lasthop
+	//for both (1) and (2), and only based on cost to determine further search(may need in-depth study for exceptions) 
+
+	rt_entry* destination;
+	rthash* routing_hash;
+
+	UInt32 hash;
+
+	RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+
+	OlsrHashing(dst, &hash);
+	routing_hash = &olsr->routingtable[hash % HASHMASK];
+
+
+
+	//Peter comment: search from last table that match with the new route,
+	//so as to compare its destination with the old route to see whether the new route 
+	//can reach old route directly (so there two routes are too near that need to be avoided)
+	//See function OlsrTwoRoutersAreNeighbour for detail
+	
+
+	//Just try whether there is one existing router that can not reached by this new one.
+	//BOOL bExistCanNotReachRouter = FALSE;
+	//BOOL bAlreadyExistOtherRoutersToSameDestination = FALSE;
+
+	
+
+	rt_entry* First_destination = NULL;
+
+
+	for (destination = routing_hash->rt_back;
+		destination != (rt_entry* ) routing_hash;
+		destination = destination->rt_back)
+	{
+		if (destination->rt_hash != hash)
+		{
+
+			continue;
+		}
+
+		if (First_destination == NULL)
+		{
+			First_destination = destination;
+
+			if (First_destination->rt_entry_infos.oa_maximum_allowed_cost == 0)
+			{
+
+				First_destination->rt_entry_infos.oa_maximum_allowed_cost = max(((double)(First_destination->rt_metric + MAX_DIFFEERENT_ROUTE_HOP_COUNT_DIFFERENCE)), ceil((double)(First_destination->rt_metric) * (double) MAX_DIFFEERENT_ROUTE_HOP_COUNT_DIFFERENCE_TIMES));
+			}
+
+			/*
+			if (First_destination->rt_entry_infos.oa_total_routes_count == 1 && First_destination->rt_entry_infos.oa_dWeightedDirectionDiffer == 0.0)
+			{
+
+				
+			}
+			*/
+		}
+
+		if (!bUpdateForAddList)
+		{
+			if (First_destination->rt_entry_infos.oa_total_routes_count == uiMaxRouterCount)
+			{
+
+				return NOT_ALLOWED;
+			}
+
+			if (First_destination->rt_entry_infos.oa_maximum_allowed_cost < expected_metric)
+			{
+
+				return NOT_ALLOWED;
+			}
+
+			// search address in the routing table entry
+			if (Address_IsSameAddress(&destination->rt_dst, &dst))
+			{			
+
+
+				if (Address_IsSameAddress(&destination->rt_router, &route))
+				{
+					//Peter comment: two entries with same dest and same router are not permitted
+
+					return NOT_ALLOWED;	
+				}
+
+
+
+				double dDgrWRT = 0.0;
+				if (_TEST_TIME_COMPLEXITY)
+				{
+					dDgrWRT = First_destination->rt_entry_infos.related_neighbor->neighbor_infos.dDegreeWRTNode;
+
+				}
+				else
+				{
+					dDgrWRT = First_destination->rt_entry_infos.rtu_DegreeWRTNode;
+
+				}
+
+				//Peter Modified to support disjoint path, only try to use shortest path now.					
+				double dDiff = RadiusDegreeDifference(dRouteDegreeWRTOriginNode, 
+					dDgrWRT);
+
+				if (fabs(dDiff) < olsr->dSectorDegree)
+				{
+
+					return NOT_ALLOWED;
+				}			
+			}
+		}
+		else
+		{
+			
+
+			/*
+			if (First_destination->rt_entry_infos.oa_total_routes_count == uiMaxRouterCount)
+			{
+
+				return NOT_ALLOWED;
+			}
+			*/
+
+			if (First_destination->rt_entry_infos.oa_maximum_allowed_cost < expected_metric)
+			{
+
+				return NOT_ALLOWED;
+			}
+
+			
+			// search address in the routing table entry
+			if (Address_IsSameAddress(&destination->rt_dst, &dst))
+			{			
+
+
+				if (Address_IsSameAddress(&destination->rt_router, &route))
+				{
+					//Peter comment: two entries with same dest and same router are not permitted
+
+					//return NOT_ALLOWED;
+					if (expected_metric >= destination->rt_metric)
+					{
+						
+						return NOT_ALLOWED;
+					}
+					else
+					{
+						destination->rt_entry_infos.rtu_metric = expected_metric;
+						destination->rt_entry_infos.rtu_lasthop = last;
+						
+						*pprte = destination;
+
+					}
+				}
+				else
+				{
+					
+				}
+
+
+
+				double dDgrWRT = 0.0;
+				if (_TEST_TIME_COMPLEXITY)
+				{
+					dDgrWRT = First_destination->rt_entry_infos.related_neighbor->neighbor_infos.dDegreeWRTNode;
+
+				}
+				else
+				{
+					dDgrWRT = First_destination->rt_entry_infos.rtu_DegreeWRTNode;
+
+				}
+
+				//Peter Modified to support disjoint path, only try to use shortest path now.					
+				double dDiff = RadiusDegreeDifference(dRouteDegreeWRTOriginNode, 
+					dDgrWRT);
+
+				if (fabs(dDiff) < olsr->dSectorDegree)
+				{
+
+					return NOT_ALLOWED;
+				}			
+			}
+
+
+		}
+
+		
+	}
+
+
+	//Update the allowed Angle range
+	//May not require
+	
+	//olsr->dSectorDegree
+	if (First_destination != NULL)
+	{
+		//at least the second one now
+
+				
+		double dAccumulatedWeightedDiffer = First_destination->rt_entry_infos.oa_dWeightedDirectionDiffer 
+										* (double)(First_destination->rt_entry_infos.oa_total_routes_count - 1);
+		
+
+		UInt16 uiCostDiff = expected_metric - First_destination->rt_entry_infos.rtu_metric;
+
+		double dWeight = (double)(((double)1.0) / (double)((uiCostDiff + 1) * (uiCostDiff + 1)));
+
+        double dDgrWRT = 0.0;
+		if (_TEST_TIME_COMPLEXITY)
+        {
+                      dDgrWRT = First_destination->rt_entry_infos.related_neighbor->neighbor_infos.dDegreeWRTNode;
+                      
+        }
+        else
+        {
+                      dDgrWRT = First_destination->rt_entry_infos.rtu_DegreeWRTNode;
+                      
+        }
+
+		dAccumulatedWeightedDiffer += RadiusDegreeDifference(dRouteDegreeWRTOriginNode, dDgrWRT) * dWeight;
+										
+		First_destination->rt_entry_infos.oa_dWeightedDirectionDiffer = (double)(dAccumulatedWeightedDiffer 
+																/ ((double)(First_destination->rt_entry_infos.oa_total_routes_count)));
+		
+		
+
+	}
+
+	if (bUpdateForAddList)
+	{
+		if (*pprte != NULL)
+		{
+			//exchange and already updated
+		}
+		else
+		{
+			if (First_destination)
+			{
+				if (First_destination->rt_entry_infos.oa_total_routes_count == uiMaxRouterCount)
+				{
+
+					return NOT_ALLOWED;
+				}
+
+			}
+		}
+
+		/*
+			
+			*/
+	}
+	
+	return ret;	
+
+}
+
+
+//#endif
 
 // /**
 // FUNCTION   :: OlsrDeleteRoutingTable
@@ -5962,7 +8912,7 @@ void OlsrReleaseRoutingTable(
 static
 rt_entry* OlsrInsertRoutingTable(
     Node* node,
-    Address dst)
+    Address dst, BOOL bForCompare = FALSE)
 {
     rt_entry* new_route_entry;
     rthash* routing_hash;
@@ -5971,7 +8921,18 @@ rt_entry* OlsrInsertRoutingTable(
     RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
 
     OlsrHashing(dst, &hash);
-    routing_hash = &olsr->routingtable[hash % HASHMASK];
+
+
+	if (bForCompare)
+	{
+		routing_hash = &olsr->mirror_table[hash % HASHMASK];
+	}
+	else
+	{
+		routing_hash = &olsr->routingtable[hash % HASHMASK];
+	}
+
+    
 
     new_route_entry = (rt_entry*) MEM_malloc(sizeof(rt_entry));
     memset(new_route_entry, 0, sizeof(rt_entry));
@@ -5985,7 +8946,39 @@ rt_entry* OlsrInsertRoutingTable(
 
     new_route_entry->rt_metric = 0;
 
+
+	//Peter modified for accumulative re-discovery, for delete case
+	new_route_entry->rt_entry_infos.bCostChanged = FALSE;
+	new_route_entry->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+	new_route_entry->rt_entry_infos.bRequireDelete = FALSE;
+
+	new_route_entry->rt_entry_infos.uiCostChg = 0;
+	//new_route_entry->rt_entry_infos.bRequireExchange = FALSE;
+	//new_route_entry->rt_entry_infos.bRequireUpdate = FALSE;
+
+	
+			
     OlsrInsertList((olsr_qelem* )new_route_entry,(olsr_qelem *)routing_hash);
+
+
+	if (bForCompare)
+	{
+
+	}
+	else
+	{
+
+		if (_OLSR_MULTIPATH)
+		{
+
+			//Every new entry set this field as 1, but Only the first entry is used for this number later
+			new_route_entry->rt_entry_infos.oa_total_routes_count = 0;
+
+			OlsrLookupAndUpdateRoutingCount(node, dst);
+		}
+		
+	}
+
 
     // We need this pointer to use it for the next routing calculation
     return new_route_entry;
@@ -6006,7 +8999,13 @@ static rt_entry*
 OlsrInsertRoutingTablefromTopology(
     Node* node,
     rt_entry* r_last,
-    Address dst)
+    Address dst,
+	// Peter Added: For _OLSR_MULTIPATH
+	Address lasthop,
+	double dRouterDegreeWRTOriginNode = 0,
+	double dRouterDistanceWRTOriginNode = 0,
+	BOOL bForCompare = FALSE
+	)
 {
     rt_entry* new_route_entry = NULL;
 
@@ -6050,12 +9049,26 @@ OlsrInsertRoutingTablefromTopology(
     // Only if a link exists to the neighbor, add the node to the routing
     // table.
 
-    new_route_entry = OlsrInsertRoutingTable(node, dst);
+    new_route_entry = OlsrInsertRoutingTable(node, dst, bForCompare);
     new_route_entry->rt_router = r_last->rt_router;
     new_route_entry->rt_metric = (UInt16) (r_last->rt_metric + 1);
     new_route_entry->rt_interface =  RoutingOlsrCheckMyIfaceAddress(
                                         node,
                                         link->local_iface_addr);
+
+	new_route_entry->rt_entry_infos.rtu_lasthop = lasthop;
+
+
+	if (_OLSR_MULTIPATH)
+	{
+
+		new_route_entry->rt_entry_infos.rtu_DegreeWRTNode = dRouterDegreeWRTOriginNode;
+		new_route_entry->rt_entry_infos.rtu_DistanceWRTNode = dRouterDistanceWRTOriginNode;
+		new_route_entry->rt_entry_infos.related_neighbor = r_last->rt_entry_infos.related_neighbor;
+
+	}
+
+	
     if (DEBUG)
     {
         char addrString1[MAX_STRING_LENGTH];
@@ -6074,30 +9087,54 @@ OlsrInsertRoutingTablefromTopology(
             new_route_entry->rt_metric);
     }
 
-    if (dst.networkType == NETWORK_IPV6)
-    {
-        Ipv6UpdateForwardingTable(
-            node,
-            GetIPv6Address(dst),
-            128,
-            GetIPv6Address(new_route_entry->rt_router),
-            new_route_entry->rt_interface,
-            new_route_entry->rt_metric,
-            ROUTING_PROTOCOL_OLSR_INRIA);
 
-    }
-    else
+	if (_TEST_TIME_COMPLEXITY || FORWARD_WITH_PURE_ROUTE_TABLE)
+	{
+	}
+	else
+	{
+	
+		if (dst.networkType == NETWORK_IPV6)
+		{
+			Ipv6UpdateForwardingTable(
+				node,
+				GetIPv6Address(dst),
+				128,
+				GetIPv6Address(new_route_entry->rt_router),
+				new_route_entry->rt_interface,
+				new_route_entry->rt_metric,
+				ROUTING_PROTOCOL_OLSR_INRIA);
 
-    {
-        NetworkUpdateForwardingTable(
-            node,
-            GetIPv4Address(dst),
-            0xffffffff,
-            GetIPv4Address(new_route_entry->rt_router),
-            new_route_entry->rt_interface,
-            new_route_entry->rt_metric,
-            ROUTING_PROTOCOL_OLSR_INRIA);
-    }
+		}
+		else
+		{
+			if (_OLSR_MULTIPATH)
+			{
+
+				OLSRv1UpdateForwardingTableWithDisjointPath(node, new_route_entry);
+			}
+			else
+			{
+
+				NetworkUpdateForwardingTable(
+					node,
+					GetIPv4Address(dst),
+					0xffffffff,
+					GetIPv4Address(new_route_entry->rt_router),
+					new_route_entry->rt_interface,
+					new_route_entry->rt_metric,
+					ROUTING_PROTOCOL_OLSR_INRIA);
+			}
+
+
+		}
+
+	}
+
+
+    
+
+	
 
 
     return new_route_entry;
@@ -6150,19 +9187,22 @@ bool OlsrIs2HopNeighborReachable(
 
 static
 destination_n* OlsrFillRoutingTableWith2HopNeighbors(
-    Node* node)
+    Node* node, UInt32 * uiLookupCntFor2Hop = NULL, BOOL bForCompare = FALSE)
 {
+
+
+	UInt32 uiCnt = 0;
+
     destination_n* list_destination_n = NULL;
+
+
+	destination_n* tmp_destination_tail = NULL;
+
     unsigned char index;
     neighbor_entry* neighbor;
     neighborhash_type* hash_neighbor;
 
     RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
-
-    if (DEBUG)
-    {
-        printf("Browse for 2 hop neighbors\n");
-    }
 
     for (index = 0; index < HASHSIZE; index++)
     {
@@ -6199,11 +9239,71 @@ destination_n* OlsrFillRoutingTableWith2HopNeighbors(
                             addrString);
                 }
 
-                if (OlsrLookupRoutingTable(node, n2_addr))
-                {
-                    neigh_2_list = neigh_2_list->neighbor_2_next;
-                    continue;
-                }
+                
+				// Peter Modified to support multipath
+				//rt_entry* tr_tmp = NULL;
+				RouteEntryType ret = NOT_ALLOWED;
+
+                double dDistance = 0.0;
+				double dRWON = 0.0;
+
+				
+				if (_OLSR_MULTIPATH)
+				{
+					if (_TEST_TIME_COMPLEXITY)
+					{
+						dRWON = neighbor->neighbor_infos.dDegreeWRTNode;
+						dDistance = neighbor->neighbor_infos.dDistanceWRTNode;
+					}
+					else
+					{
+						dRWON = ComputeRouterDegreeWRTOriginNode(node, neighbor->neighbor_main_addr.interfaceAddr.ipv4, &dDistance);
+						dRWON = SimulateLocalDirectionOfAoA(node, dRWON);
+
+					}
+				}
+						
+
+								
+				
+				if (_TEST_TIME_COMPLEXITY && uiLookupCntFor2Hop != NULL)
+				{						
+					uiCnt++;
+
+
+					/*
+					if (uiCnt > 5)
+					{
+						printf("uiCnt = %d \n", uiCnt);
+
+					}
+					*/
+					
+				}
+				
+				
+				if (_OLSR_MULTIPATH)
+				{
+								
+					ret = OlsrAdvancedLookupRoutingTable(node, n2_addr, neighbor->neighbor_main_addr, 2, 
+                                                dRWON, 
+                                                _OLSR_TEMP_ROUTES_LIMIT, neighbor->neighbor_main_addr);
+					if (ret == NOT_ALLOWED)
+					{
+						neigh_2_list = neigh_2_list->neighbor_2_next;
+						continue;
+					}
+				}
+				else
+				{
+
+					if (OlsrLookupRoutingTable(node, n2_addr, bForCompare))
+					{
+
+						neigh_2_list = neigh_2_list->neighbor_2_next;
+						continue;
+					}
+				}							
 
                 if (!OlsrIs2HopNeighborReachable(neigh_2_list))
                 {
@@ -6223,14 +9323,32 @@ destination_n* OlsrFillRoutingTableWith2HopNeighbors(
 
                     if (link)
                     {
-                        rt_entry* new_route_entry =
-                            OlsrInsertRoutingTable(
-                                node,
-                                addrsp->alias);
+                        // Peter modified to support multipath						
+						
+						rt_entry* new_route_entry = OlsrInsertRoutingTable(node, addrsp->alias, bForCompare);
 
-                        new_route_entry->rt_router =
-                            link->neighbor_iface_addr;
+                        new_route_entry->rt_router = link->neighbor_iface_addr;
 
+						new_route_entry->rt_entry_infos.rtu_lasthop = link->neighbor_iface_addr;
+
+
+						if (_OLSR_MULTIPATH)
+						{
+							if (_TEST_TIME_COMPLEXITY)
+							{
+								new_route_entry->rt_entry_infos.related_neighbor = neighbor;					
+
+							}
+							else
+							{
+								new_route_entry->rt_entry_infos.rtu_DegreeWRTNode = dRWON;
+
+								new_route_entry->rt_entry_infos.rtu_DistanceWRTNode = dDistance;
+
+							}
+						}
+												
+                                                
                         // The next router is the neighbor itself
                         new_route_entry->rt_metric = 2;
 
@@ -6258,30 +9376,50 @@ destination_n* OlsrFillRoutingTableWith2HopNeighbors(
                                 new_route_entry->rt_metric);
                         }
 
-                        if (addrsp->alias.networkType == NETWORK_IPV6)
-                        {
-                            Ipv6UpdateForwardingTable(
-                                node,
-                                GetIPv6Address(addrsp->alias),
-                                128,
-                                GetIPv6Address(link->neighbor_iface_addr),
-                                new_route_entry->rt_interface,
-                                new_route_entry->rt_metric,
-                                ROUTING_PROTOCOL_OLSR_INRIA);
-                        }
-                        else
+						if (_TEST_TIME_COMPLEXITY || FORWARD_WITH_PURE_ROUTE_TABLE)
+						{
 
-                        {
-                            NetworkUpdateForwardingTable(
-                                node,
-                                GetIPv4Address(addrsp->alias),
-                                0xffffffff,
-                                GetIPv4Address(link->neighbor_iface_addr),
-                                new_route_entry->rt_interface,
-                                new_route_entry->rt_metric,
-                                ROUTING_PROTOCOL_OLSR_INRIA);
-                        }
-                        if (new_route_entry != NULL)
+						}
+						else
+						{
+
+							if (addrsp->alias.networkType == NETWORK_IPV6)
+							{
+								Ipv6UpdateForwardingTable(
+									node,
+									GetIPv6Address(addrsp->alias),
+									128,
+									GetIPv6Address(link->neighbor_iface_addr),
+									new_route_entry->rt_interface,
+									new_route_entry->rt_metric,
+									ROUTING_PROTOCOL_OLSR_INRIA);
+							}
+							else
+							{
+
+								if (_OLSR_MULTIPATH)
+								{
+
+									OLSRv1UpdateForwardingTableWithDisjointPath(node, new_route_entry);
+								}
+								else
+								{
+
+									NetworkUpdateForwardingTable(
+										node,
+										GetIPv4Address(addrsp->alias),
+										0xffffffff,
+										GetIPv4Address(link->neighbor_iface_addr),
+										new_route_entry->rt_interface,
+										new_route_entry->rt_metric,
+										ROUTING_PROTOCOL_OLSR_INRIA);
+								}                  
+							}
+
+						}
+
+                       
+						if (new_route_entry != NULL)
                         {
                             destination_n* list_destination_tmp;
                             list_destination_tmp = (destination_n* )
@@ -6294,8 +9432,26 @@ destination_n* OlsrFillRoutingTableWith2HopNeighbors(
 
                             list_destination_tmp->destination =
                                 new_route_entry;
-                            list_destination_tmp->next = list_destination_n;
-                            list_destination_n = list_destination_tmp;
+                            
+							//list_destination_tmp->next = list_destination_n;
+                            //list_destination_n = list_destination_tmp;
+
+							if (list_destination_n == NULL)
+							{
+								list_destination_n = list_destination_tmp;
+								tmp_destination_tail = list_destination_tmp;
+							}
+							else
+							{
+								//list_destination_tmp->next = NULL;
+								//list_destination_tmp->next = ;
+
+								//list_destination_n->next = list_destination_tmp;
+								tmp_destination_tail->next = list_destination_tmp;
+								tmp_destination_tail = tmp_destination_tail->next;
+
+							}
+
                         }
                     }
 
@@ -6306,8 +9462,360 @@ destination_n* OlsrFillRoutingTableWith2HopNeighbors(
             }
         }
     }
+
+	if (_TEST_TIME_COMPLEXITY && uiLookupCntFor2Hop != NULL)
+	{
+
+		*uiLookupCntFor2Hop = uiCnt;
+
+	}
+	
+
     return list_destination_n;
 }
+
+
+static
+destination_n* OlsrFillRoutingTableWith2HopNeighborsForSpecificNeighbor(
+    Node* node, NodeAddress naNeighbor, UInt32 * uiLookupCntFor2Hop = NULL)
+{
+
+
+	UInt32 uiCnt = 0;
+
+    destination_n* list_destination_n = NULL;
+
+	destination_n* tmp_destination_tail = NULL;
+
+    unsigned char index;
+    neighbor_entry* neighbor;
+    neighborhash_type* hash_neighbor;
+
+    RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+
+    //for (index = 0; index < HASHSIZE; index++)
+    {
+        hash_neighbor = &olsr->neighbortable.neighborhash[naNeighbor % HASHMASK];
+
+        for (neighbor = hash_neighbor->neighbor_forw;
+            neighbor != (neighbor_entry *) hash_neighbor;
+            neighbor = neighbor->neighbor_forw)
+        {
+            neighbor_2_list_entry* neigh_2_list;
+
+            if (neighbor->neighbor_status != SYM)
+            {
+                continue;
+            }
+
+			if (neighbor->neighbor_main_addr.interfaceAddr.ipv4 == naNeighbor)
+			{
+				//return neighbor;
+				//continue
+				neigh_2_list = neighbor->neighbor_2_list;
+				while (neigh_2_list != NULL)
+				{
+					Address n2_addr;
+					mid_address addrs;
+					memset( &addrs, 0, sizeof(mid_address));
+					mid_address* addrsp;
+
+					n2_addr = neigh_2_list->neighbor_2->neighbor_2_addr;
+
+					if (DEBUG)
+					{
+						char addrString[MAX_STRING_LENGTH];
+						IO_ConvertIpAddressToString(&n2_addr,
+								addrString);
+
+						printf("Checking Node  %s\n",
+								addrString);
+					}
+
+	                
+					// Peter Modified to support multipath
+					//rt_entry* tr_tmp = NULL;
+					RouteEntryType ret = NOT_ALLOWED;
+
+					double dDistance = 0.0;
+					double dRWON = 0.0;
+
+
+					if (_OLSR_MULTIPATH)
+					{
+						if (_TEST_TIME_COMPLEXITY)
+						{
+							dRWON = neighbor->neighbor_infos.dDegreeWRTNode;
+							dDistance = neighbor->neighbor_infos.dDistanceWRTNode;
+						}
+						else
+						{
+							dRWON = ComputeRouterDegreeWRTOriginNode(node, neighbor->neighbor_main_addr.interfaceAddr.ipv4, &dDistance);
+							dRWON = SimulateLocalDirectionOfAoA(node, dRWON);
+
+						}
+					}					
+
+									
+					
+					if (_TEST_TIME_COMPLEXITY && uiLookupCntFor2Hop != NULL)
+					{						
+						uiCnt++;
+
+
+						/*
+						if (uiCnt > 5)
+						{
+							printf("uiCnt = %d \n", uiCnt);
+
+						}
+						*/
+						
+					}
+					
+
+					rt_entry* rt_tmp = NULL;
+					if (_OLSR_MULTIPATH)
+					{
+									
+						ret = OlsrAdvancedLookupRoutingTable(node, n2_addr, neighbor->neighbor_main_addr, 2, 
+													dRWON, 
+													_OLSR_TEMP_ROUTES_LIMIT, neighbor->neighbor_main_addr);
+						if (ret == NOT_ALLOWED)
+						{
+							neigh_2_list = neigh_2_list->neighbor_2_next;
+							continue;
+						}
+					}
+					else
+					{
+						//rt_entry* rt_tmp = NULL; 
+						rt_tmp = OlsrLookupRoutingTable(node, n2_addr);
+						if (rt_tmp != NULL)
+						{
+
+							if (rt_tmp->rt_entry_infos.rtu_metric > 2)
+							{
+								//if exist one is larger, then still add this new
+								//OlsrDeleteRoutingTable(rt_tmp);
+							}
+							else
+							{
+
+								if (g_iToAchieveSameRoute == 1)
+								{
+									if (rt_tmp->rt_entry_infos.rtu_metric == 2 && PreferredRouteForNew(naNeighbor, rt_tmp->rt_entry_infos.rtu_router.interfaceAddr.ipv4))
+									{
+
+										//OlsrDeleteRoutingTable(rt_tmp);										
+									}
+									else
+									{
+										neigh_2_list = neigh_2_list->neighbor_2_next;
+										continue;
+									}
+									
+								}
+								else
+								{
+									neigh_2_list = neigh_2_list->neighbor_2_next;
+									continue;
+								}	
+
+							}
+							
+						}
+
+					}
+
+
+					if (!OlsrIs2HopNeighborReachable(neigh_2_list))
+					{
+						neigh_2_list = neigh_2_list->neighbor_2_next;
+						continue;
+					}
+
+					addrs.alias = n2_addr;
+					addrs.next_alias = OlsrLookupMidAliases(node,n2_addr);
+					addrsp = &addrs;
+
+					while (addrsp!=NULL)
+					{
+						link_entry* link = OlsrGetBestLinktoNeighbor(
+											   node,
+											   neighbor->neighbor_main_addr);
+
+						if (link)
+						{
+							// Peter modified to support multipath						
+							
+							rt_entry* new_route_entry = NULL;
+
+							if (rt_tmp != NULL)
+							{
+								new_route_entry = rt_tmp;
+							}
+							else
+							{
+								new_route_entry = OlsrInsertRoutingTable(node, addrsp->alias);
+							}
+
+							
+							new_route_entry->rt_router =
+								link->neighbor_iface_addr;
+
+							new_route_entry->rt_entry_infos.rtu_lasthop = link->neighbor_iface_addr;
+
+
+							if (_OLSR_MULTIPATH)
+							{
+								if (_TEST_TIME_COMPLEXITY)
+								{
+									new_route_entry->rt_entry_infos.related_neighbor = neighbor;					
+
+								}
+								else
+								{
+									new_route_entry->rt_entry_infos.rtu_DegreeWRTNode = dRWON;
+
+									new_route_entry->rt_entry_infos.rtu_DistanceWRTNode = dDistance;
+
+								}
+							}
+														
+	                                                
+							// The next router is the neighbor itself
+							new_route_entry->rt_metric = 2;
+
+							new_route_entry->rt_interface =
+								 RoutingOlsrCheckMyIfaceAddress(
+									node,
+									link->local_iface_addr);
+
+							if (DEBUG)
+							{
+								char addrString1[MAX_STRING_LENGTH];
+								char addrString2[MAX_STRING_LENGTH];
+								IO_ConvertIpAddressToString(&addrsp->alias,
+									addrString1);
+								IO_ConvertIpAddressToString(
+									&link->neighbor_iface_addr,
+									addrString2);
+								printf("Updating Routing Table at node %d\n",
+									node->nodeId);
+								printf("Dst : %s Next Hop : %s Interface: %d"
+									" Metric: %d\n",
+									addrString1,
+									addrString2,
+									new_route_entry->rt_interface,
+									new_route_entry->rt_metric);
+							}
+
+							if (_TEST_TIME_COMPLEXITY || FORWARD_WITH_PURE_ROUTE_TABLE)
+							{
+
+							}
+							else
+							{
+
+								if (addrsp->alias.networkType == NETWORK_IPV6)
+								{
+									Ipv6UpdateForwardingTable(
+										node,
+										GetIPv6Address(addrsp->alias),
+										128,
+										GetIPv6Address(link->neighbor_iface_addr),
+										new_route_entry->rt_interface,
+										new_route_entry->rt_metric,
+										ROUTING_PROTOCOL_OLSR_INRIA);
+								}
+								else
+								{
+
+									if (_OLSR_MULTIPATH)
+									{
+
+										OLSRv1UpdateForwardingTableWithDisjointPath(node, new_route_entry);
+									}
+									else
+									{
+
+										NetworkUpdateForwardingTable(
+											node,
+											GetIPv4Address(addrsp->alias),
+											0xffffffff,
+											GetIPv4Address(link->neighbor_iface_addr),
+											new_route_entry->rt_interface,
+											new_route_entry->rt_metric,
+											ROUTING_PROTOCOL_OLSR_INRIA);
+									}                  
+								}
+
+							}
+
+	                       
+							if (new_route_entry != NULL)
+							{
+								destination_n* list_destination_tmp;
+								list_destination_tmp = (destination_n* )
+									MEM_malloc(sizeof(destination_n));
+
+								memset(
+									list_destination_tmp,
+									0,
+									sizeof(destination_n));
+
+								list_destination_tmp->destination =
+									new_route_entry;
+								
+								//list_destination_tmp->next = list_destination_n;
+								//list_destination_n = list_destination_tmp;
+
+								
+								if (list_destination_n == NULL)
+								{
+									list_destination_n = list_destination_tmp;
+									tmp_destination_tail = list_destination_tmp;
+								}
+								else
+								{
+									//list_destination_tmp->next = NULL;
+									//list_destination_tmp->next = ;
+									
+									//list_destination_n->next = list_destination_tmp;
+									tmp_destination_tail->next = list_destination_tmp;
+									tmp_destination_tail = tmp_destination_tail->next;
+
+								}
+								
+							}
+						}
+
+						addrsp = addrsp->next_alias;
+					}
+
+					neigh_2_list = neigh_2_list->neighbor_2_next;
+				}
+				
+			
+				break;
+			}
+
+            
+        }
+    }
+
+	if (_TEST_TIME_COMPLEXITY && uiLookupCntFor2Hop != NULL)
+	{
+
+		*uiLookupCntFor2Hop = uiCnt;
+
+	}
+	
+
+    return list_destination_n;
+}
+
 
 // /**
 // FUNCTION   :: OlsrFillRoutingTableWithNeighbors
@@ -6319,7 +9827,7 @@ destination_n* OlsrFillRoutingTableWith2HopNeighbors(
 // **/
 
 static
-Int32 OlsrFillRoutingTableWithNeighbors(Node *node)
+Int32 OlsrFillRoutingTableWithNeighbors(Node *node, BOOL bForCompare = FALSE)
 {
     int index;
     neighbor_entry* neighbor;
@@ -6380,10 +9888,34 @@ Int32 OlsrFillRoutingTableWithNeighbors(Node *node)
                         // inserts each neighbor in the routing table
                         new_route_entry = OlsrInsertRoutingTable(
                                               node,
-                                              addrs2->alias);
+                                              addrs2->alias, bForCompare);
 
                         new_route_entry->rt_router =
                             link->neighbor_iface_addr;
+
+						SetIPv4AddressInfo(&new_route_entry->rt_entry_infos.rtu_lasthop, node->nodeId);
+
+						
+						if (_OLSR_MULTIPATH)
+						{
+							if (_TEST_TIME_COMPLEXITY)
+							{
+								new_route_entry->rt_entry_infos.related_neighbor = neighbor;
+							}
+							else
+							{
+
+
+								{
+									double dDistance = 0.0;
+									double dRWON = ComputeRouterDegreeWRTOriginNode(node, link->neighbor_iface_addr.interfaceAddr.ipv4, &dDistance);
+
+									new_route_entry->rt_entry_infos.rtu_DegreeWRTNode = SimulateLocalDirectionOfAoA(node, dRWON);
+									new_route_entry->rt_entry_infos.rtu_DistanceWRTNode = dDistance;
+								}							   
+							}
+						}
+						
 
                         // The next router is the neighbor itself
                         new_route_entry->rt_metric = 1;
@@ -6412,29 +9944,51 @@ Int32 OlsrFillRoutingTableWithNeighbors(Node *node)
                                  new_route_entry->rt_metric);
                         }
 
-                        if (addrs2->alias.networkType == NETWORK_IPV6)
-                        {
-                            Ipv6UpdateForwardingTable(
-                                node,
-                                GetIPv6Address(addrs2->alias),
-                                128,
-                                GetIPv6Address(link->neighbor_iface_addr),
-                                new_route_entry->rt_interface,
-                                new_route_entry->rt_metric,
-                                ROUTING_PROTOCOL_OLSR_INRIA);
-                        }
-                        else
 
-                        {
-                            NetworkUpdateForwardingTable(
-                                node,
-                                GetIPv4Address(addrs2->alias),
-                                0xffffffff,
-                                GetIPv4Address(link->neighbor_iface_addr),
-                                new_route_entry->rt_interface,
-                                new_route_entry->rt_metric,
-                                ROUTING_PROTOCOL_OLSR_INRIA);
-                        }
+						if (_TEST_TIME_COMPLEXITY || FORWARD_WITH_PURE_ROUTE_TABLE)
+						{
+
+						}
+						else
+						{
+							if (addrs2->alias.networkType == NETWORK_IPV6)
+							{
+								Ipv6UpdateForwardingTable(
+									node,
+									GetIPv6Address(addrs2->alias),
+									128,
+									GetIPv6Address(link->neighbor_iface_addr),
+									new_route_entry->rt_interface,
+									new_route_entry->rt_metric,
+									ROUTING_PROTOCOL_OLSR_INRIA);
+							}
+							else
+							{
+								if (_OLSR_MULTIPATH)
+								{
+
+									OLSRv1UpdateForwardingTableWithDisjointPath(node, new_route_entry);
+								}
+								else
+								{
+									NetworkUpdateForwardingTable(
+										node,
+										GetIPv4Address(addrs2->alias),
+										0xffffffff,
+										GetIPv4Address(link->neighbor_iface_addr),
+										new_route_entry->rt_interface,
+										new_route_entry->rt_metric,
+										ROUTING_PROTOCOL_OLSR_INRIA);
+								}							
+
+							}
+
+
+
+
+						}
+
+                        
                     }
                     addrs2 = addrs2->next_alias;
                 }
@@ -6443,6 +9997,191 @@ Int32 OlsrFillRoutingTableWithNeighbors(Node *node)
     }
     return 1 ;
 }
+
+
+static
+Int32 OlsrFillRoutingTableWithSpecificNeighbor(Node *node, NodeAddress naNeighbor)
+{
+	int index;
+	neighbor_entry* neighbor;
+	neighborhash_type* hash_neighbor;
+	rt_entry* new_route_entry = NULL;
+
+	RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+
+	//for (index = 0; index < HASHSIZE; index++)
+	{
+		hash_neighbor = &olsr->neighbortable.neighborhash[naNeighbor % HASHMASK];
+
+		for (neighbor = hash_neighbor->neighbor_forw;
+			neighbor != (neighbor_entry *) hash_neighbor;
+			neighbor = neighbor->neighbor_forw)
+		{
+			if (neighbor->neighbor_status == SYM && neighbor->neighbor_main_addr.interfaceAddr.ipv4 == naNeighbor)
+			{
+				mid_address  addrs;
+				memset( &addrs, 0, sizeof(mid_address));
+				mid_address* addrs2;
+
+				if (DEBUG)
+				{
+					OlsrPrintMidTable(node);
+				}
+				addrs.alias = neighbor->neighbor_main_addr;
+				addrs.next_alias = OlsrLookupMidAliases(
+					node,
+					neighbor->neighbor_main_addr);
+
+				addrs2 = &addrs;
+
+				if (DEBUG)
+				{
+					printf(" List of aliases to be added\n");
+					mid_address* tmp_addr;
+					tmp_addr = &addrs;
+
+					while (tmp_addr != NULL)
+					{
+						char addrString[MAX_STRING_LENGTH];
+						IO_ConvertIpAddressToString(&tmp_addr->alias,
+							addrString);
+						printf(" Alias: %s\n", addrString);
+
+						tmp_addr = tmp_addr->next_alias;
+					}
+				}
+
+				while (addrs2 != NULL)
+				{
+					link_entry* link = OlsrGetBestLinktoNeighbor(
+						node, addrs2->alias);
+
+					if (link)
+					{
+
+
+						rt_entry* rt_tmp = OlsrLookupRoutingTable(node, neighbor->neighbor_main_addr);
+
+						if (rt_tmp != NULL && rt_tmp->rt_entry_infos.rtu_metric > 1)
+						{
+
+							//OlsrDeleteRoutingTable(rt_tmp);
+							new_route_entry = rt_tmp;
+						}
+						else
+						{
+							// inserts each neighbor in the routing table
+							new_route_entry = OlsrInsertRoutingTable(
+								node,
+								addrs2->alias);
+						}
+
+						
+						new_route_entry->rt_router =
+							link->neighbor_iface_addr;
+
+						SetIPv4AddressInfo(&new_route_entry->rt_entry_infos.rtu_lasthop, node->nodeId);
+
+						if (_OLSR_MULTIPATH)
+						{
+							if (_TEST_TIME_COMPLEXITY)
+							{
+								new_route_entry->rt_entry_infos.related_neighbor = neighbor;
+							}
+							else
+							{
+
+
+								{
+									double dDistance = 0.0;
+									double dRWON = ComputeRouterDegreeWRTOriginNode(node, link->neighbor_iface_addr.interfaceAddr.ipv4, &dDistance);
+
+									new_route_entry->rt_entry_infos.rtu_DegreeWRTNode = SimulateLocalDirectionOfAoA(node, dRWON);
+									new_route_entry->rt_entry_infos.rtu_DistanceWRTNode = dDistance;
+								}							
+							}
+						}
+						
+
+						// The next router is the neighbor itself
+						new_route_entry->rt_metric = 1;
+
+						new_route_entry->rt_interface =
+							RoutingOlsrCheckMyIfaceAddress(
+							node,
+							link->local_iface_addr);
+
+						if (DEBUG)
+						{
+							char addrString1[MAX_STRING_LENGTH];
+							char addrString2[MAX_STRING_LENGTH];
+							IO_ConvertIpAddressToString(
+								&addrs2->alias,
+								addrString1);
+							IO_ConvertIpAddressToString(
+								&link->neighbor_iface_addr,
+								addrString2);
+							printf("Updating Routing Table at node %d\n",
+								node->nodeId);
+							printf("Dst : %s Next Hop : %s Interface: %d"
+								" Metric: %d\n",
+								addrString1, addrString2,
+								new_route_entry->rt_interface,
+								new_route_entry->rt_metric);
+						}
+
+
+						if (_TEST_TIME_COMPLEXITY || FORWARD_WITH_PURE_ROUTE_TABLE)
+						{
+
+						}
+						else
+						{
+							if (addrs2->alias.networkType == NETWORK_IPV6)
+							{
+								Ipv6UpdateForwardingTable(
+									node,
+									GetIPv6Address(addrs2->alias),
+									128,
+									GetIPv6Address(link->neighbor_iface_addr),
+									new_route_entry->rt_interface,
+									new_route_entry->rt_metric,
+									ROUTING_PROTOCOL_OLSR_INRIA);
+							}
+							else
+							{
+								if (_OLSR_MULTIPATH)
+								{
+
+									OLSRv1UpdateForwardingTableWithDisjointPath(node, new_route_entry);
+								}
+								else
+								{
+									NetworkUpdateForwardingTable(
+										node,
+										GetIPv4Address(addrs2->alias),
+										0xffffffff,
+										GetIPv4Address(link->neighbor_iface_addr),
+										new_route_entry->rt_interface,
+										new_route_entry->rt_metric,
+										ROUTING_PROTOCOL_OLSR_INRIA);
+								}							
+
+							}
+
+						}
+
+					}
+					addrs2 = addrs2->next_alias;
+				}
+
+				break;
+			}
+		}
+	}
+	return 1 ;
+}
+
 
 // /**
 // FUNCTION   :: OlsrInsertRoutingTableFromHnaTable
@@ -6456,6 +10195,9 @@ Int32 OlsrFillRoutingTableWithNeighbors(Node *node)
 static
 void OlsrInsertRoutingTableFromHnaTable(Node* node)
 {
+    //Peter comment: this function although called, will not update forwarding table in current scnario.
+	
+	
     RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
     hna_entry* tmp_hna;
     hna_net* tmp_net;
@@ -6638,39 +10380,782 @@ void OlsrRoutingMirror(
 // RETURN :: void : NULL
 // **/
 
+
+void PrintRoutingTableForAEntry(rt_entry* destination, char * pszRT = NULL, BOOL bShowFull = TRUE)
+{
+
+	
+	char addrString1[MAX_STRING_LENGTH];
+    char addrString2[MAX_STRING_LENGTH];
+
+	//Peter Modified to support disjoint path
+	//_OLSR_DISJOINTPATH
+	char addrString3[MAX_STRING_LENGTH] = {0};
+	char addrString4[MAX_STRING_LENGTH] = {0};
+
+	char buf[MAX_STRING_LENGTH] = {0};
+
+    IO_ConvertIpAddressToString(&destination->rt_dst,
+                                addrString1);
+
+    IO_ConvertIpAddressToString(&destination->rt_router,
+                                addrString2);
+
+
+	IO_ConvertIpAddressToString(&destination->rt_entry_infos.rtu_lasthop,
+								addrString3);
+
+	/*
+	if (destination->rt_entry_infos.rtu_recommended_2hop.networkType != NETWORK_INVALID)
+	{
+
+		IO_ConvertIpAddressToString(&destination->rt_entry_infos.rtu_recommended_2hop,
+			addrString3);
+
+	}	
+
+	for (int i = 0; i < _OLSR_DISJOINTPATH_UNRECOMENDED_LIMIT; i++)
+	{
+
+		if (destination->rt_entry_infos.rtu_unrecommended_2hop[i].networkType != NETWORK_INVALID)
+		{
+
+			IO_ConvertIpAddressToString(&destination->rt_entry_infos.rtu_unrecommended_2hop[i],
+				addrString4);
+
+			sprintf(buf, "%s  %s", buf, addrString4);
+
+		}
+	}
+	*/
+	
+	
+
+	/*
+    printf("%-15s %-15s  %-15s  %-15s        %-10d   %-10d\n",addrString1,
+            addrString2, addrString3, buf, destination->rt_interface,
+                    destination->rt_metric);
+	*/
+
+
+    double dDgrWRT = 0.0;
+    double dDtsWRT = 0.0; 
+
+
+	if (_OLSR_MULTIPATH)
+	{
+		if (_TEST_TIME_COMPLEXITY)
+		{
+			dDgrWRT = destination->rt_entry_infos.related_neighbor->neighbor_infos.dDegreeWRTNode;
+			dDtsWRT = destination->rt_entry_infos.related_neighbor->neighbor_infos.dDistanceWRTNode;
+		}
+		else
+		{
+			dDgrWRT = destination->rt_entry_infos.rtu_DegreeWRTNode;
+			dDtsWRT = destination->rt_entry_infos.rtu_DistanceWRTNode;
+		}
+	}
+
+       
+
+
+
+	if (g_iRunTimeCompare == 1)
+	{
+		if (pszRT == NULL)
+		{
+			return;
+		}
+
+		if (bShowFull)
+		{
+
+			sprintf(pszRT, "%s%-15s %-15s  %-15s   %-10d   %-10d   \n", pszRT, addrString1, 
+				addrString2, addrString3, destination->rt_interface, destination->rt_metric);
+		}
+		else
+		{
+			if (g_iToAchieveSameRoute == 1)
+			{
+
+				sprintf(pszRT, "%s%-15s %-15s    %-10d   \n", pszRT, addrString1, addrString2, destination->rt_metric);
+			}
+			else
+			{
+
+				sprintf(pszRT, "%s%-15s    %-10d   \n", pszRT, addrString1, destination->rt_metric);
+			}
+		}
+
+	}
+	else
+	{
+		if (g_iChaseRouteTable == 1)
+		{
+
+			if (g_iChaseRouteTableSkipRouteLast == 1)
+			{
+				
+
+				if (g_iToAchieveSameRoute == 1)
+				{
+
+					sprintf(g_szTextRT, "%s%-15s %-15s  %-15s   %-10d   %-10d   %-10f   %-10f \n", g_szTextRT, addrString1,
+						addrString2, "0.0.0.0", destination->rt_interface, destination->rt_metric, 
+						0.0, 
+						0.0);
+				}
+				else
+				{
+
+					sprintf(g_szTextRT, "%s%-15s %-15s  %-15s   %-10d   %-10d   %-10f   %-10f \n", g_szTextRT, addrString1,
+						"0.0.0.0", "0.0.0.0", destination->rt_interface, destination->rt_metric, 
+						0.0, 
+						0.0);
+				}
+
+				/*
+				sprintf(g_szTextRT, "%s%-15s %-15s  %-15s   %-10d   %-10d   %-10f   %-10f \n", g_szTextRT, addrString1,
+					"0.0.0.0", "0.0.0.0", destination->rt_interface, destination->rt_metric, 
+					0, 
+					0);
+				*/
+				
+									
+				
+				
+				
+			}
+			else
+			{
+				
+
+				sprintf(g_szTextRT, "%s%-15s %-15s  %-15s   %-10d   %-10d   %-10f   %-10f \n", g_szTextRT, addrString1,
+					addrString2, addrString3, destination->rt_interface, destination->rt_metric, 
+					0.0, 
+					0.0);
+			}
+
+			
+
+		}
+		else
+		{
+
+			printf("%-15s %-15s  %-15s   %-10d   %-10d   %-10f   %-10f \n",addrString1,
+				addrString2, addrString3, destination->rt_interface, destination->rt_metric, 
+				dDgrWRT, 
+				dDtsWRT);
+
+		}
+	}
+
+
+	
+
+
+}
+
 static
 void OlsrPrintRoutingTable(
-    rthash* table)
+    rthash* table, char * pszRT = NULL, BOOL bShowFull = TRUE)
 {
     rt_entry* destination;
     rthash* routing_hash;
     int index;
 
-    printf("Routing Table:\n");
-    printf("Dest            NextHop           Intf Distance\n");
 
+	if (g_iRunTimeCompare == 1)
+	{
+		if (pszRT == NULL)
+		{
+			return;
+		}
+
+		sprintf(pszRT, "Routing Table:\n");
+		
+		if (bShowFull)
+		{
+			sprintf(pszRT, "%sDest             NextHop        LastHop          Intf       Distance \n", pszRT);
+		}
+		else
+		{
+			if (g_iToAchieveSameRoute == 1)
+			{
+				sprintf(pszRT, "%sDest             NextHop           Distance \n", pszRT);
+			}
+			else
+			{
+				sprintf(pszRT, "%sDest       Distance \n", pszRT);
+			}
+		}
+		
+	}
+	else
+	{
+
+		if (g_iChaseRouteTable == 1)
+		{
+			memset(g_szTextRT, 0, 16384 * sizeof(char));
+
+			sprintf(g_szTextRT, "Routing Table:\n");
+			sprintf(g_szTextRT, "%sDest             NextHop        LastHop          Intf       Distance \n", g_szTextRT);
+
+		}
+		else
+		{
+			printf("Routing Table:\n");
+			//printf("Dest            NextHop     Positive_Next2Hop   Negative_Next2Hop1  Negative_Next2Hop2  Negative_Next2Hop3  Negative_Next2Hop4  Negative_Next2Hop5     Intf     Distance\n");
+
+			printf("Dest             NextHop        LastHop          Intf       Distance \n");
+		}
+	}
+	
+    
     for (index = 0; index < HASHSIZE; index++)
     {
+
+		// insert in routing table using topology
+		destination_n* destination_n_of_current_hash = NULL;
+
+	
         routing_hash = &table[index];
         for (destination = routing_hash->rt_forw;
             destination != (rt_entry *) routing_hash;
             destination = destination->rt_forw)
         {
-            char addrString1[MAX_STRING_LENGTH];
-            char addrString2[MAX_STRING_LENGTH];
+           
+			
+			if (g_iRunTimeCompare == 1 || g_iChaseRouteTable == 1)
+			{
 
-            IO_ConvertIpAddressToString(&destination->rt_dst,
-                                        addrString1);
+				destination_n* destination_n_1 = (destination_n *)
+				MEM_malloc(sizeof(destination_n));
 
-            IO_ConvertIpAddressToString(&destination->rt_router,
-                                        addrString2);
+				memset(destination_n_1, 0, sizeof(destination_n));
 
-            printf("%-15s %-15s   %d    %d\n",addrString1,
-                    addrString2, destination->rt_interface,
-                            destination->rt_metric);
-        }
+				destination_n_1->destination = destination;
+
+				if (destination_n_of_current_hash == NULL)
+				{
+					destination_n_of_current_hash = destination_n_1;
+					//*p_tmp_destination_tail = destination_n_1;
+				}
+				else
+				{
+					
+					if (destination_n_of_current_hash->destination->rt_entry_infos.rtu_hash < destination_n_1->destination->rt_entry_infos.rtu_hash)
+					{
+						//keep on search until find right position
+						destination_n* p_tmp_destination = destination_n_of_current_hash;
+						while (p_tmp_destination->next != NULL)
+						{
+							
+							if (p_tmp_destination->next->destination->rt_entry_infos.rtu_hash < destination_n_1->destination->rt_entry_infos.rtu_hash)
+							{
+								
+							}
+							else
+							{
+	
+								break;
+							}
+
+							p_tmp_destination = p_tmp_destination->next;
+						}
+
+						//insert after the recent p_tmp_destination
+						destination_n_1->next = p_tmp_destination->next;
+						p_tmp_destination->next = destination_n_1;
+
+
+					}
+					else
+					{
+						//insert before the destination_n_of_current_hash
+						destination_n_1->next = destination_n_of_current_hash;
+
+						destination_n_of_current_hash = destination_n_1;
+					}
+					
+				}
+
+			}
+			else			
+			{
+				PrintRoutingTableForAEntry(destination, pszRT, bShowFull);
+			}		
+		}
+
+		if (g_iRunTimeCompare == 1 || g_iChaseRouteTable == 1)
+		{
+
+		
+			while (destination_n_of_current_hash != NULL)
+			{
+
+				PrintRoutingTableForAEntry(destination_n_of_current_hash->destination, pszRT, bShowFull);
+				
+				destination_n* tmp_desn = destination_n_of_current_hash;
+				destination_n_of_current_hash = destination_n_of_current_hash->next;
+
+				MEM_free(tmp_desn);
+			}
+		}		
+		
     }
 }
+
+
+
+//Peter Modified for disjoint path
+//_OLSR_DISJOINTPATH
+
+/*
+static
+void GenerateRecommendedOrUnrecommended2Hops(Node *node, rt_entry* rt_first, rt_entry* rt_bound)
+{
+
+
+	Int32 index2;
+	neighbor_2_entry* neighbor_2;
+	neighbor2_hash* hash_2_neighbor;
+	rt_entry* destination;
+
+	RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+
+	
+	UInt16 iUnrecommendedCnt = 0;
+
+	for (index2 = 0; index2 < HASHSIZE; index2++)
+	{
+		
+		if (iUnrecommendedCnt == _OLSR_DISJOINTPATH_UNRECOMENDED_LIMIT)
+		{
+
+			break;
+		}
+		
+		hash_2_neighbor = &olsr->neighbor2table[index2];
+
+		for (neighbor_2 = hash_2_neighbor->neighbor2_forw;
+			neighbor_2 != (neighbor_2_entry *) hash_2_neighbor;
+			neighbor_2 = neighbor_2->neighbor_2_forw)
+		{
+
+			if (iUnrecommendedCnt == _OLSR_DISJOINTPATH_UNRECOMENDED_LIMIT)
+			{
+
+				break;
+			}
+
+			UInt32 hash;
+			rthash* routing_hash;
+			
+
+			OlsrHashing(neighbor_2->neighbor_2_addr, &hash);
+			
+
+			RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+			routing_hash = &olsr->routingtable[hash % HASHMASK];
+
+			bool bSkip = false;
+
+			UInt16 min_cost = 0;
+			
+			for (destination = routing_hash->rt_forw;
+				destination != (rt_entry* ) routing_hash;
+				destination = destination->rt_forw)
+			{
+
+				if (destination->rt_hash != hash)
+				{
+
+					if (bSkip)
+					{
+					
+						break;
+					}
+					else
+					{
+
+						continue;
+					}
+					
+				}
+				else
+				{
+
+					bSkip = true;
+					
+					if(min_cost == 0)
+					{
+					
+						min_cost = destination->rt_metric;
+					}
+					else
+					{
+
+						if (destination->rt_metric < min_cost)
+						{
+
+							min_cost = destination->rt_metric;
+						}
+					}
+
+				}
+
+
+				//
+				//Peter comment: assume that every route has the same shortest cost based 
+				//on modified route discovery algorithm
+				//if (destination->rt_metric != 2)   //2 means exactly two hop away
+				//{
+					
+				//	bSkip = true;
+				//}
+
+				//break;
+				//
+			}
+
+			if (min_cost != 2)
+			{
+				//to consider the next 2 hop neighbor
+				continue;
+			}			
+			
+						
+			
+			int iNeighborMatchCnt = 0;
+			int iNeighborCnt = 0;
+			rt_entry* rte_tmp = NULL;
+
+
+			neighbor_list_entry* list_1 = NULL;
+
+			list_1 = neighbor_2->neighbor_2_nblist;
+
+			while (list_1 != NULL)
+			{
+				iNeighborCnt++;
+				
+				for (destination = rt_first;
+					destination != rt_bound;
+					destination = destination->rt_forw)
+				{
+
+				
+					if (Address_IsSameAddress(&list_1->neighbor->neighbor_main_addr, &destination->rt_router))
+					{
+
+						if (iNeighborMatchCnt >= 1)
+						{
+
+							rte_tmp->rt_entry_infos.rtu_unrecommended_2hop[iUnrecommendedCnt] = neighbor_2->neighbor_2_addr;
+
+							OLSRv1UpdateForwardingTableWithDisjointPath(node, rte_tmp);
+							
+						}
+
+						rte_tmp = destination;
+
+						iNeighborMatchCnt++;
+
+					}
+
+				}
+
+
+				list_1 = list_1->neighbor_next;
+			}
+
+
+			if (iNeighborMatchCnt > 1)
+			{
+
+				rte_tmp->rt_entry_infos.rtu_unrecommended_2hop[iUnrecommendedCnt] = neighbor_2->neighbor_2_addr;
+
+				OLSRv1UpdateForwardingTableWithDisjointPath(node, rte_tmp);
+
+				iUnrecommendedCnt++;
+
+			}
+			else if (iNeighborMatchCnt == 1)
+			{
+
+				//consider the one who has only one neighbor that can only reached by this route 
+				//(so the route is the only neighbor, since for other 2 hops node even if we do not 
+				//set the recommended, it still can be choosed if no unrecommended exist.)  
+				//if (iNeighborCnt == 1)
+				//{
+
+
+					rte_tmp->rt_entry_infos.rtu_recommended_2hop = neighbor_2->neighbor_2_addr;
+
+					OLSRv1UpdateForwardingTableWithDisjointPath(node, rte_tmp);
+				//}
+				
+			}
+			else
+			{
+
+			}
+	
+		}			
+	
+	}
+}
+*/
+
+//Peter Modified for disjoint path
+//_OLSR_DISJOINTPATH
+
+/*
+static
+void OptimizeRouteTable(Node *node, rthash* table)
+{
+	
+	//Does not finished!!!!!!!!!!!   
+	//Currently just copy from Generate2HopRoute
+	
+	//printf("Generate2HopRoute");
+	rt_entry* destination;
+	rthash* routing_hash;
+	int index;
+
+
+	for (index = 0; index < HASHSIZE; index++)
+	{
+		routing_hash = &table[index];
+
+		int iRouteCnt = 0;
+
+		UInt16 min_cost = 0;
+
+		char addrString1[MAX_STRING_LENGTH];
+		char addrString2[MAX_STRING_LENGTH];
+
+		
+		rt_entry* same_dst_first = NULL;
+		rt_entry* same_dst_last = NULL;
+
+		//Peter comment: the destinations with same hash values will included in same hash entries, 
+		//so need to separate and deal with by sub-groups.
+
+		for (destination = routing_hash->rt_forw;
+			destination != (rt_entry *) routing_hash;
+			destination = destination->rt_forw)
+		{
+
+			
+
+			if (same_dst_first == NULL)
+			{
+				
+				same_dst_first = destination;
+			}
+
+
+			if (same_dst_last != NULL)
+			{
+				
+				//if (Address_IsSameAddress(&same_dst_last->rt_dst, &destination->rt_dst))
+				if (same_dst_last->rt_hash == destination->rt_hash)
+				{
+				
+					same_dst_last = destination;
+				}
+				else
+				{
+					
+					//solve recommended and unrecommended
+					if (same_dst_first != same_dst_last //more than one route
+						&& min_cost >= DISJOINT_APPLY_THRESHOLD)  
+					{
+
+						GenerateRecommendedOrUnrecommended2Hops(node, same_dst_first, destination);
+
+						// this destination is for the for loop in the sub function to meet a bound, 
+						//which is the start of entry with different destination
+
+					}
+
+					min_cost = destination->rt_metric;
+
+					same_dst_last = destination;
+					same_dst_first = destination;
+					
+				}				
+			}
+			else
+			{
+
+				same_dst_last = destination;
+			}
+
+
+			if (min_cost == 0)
+			{
+
+				min_cost = destination->rt_metric;
+			}
+			else
+			{
+				if (destination->rt_metric < min_cost)
+				{
+
+					min_cost = destination->rt_metric;
+				}				
+
+			}
+
+			  
+		}
+
+
+		if (same_dst_last != NULL)
+		{
+
+			//solve recommended and unrecommended for last sub-group with same destination
+			if (same_dst_first != same_dst_last //more than one route
+				&& min_cost >= DISJOINT_APPLY_THRESHOLD)  
+			{
+
+				GenerateRecommendedOrUnrecommended2Hops(node, same_dst_first, destination);
+
+				// this destination is for the for loop in the sub function to meet a bound, 
+				//which is the start of entry with different destination
+
+			}			
+			
+		}
+		
+	}	
+}
+*/
+
+/*
+static
+void Generate2HopRoute(Node *node, rthash* table)
+{
+	//printf("Generate2HopRoute");
+	rt_entry* destination;
+	rthash* routing_hash;
+	int index;
+
+
+	for (index = 0; index < HASHSIZE; index++)
+	{
+		routing_hash = &table[index];
+
+		int iRouteCnt = 0;
+
+		UInt16 min_cost = 0;
+
+		char addrString1[MAX_STRING_LENGTH];
+		char addrString2[MAX_STRING_LENGTH];
+
+		
+		rt_entry* same_dst_first = NULL;
+		rt_entry* same_dst_last = NULL;
+
+		//Peter comment: the destinations with same hash values will included in same hash entries, 
+		//so need to separate and deal with by sub-groups.
+
+		for (destination = routing_hash->rt_forw;
+			destination != (rt_entry *) routing_hash;
+			destination = destination->rt_forw)
+		{
+
+			
+			
+
+			if (same_dst_first == NULL)
+			{
+				
+				same_dst_first = destination;
+			}
+
+
+			if (same_dst_last != NULL)
+			{
+				
+				//if (Address_IsSameAddress(&same_dst_last->rt_dst, &destination->rt_dst))
+				if (same_dst_last->rt_hash == destination->rt_hash)
+				{
+				
+					same_dst_last = destination;
+				}
+				else
+				{
+					
+					//solve recommended and unrecommended
+					if (same_dst_first != same_dst_last //more than one route
+						&& min_cost >= DISJOINT_APPLY_THRESHOLD)  
+					{
+
+						GenerateRecommendedOrUnrecommended2Hops(node, same_dst_first, destination);
+
+						// this destination is for the for loop in the sub function to meet a bound, 
+						//which is the start of entry with different destination
+
+					}
+
+					min_cost = destination->rt_metric;
+
+					same_dst_last = destination;
+					same_dst_first = destination;
+					
+				}				
+			}
+			else
+			{
+
+				same_dst_last = destination;
+			}
+
+
+			if (min_cost == 0)
+			{
+
+				min_cost = destination->rt_metric;
+			}
+			else
+			{
+				if (destination->rt_metric < min_cost)
+				{
+
+					min_cost = destination->rt_metric;
+				}				
+
+			}
+
+			  
+		}
+
+
+		if (same_dst_last != NULL)
+		{
+
+			//solve recommended and unrecommended for last sub-group with same destination
+			if (same_dst_first != same_dst_last //more than one route
+				&& min_cost >= DISJOINT_APPLY_THRESHOLD)  
+			{
+
+				GenerateRecommendedOrUnrecommended2Hops(node, same_dst_first, destination);
+
+				// this destination is for the for loop in the sub function to meet a bound, 
+				//which is the start of entry with different destination
+
+			}			
+			
+		}
+		
+	}	
+}
+*/
+
 
 // /**
 // FUNCTION   :: OlsrCalculateRoutingTable
@@ -6681,10 +11166,4116 @@ void OlsrPrintRoutingTable(
 // RETURN :: void : NULL
 // **/
 
-static
-void OlsrCalculateRoutingTable(Node *node)
+//Peter added to support real time query for _OLSR_MULTIPATH
+#include "external_util.h"
+
+
+static void OlsrCalculateRoutingTableForSinglePathTopologySearchHelpFuncForCompare(Node * node, Address addrReached, destination_n* list_destination_n, destination_n** p_list_destination_n_1, destination_n** p_tmp_destination_tail)
 {
-    destination_n* list_destination_n = NULL;
+
+	RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+
+	mid_address tmp_addrs;
+	memset( &tmp_addrs, 0, sizeof(mid_address));
+	mid_address* tmp_addrsp;
+
+	tmp_addrs.alias = addrReached;
+
+	
+
+	tmp_addrs.next_alias = OlsrLookupMidAliases(node, addrReached);
+	tmp_addrsp = &tmp_addrs;
+
+	while (tmp_addrsp != NULL)
+	{
+
+		// topo_dest is not in the routing table
+
+		//Peter Modified and added to support olsr multi-path
+		bool bExist = false;
+		RouteEntryType ret = NOT_ALLOWED;
+
+
+		double dDistance = 0.0;
+		double dRWON = 0.0;
+
+
+		if (_OLSR_MULTIPATH)
+		{
+			if (_TEST_TIME_COMPLEXITY)
+			{
+
+				dRWON = list_destination_n->destination->rt_entry_infos.related_neighbor->neighbor_infos.dDegreeWRTNode;
+				dDistance = list_destination_n->destination->rt_entry_infos.related_neighbor->neighbor_infos.dDistanceWRTNode;
+			}
+			else
+			{
+
+				dRWON = ComputeRouterDegreeWRTOriginNode(node, list_destination_n->destination->rt_entry_infos.rtu_router.interfaceAddr.ipv4, &dDistance);
+				dRWON = SimulateLocalDirectionOfAoA(node, dRWON);
+			}
+		}
+
+
+		rt_entry* preExisting = NULL;
+
+
+		rt_entry* rt_tmp = NULL;
+
+		BOOL bSpecialCase = FALSE;
+
+		
+		{
+			if (NULL != OlsrLookupRoutingTable(node, tmp_addrsp->alias, TRUE))
+			{
+
+				bExist = true;
+			}
+		}
+
+
+		if (!bExist)
+		{
+
+			// PRINT OUT: Last Hop to Final Destination. The
+			// function convert_address_to_string has to be
+			// separately
+
+			if (DEBUG)
+			{
+				char addrString[MAX_STRING_LENGTH];
+				IO_ConvertIpAddressToString(
+					&list_destination_n->destination->rt_dst,
+					addrString);
+
+				printf("%s -> ", addrString);
+
+				IO_ConvertIpAddressToString(
+					&addrReached,
+					addrString);
+
+				printf("%s\n", addrString);
+			}
+
+			destination_n* destination_n_1 = NULL;
+
+			rt_entry* tmp = NULL;
+
+			
+			{
+				if (rt_tmp != NULL)
+				{
+					tmp = rt_tmp;
+
+					tmp->rt_entry_infos.rtu_router = list_destination_n->destination->rt_entry_infos.rtu_router;
+					tmp->rt_entry_infos.rtu_interface = list_destination_n->destination->rt_interface;
+
+					tmp->rt_entry_infos.rtu_lasthop = list_destination_n->destination->rt_entry_infos.rtu_dst;
+					tmp->rt_entry_infos.rtu_metric = list_destination_n->destination->rt_entry_infos.rtu_metric + 1;
+
+					
+				}
+				else
+				{
+					// changed by SRD for multiple iface problem
+					tmp = OlsrInsertRoutingTablefromTopology(
+						node,
+						list_destination_n->destination,
+						tmp_addrsp->alias,
+						list_destination_n->destination->rt_dst,
+						dRWON, dDistance, TRUE				
+						);
+				}				
+				
+			}
+
+			
+
+			// insert in routing table using topology
+			if (tmp != NULL)
+			{
+
+				destination_n_1 = (destination_n *)
+					MEM_malloc(sizeof(destination_n));
+
+				memset(destination_n_1, 0, sizeof(destination_n));
+
+				destination_n_1->destination = tmp;
+			}
+		
+
+			if (destination_n_1 != NULL)
+			{
+				//Peter comment: add the new added entry to list_destination_n_1
+				//destination_n_1->next = *p_list_destination_n_1;
+				//*p_list_destination_n_1 = destination_n_1;
+
+
+
+				if (*p_list_destination_n_1 == NULL)
+				{
+					*p_list_destination_n_1 = destination_n_1;
+					*p_tmp_destination_tail = destination_n_1;
+				}
+				else
+				{
+					
+					(*p_tmp_destination_tail)->next = destination_n_1;
+					*p_tmp_destination_tail = (*p_tmp_destination_tail)->next;
+
+					
+				}
+			}
+		}
+		tmp_addrsp = tmp_addrsp->next_alias;
+	}
+}
+
+
+
+
+static void OlsrCalculateRoutingTableForSinglePathTopologySearchHelpFunc(Node * node, Address addrReached, destination_n* list_destination_n, destination_n** p_list_destination_n_1, destination_n** p_tmp_destination_tail, BOOL bAdvanced = FALSE, BOOL bReplace = FALSE, BOOL bOnlyCommonLasthop = FALSE, 
+																		 UInt32 * puiLookupCnt = NULL, BOOL bRequireSameRouter = FALSE, BOOL * pbRediscovery = NULL)
+{
+
+	RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+
+	mid_address tmp_addrs;
+	memset( &tmp_addrs, 0, sizeof(mid_address));
+	mid_address* tmp_addrsp;
+
+	tmp_addrs.alias = addrReached;
+
+	//destination_n* tmp_destination_tail = NULL;
+
+
+	tmp_addrs.next_alias = OlsrLookupMidAliases(node, addrReached);
+	tmp_addrsp = &tmp_addrs;
+
+	while (tmp_addrsp != NULL)
+	{
+
+		// topo_dest is not in the routing table
+
+		//Peter Modified and added to support olsr multi-path
+		bool bExist = false;
+		RouteEntryType ret = NOT_ALLOWED;
+
+
+		double dDistance = 0.0;
+		double dRWON = 0.0;
+
+
+		if (_OLSR_MULTIPATH)
+		{
+			if (_TEST_TIME_COMPLEXITY)
+			{
+
+				dRWON = list_destination_n->destination->rt_entry_infos.related_neighbor->neighbor_infos.dDegreeWRTNode;
+				dDistance = list_destination_n->destination->rt_entry_infos.related_neighbor->neighbor_infos.dDistanceWRTNode;
+			}
+			else
+			{
+
+				dRWON = ComputeRouterDegreeWRTOriginNode(node, list_destination_n->destination->rt_entry_infos.rtu_router.interfaceAddr.ipv4, &dDistance);
+				dRWON = SimulateLocalDirectionOfAoA(node, dRWON);
+			}
+		}
+
+
+		rt_entry* preExisting = NULL;
+
+
+		rt_entry* rt_tmp = NULL;
+
+		BOOL bSpecialCase = FALSE;
+
+		//bAdvanced: for optimized accumulative route re-calculation
+		if (bAdvanced)
+		{
+			if (g_iAccumulativeRouteCalculation == 1 || g_iAccumulativeRouteCalculation == 2)
+			{
+
+				/*
+				if (NULL != OlsrLookupRoutingTable(node, tmp_addrsp->alias))
+				{
+
+					bExist = true;
+				}
+				*/
+			//}
+			//else	//g_iAccumulativeRouteCalculation == 2
+			//{
+
+				if (bReplace)
+				{
+
+
+					if (list_destination_n->destination->rt_entry_infos.bDescendentRequireFurtherUpdate)
+					{
+
+							//printf("call OlsrLookupRoutingTableAdvForLastReplace \n");
+						//???
+						rt_entry* preConcludeFirst = NULL;
+						preExisting = OlsrLookupRoutingTableAdvForLastReplace(node, tmp_addrsp->alias, list_destination_n->destination->rt_dst, 
+							list_destination_n->destination->rt_router, list_destination_n->destination->rt_metric + 1, bOnlyCommonLasthop, bRequireSameRouter, &preConcludeFirst);
+
+                                                //may need to check whether it already had been added to work set
+						//??Or just try to check whether already satisfy the following conditions
+						if (NULL != preExisting)
+						{
+							//already must have been commonlast
+							if (preExisting->rt_entry_infos.rtu_router.interfaceAddr.ipv4 == list_destination_n->destination->rt_entry_infos.rtu_router.interfaceAddr.ipv4
+								&& preExisting->rt_metric == list_destination_n->destination->rt_metric + 1)
+							{
+								preExisting = NULL;
+							}							
+						}
+						
+
+						if (NULL != preExisting)
+						{
+
+							preExisting->rt_entry_infos.uiCostChg = 0;
+							preExisting->rt_entry_infos.bCostChanged = FALSE;
+							preExisting->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+							preExisting->rt_entry_infos.bRequireDelete = FALSE;
+							//preExisting->rt_entry_infos.bRequireExchange = FALSE;
+							
+							if (!list_destination_n->destination->rt_entry_infos.bRequireDelete)
+							{
+
+								if (list_destination_n->destination->rt_entry_infos.bCostChanged)
+								{
+									//preExisting->rt_entry_infos.bRequireExchange = TRUE;
+								
+								
+									//DebugBreak();
+									BOOL bExchangeFound = FindRouteExchange(node, preExisting, TRUE, puiLookupCnt, bRequireSameRouter);
+
+									if (!bExchangeFound)
+									{
+
+										//this branch should never happen, since the success of find earlier level exchange
+										//can ensure there is at least one suitable (maybe not perfect) option
+										
+										
+										//OlsrDeleteRoutingTable(preExisting);
+										//preExisting = NULL;
+
+										//*pbRequireRediscovery = TRUE;
+										//return NULL;
+									}
+
+								}
+								else
+								{
+									//only route changed
+
+									
+									//preExisting->rt_entry_infos.bRequireExchange = FALSE;
+
+									//preExisting->rt_entry_infos.bRequireUpdate = TRUE;
+
+									preExisting->rt_interface = list_destination_n->destination->rt_interface;
+									preExisting->rt_router = list_destination_n->destination->rt_router;
+
+									if (_OLSR_MULTIPATH)
+									{
+
+
+										preExisting->rt_entry_infos.rtu_DegreeWRTNode = list_destination_n->destination->rt_entry_infos.rtu_DegreeWRTNode;
+										preExisting->rt_entry_infos.rtu_DistanceWRTNode = list_destination_n->destination->rt_entry_infos.rtu_DistanceWRTNode;
+										preExisting->rt_entry_infos.related_neighbor = list_destination_n->destination->rt_entry_infos.related_neighbor;
+									}
+
+									preExisting->rt_entry_infos.bDescendentRequireFurtherUpdate = TRUE;
+									preExisting->rt_entry_infos.bCostChanged = FALSE;
+									preExisting->rt_entry_infos.bRequireDelete = FALSE;
+
+									preExisting->rt_entry_infos.uiCostChg = 0;
+									
+
+
+								}		
+
+							}
+							else
+							{
+								//delete
+
+								if (preConcludeFirst != NULL)
+								{
+									//if there is more than one entry for this dest, then it can be delete
+									if (preConcludeFirst->rt_entry_infos.oa_total_routes_count >= 2)
+									{
+
+
+										//OlsrDeleteRoutingTable(prte);
+
+
+										preConcludeFirst->rt_entry_infos.oa_total_routes_count--;
+
+										if (preExisting != preConcludeFirst)
+										{
+											OlsrRemoveList((olsr_qelem *)preExisting);
+											//rt_entry* prteTmp = QueryRoutingTableAccordingToNodeId(node, tco_delete_list_tmp->nid);
+										}
+										else	//prte == prteFirst
+										{
+
+											OlsrRemoveList((olsr_qelem *)preExisting);
+
+											rt_entry* prteTmpNewFirst = QueryRoutingTableAccordingToNodeId(node, preExisting->rt_entry_infos.rtu_dst.interfaceAddr.ipv4);
+
+											if (prteTmpNewFirst != NULL)
+											{
+
+
+												if (_OLSR_MULTIPATH)
+												{
+
+													prteTmpNewFirst->rt_entry_infos.oa_total_routes_count = preExisting->rt_entry_infos.oa_total_routes_count;
+													prteTmpNewFirst->rt_entry_infos.oa_dWeightedDirectionDiffer = preExisting->rt_entry_infos.oa_dWeightedDirectionDiffer;
+													prteTmpNewFirst->rt_entry_infos.oa_maximum_allowed_cost = preExisting->rt_entry_infos.oa_maximum_allowed_cost;
+												}
+
+											}
+
+										}
+
+
+
+										preExisting->rt_entry_infos.bDescendentRequireFurtherUpdate = TRUE;
+
+										preExisting->rt_entry_infos.bRequireDelete = TRUE;
+
+										/*
+										destination_n* list_destination_tmp;
+										list_destination_tmp = (destination_n* )
+											MEM_malloc(sizeof(destination_n));
+
+										memset(
+											list_destination_tmp,
+											0,
+											sizeof(destination_n));
+
+										list_destination_tmp->destination = prte;
+										list_destination_tmp->next = list_destination_n;
+										list_destination_n = list_destination_tmp;
+										*/
+
+
+									}
+									else	// < 2
+									{
+
+										if (pbRediscovery != NULL)
+										{
+											*pbRediscovery = TRUE;
+										}
+										//OlsrDeleteRoutingTable(prte);
+
+										//bExist = false;
+										break;
+
+										//return;
+									}
+
+								}
+								else
+								{
+									//should never happen
+								}
+							}
+							
+							bExist = true;
+						}
+						else
+						{
+							bExist = false;
+						}
+
+					}
+					else
+					{
+						bExist = false;
+					}
+
+					
+
+
+				}
+				else
+				{
+
+					//printf("----------------------- call OlsrLookupRoutingTableAdv Begin \n");
+					
+
+					//Peter Comment: check whether it will indeed be reach if the last hop is a neighbor node with cost 1,
+					//since if there is no such 2 hop neighbor with main_neighbor_addr equal this neighbor node,
+					//then we can not consider this connection exist, even if according to last table it is!!!
+					
+					BOOL b2HopNeighborMismatchCausedDisconnect = FALSE;
+					if (list_destination_n->destination->rt_metric == 1)
+					{
+						
+						b2HopNeighborMismatchCausedDisconnect = TRUE;
+						b2HopNeighborMismatchCausedDisconnect = DisconnectivetyCausedBy2HopNeighbor(node, tmp_addrsp->alias, list_destination_n->destination->rt_entry_infos.rtu_dst.interfaceAddr.ipv4);
+						
+					}
+
+
+					if (b2HopNeighborMismatchCausedDisconnect)
+					{
+
+						bExist = true;
+					}
+					else
+					{
+						 //|| NULL != OlsrLookupRoutingTableAdv(node, tmp_addrsp->alias, list_destination_n->destination->rt_metric + 1)
+						//OlsrLookupRoutingTableAdv(node, tmp_addrsp->alias, list_destination_n->destination->rt_metric + 1)
+
+						rt_tmp = OlsrLookupRoutingTable(node, tmp_addrsp->alias);
+
+						if (rt_tmp != NULL)
+						{
+							if (list_destination_n->destination->rt_metric + 1 < rt_tmp->rt_metric)
+							{
+								//TO_IMPROVE_PERFORMANCE
+								/*
+								if (olsr->bNeighborChgCausedRemoveFromHigherHop)
+								{
+									if (rt_tmp->rt_metric == MAX_COST)
+									{
+										remove_from_tco_node_addr_set(&olsr->recent_delete_list, rt_tmp->rt_entry_infos.rtu_dst.interfaceAddr.ipv4);										
+									
+									
+										if (g_iToAchieveSameRoute == 1)
+										{
+											bSpecialCase = TRUE;
+											//FindRouteExchangeV20(node, rt_tmp, TRUE);
+										}										
+									
+									}
+
+								}
+								*/
+								
+								
+																
+
+								bExist = false;
+							}
+							else
+							{
+								if (g_iToAchieveSameRoute == 1)
+								{
+									if (list_destination_n->destination->rt_metric + 1 == rt_tmp->rt_metric 
+										&& PreferredRouteForNew(list_destination_n->destination->rt_entry_infos.rtu_router.interfaceAddr.ipv4, rt_tmp->rt_entry_infos.rtu_router.interfaceAddr.ipv4))
+									{
+										bExist = false;
+									}
+									else
+									{
+										bExist = true;
+									}
+								}
+								else
+								{
+									bExist = true;
+								}
+								
+							}
+						}
+						else
+						{
+							bExist = false;
+						}
+
+					}
+
+					//printf("----------------------- call OlsrLookupRoutingTableAdv End \n");
+				}
+				
+			}
+		}
+		else
+		{
+			if (NULL != OlsrLookupRoutingTable(node, tmp_addrsp->alias))
+			{
+
+				bExist = true;
+			}
+		}
+
+
+		if (!bReplace && !bExist || bExist && bReplace && preExisting != NULL)
+		{
+
+			// PRINT OUT: Last Hop to Final Destination. The
+			// function convert_address_to_string has to be
+			// separately
+
+			if (DEBUG)
+			{
+				char addrString[MAX_STRING_LENGTH];
+				IO_ConvertIpAddressToString(
+					&list_destination_n->destination->rt_dst,
+					addrString);
+
+				printf("%s -> ", addrString);
+
+				IO_ConvertIpAddressToString(
+					&addrReached,
+					addrString);
+
+				printf("%s\n", addrString);
+			}
+
+			destination_n* destination_n_1 = NULL;
+
+			rt_entry* tmp = NULL;
+
+			if (bReplace)
+			{
+				if (preExisting->rt_entry_infos.bDescendentRequireFurtherUpdate)
+				{
+					
+					tmp = preExisting;
+				}				
+				
+			}
+			else
+			{
+				if (rt_tmp != NULL)
+				{
+					tmp = rt_tmp;
+
+					tmp->rt_entry_infos.rtu_router = list_destination_n->destination->rt_entry_infos.rtu_router;
+					tmp->rt_entry_infos.rtu_interface = list_destination_n->destination->rt_interface;
+
+					tmp->rt_entry_infos.rtu_lasthop = list_destination_n->destination->rt_entry_infos.rtu_dst;
+					tmp->rt_entry_infos.rtu_metric = list_destination_n->destination->rt_entry_infos.rtu_metric + 1;
+
+					/*
+					if (g_iToAchieveSameRoute == 1 && bSpecialCase)
+					{
+						//bSpecialCase = TRUE;
+						FindRouteExchangeV20(node, rt_tmp, TRUE);
+					}
+					*/
+
+				}
+				else
+				{
+					// changed by SRD for multiple iface problem
+					tmp = OlsrInsertRoutingTablefromTopology(
+						node,
+						list_destination_n->destination,
+						tmp_addrsp->alias,
+						list_destination_n->destination->rt_dst,
+						dRWON, dDistance				
+						);
+				}				
+				
+			}
+
+			
+
+			// insert in routing table using topology
+			if (tmp != NULL)
+			{
+				destination_n_1 = (destination_n *)
+					MEM_malloc(sizeof(destination_n));
+
+				memset(destination_n_1, 0, sizeof(destination_n));
+
+				destination_n_1->destination = tmp;
+			}
+			
+			if (destination_n_1 != NULL)
+			{
+				//Peter comment: add the new added entry to list_destination_n_1
+				//destination_n_1->next = *p_list_destination_n_1;
+				//*p_list_destination_n_1 = destination_n_1;
+
+
+
+				if (*p_list_destination_n_1 == NULL)
+				{
+					*p_list_destination_n_1 = destination_n_1;
+					*p_tmp_destination_tail = destination_n_1;
+				}
+				else
+				{
+					
+					(*p_tmp_destination_tail)->next = destination_n_1;
+					*p_tmp_destination_tail = (*p_tmp_destination_tail)->next;
+
+					//(*p_list_destination_n_1)->next = destination_n_1;
+				}
+			}
+		}
+		tmp_addrsp = tmp_addrsp->next_alias;
+	}
+}
+
+
+
+static void OlsrCalculateRoutingTableForSinglePathTopologySearchHelpFuncV24(Node * node, destination_n * dCorrespondingChild, Address addrReached, destination_n* list_destination_n, destination_n** p_current_p0, destination_n** p_list_tmp, UInt32 * puiLookupCnt = NULL, tco_node_addr ** ptna = NULL, tco_node_addr ** ptna_avoid = NULL, tco_node_addr ** ptna_avoid2 = NULL)
+{
+
+	mid_address tmp_addrs;
+	memset( &tmp_addrs, 0, sizeof(mid_address));
+	mid_address* tmp_addrsp;
+
+	tmp_addrs.alias = addrReached;
+
+
+	tmp_addrs.next_alias = OlsrLookupMidAliases(node, addrReached);
+	tmp_addrsp = &tmp_addrs;
+
+	while (tmp_addrsp != NULL)
+	{
+
+		// topo_dest is not in the routing table
+
+		//Peter Modified and added to support olsr multi-path
+		bool bExist = false;
+		RouteEntryType ret = NOT_ALLOWED;
+
+
+		double dDistance = 0.0;
+		double dRWON = 0.0;
+
+
+		if (_OLSR_MULTIPATH)
+		{
+			if (_TEST_TIME_COMPLEXITY)
+			{
+
+				dRWON = list_destination_n->destination->rt_entry_infos.related_neighbor->neighbor_infos.dDegreeWRTNode;
+				dDistance = list_destination_n->destination->rt_entry_infos.related_neighbor->neighbor_infos.dDistanceWRTNode;
+			}
+			else
+			{
+
+				dRWON = ComputeRouterDegreeWRTOriginNode(node, list_destination_n->destination->rt_entry_infos.rtu_router.interfaceAddr.ipv4, &dDistance);
+				dRWON = SimulateLocalDirectionOfAoA(node, dRWON);
+			}
+
+		}
+
+		
+
+		rt_entry* preExisting = NULL;
+
+		//bAdvanced: for optimized accumulative route re-calculation
+		
+		
+			//g_iAccumulativeRouteCalculation == 2
+		{
+
+			
+			if (list_destination_n->destination->rt_entry_infos.bDescendentRequireFurtherUpdate)
+			{
+
+					//printf("call OlsrLookupRoutingTableAdvForLastReplace \n");
+				//???
+				//rt_entry* preConcludeFirst = NULL;
+
+				if (dCorrespondingChild != NULL)
+				{
+					
+					preExisting = dCorrespondingChild->destination;
+				}
+				else
+				{
+
+					preExisting = OlsrLookupRoutingTableAdvForLastReplace(node, tmp_addrsp->alias, list_destination_n->destination->rt_dst, 
+						list_destination_n->destination->rt_router, list_destination_n->destination->rt_metric + 1, TRUE);
+				}
+
+
+				//may need to check whether it already had been added to work set
+				//??Or just try to check whether already satisfy the following conditions
+				if (NULL != preExisting)
+				{
+					//already must have been commonlast
+					if (preExisting->rt_entry_infos.rtu_router.interfaceAddr.ipv4 == list_destination_n->destination->rt_entry_infos.rtu_router.interfaceAddr.ipv4
+						&& preExisting->rt_metric == list_destination_n->destination->rt_metric + 1)
+					{
+						//consider this as the entry already be added into the n_1 table,
+						//since the exchange function may cause lasthop change, so update again will cause the disappear of further update and cause problem.
+						//and the exchange means it has already be added to lists, so add again will cause problem as well
+						
+						preExisting = NULL;
+					}							
+				}
+				
+
+
+				if (NULL != preExisting)
+				{
+
+					preExisting->rt_entry_infos.bCostChanged = FALSE;
+					preExisting->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+					preExisting->rt_entry_infos.bRequireDelete = FALSE;
+
+					preExisting->rt_entry_infos.uiCostChg = 0;
+					
+
+					if (list_destination_n->destination->rt_entry_infos.uiCostChg == 1)
+					{
+
+						BOOL bExchangeFound = FindRouteExchangeV20(node, dCorrespondingChild, preExisting, FALSE, puiLookupCnt, FALSE, ptna_avoid, ptna_avoid2);
+
+						if (bExchangeFound)
+						{
+							if (preExisting->rt_entry_infos.bDescendentRequireFurtherUpdate)
+							{
+								//only route change in this case
+								//add to n_1???
+								//add to n_1
+
+
+							}
+							else
+							{
+								//perfect change							
+								preExisting = NULL;
+
+								
+							
+							}
+
+						}
+						else
+						{
+							//add to 
+
+							if (ptna != NULL)
+							{
+								insert_into_tco_node_addr_set(ptna, addrReached.interfaceAddr.ipv4);
+
+								//add to avoid consider list
+
+								destination_n* destination_n_1 = (destination_n *)
+									MEM_malloc(sizeof(destination_n));
+
+								memset(destination_n_1, 0, sizeof(destination_n));
+
+								//special case, save the (+2) last hop's route related infos, except the cost+1
+
+								//preExisting->rt_entry_infos.rtu_lasthop = prtetmp->rt_dst;
+								
+								/*
+								rt_entry*  prtetmp = list_destination_n->destination;
+
+
+								preExisting->rt_interface = prtetmp->rt_interface;
+								preExisting->rt_router = prtetmp->rt_router;
+
+
+								preExisting->rt_entry_infos.rtu_DegreeWRTNode = prtetmp->rt_entry_infos.rtu_DegreeWRTNode;
+								preExisting->rt_entry_infos.rtu_DistanceWRTNode = prtetmp->rt_entry_infos.rtu_DistanceWRTNode;
+								preExisting->rt_entry_infos.related_neighbor = prtetmp->rt_entry_infos.related_neighbor;
+
+								*/
+
+								destination_n_1->destination = preExisting;
+
+								if (dCorrespondingChild != NULL)
+								{
+									destination_n_1->children = dCorrespondingChild->children;
+									destination_n_1->bChildrenDetermined = dCorrespondingChild->bChildrenDetermined;
+
+									dCorrespondingChild->children = NULL;
+								}
+
+
+								destination_n_1->next = *p_list_tmp;
+								*p_list_tmp = destination_n_1;
+							}
+						}
+					
+					}
+					else
+					{
+						//should not happen
+
+					}		
+
+					
+				
+					
+					bExist = true;
+				}
+				else
+				{
+					bExist = false;
+				}
+
+			}
+			else
+			{
+				bExist = false;
+			}
+			
+		}
+				
+
+		if (bExist && preExisting != NULL)
+		{
+
+			// PRINT OUT: Last Hop to Final Destination. The
+			// function convert_address_to_string has to be
+			// separately
+
+			if (DEBUG)
+			{
+				char addrString[MAX_STRING_LENGTH];
+				IO_ConvertIpAddressToString(
+					&list_destination_n->destination->rt_dst,
+					addrString);
+
+				printf("%s -> ", addrString);
+
+				IO_ConvertIpAddressToString(
+					&addrReached,
+					addrString);
+
+				printf("%s\n", addrString);
+			}
+
+			destination_n* destination_n_1 = NULL;
+
+			rt_entry* tmp = NULL;
+
+			
+			if (preExisting->rt_entry_infos.bDescendentRequireFurtherUpdate)
+			{
+				
+				tmp = preExisting;
+			}				
+				
+			
+			// insert in routing table using topology
+			if (tmp != NULL)
+			{
+
+				destination_n_1 = (destination_n *)
+					MEM_malloc(sizeof(destination_n));
+
+				memset(destination_n_1, 0, sizeof(destination_n));
+
+				destination_n_1->destination = tmp;
+
+				if (dCorrespondingChild != NULL)
+				{
+					destination_n_1->children = dCorrespondingChild->children;
+					destination_n_1->bChildrenDetermined = dCorrespondingChild->bChildrenDetermined;
+
+					dCorrespondingChild->children = NULL;
+				}
+			}
+		
+
+			if (destination_n_1 != NULL)
+			{
+				
+				//!!! in this function, cost change mean only cost plus one change 
+				
+				//Peter comment: add the new added entry to p_list_destination_n_0 or p_list_destination_n_1
+				//BOOL bLastHopCostChg = list_destination_n->destination->rt_entry_infos.bCostChanged;
+
+				UInt16 uiLastHopCostChg = list_destination_n->destination->rt_entry_infos.uiCostChg;
+
+				if (uiLastHopCostChg == 1)
+				{
+					
+					
+					//DebugBreak();
+					//if (preExisting->rt_entry_infos.bDescendentRequireFurtherUpdate)
+					{
+
+						//find 0 exchange
+						destination_n_1->next = *p_current_p0;
+						*p_current_p0 = destination_n_1;
+
+					}
+					//else
+					{
+
+						
+					}
+						
+				
+				}
+				
+
+				
+				/*
+				if (preExisting->rt_entry_infos.bCostChanged)
+				{
+					
+					destination_n_1->next = *p_list_destination_n_2;
+					*p_list_destination_n_2 = destination_n_1;
+
+				}
+				else
+				{
+					destination_n_1->next = *p_list_destination_n_1;
+					*p_list_destination_n_1 = destination_n_1;
+				}
+				*/
+				
+			}
+		}
+		tmp_addrsp = tmp_addrsp->next_alias;
+	}
+}
+
+
+
+static void OlsrCalculateRoutingTableForSinglePathTopologySearchHelpFuncV23(Node * node, destination_n * dCorrespondingChild, e2_s e2_current, Address addrReached, destination_n* list_destination_n, destination_n** p_minus_1_p0, destination_n** p_list_tmp, UInt32 * puiLookupCnt = NULL, tco_node_addr ** ptna = NULL)
+{
+
+	mid_address tmp_addrs;
+	memset( &tmp_addrs, 0, sizeof(mid_address));
+	mid_address* tmp_addrsp;
+
+	tmp_addrs.alias = addrReached;
+
+
+	tmp_addrs.next_alias = OlsrLookupMidAliases(node, addrReached);
+	tmp_addrsp = &tmp_addrs;
+
+	while (tmp_addrsp != NULL)
+	{
+
+		// topo_dest is not in the routing table
+
+		//Peter Modified and added to support olsr multi-path
+		bool bExist = false;
+		RouteEntryType ret = NOT_ALLOWED;
+
+
+		double dDistance = 0.0;
+		double dRWON = 0.0;
+
+
+		if (_OLSR_MULTIPATH)
+		{	
+
+			if (_TEST_TIME_COMPLEXITY)
+			{
+
+				dRWON = list_destination_n->destination->rt_entry_infos.related_neighbor->neighbor_infos.dDegreeWRTNode;
+				dDistance = list_destination_n->destination->rt_entry_infos.related_neighbor->neighbor_infos.dDistanceWRTNode;
+			}
+			else
+			{
+
+				dRWON = ComputeRouterDegreeWRTOriginNode(node, list_destination_n->destination->rt_entry_infos.rtu_router.interfaceAddr.ipv4, &dDistance);
+				dRWON = SimulateLocalDirectionOfAoA(node, dRWON);
+			}
+		}
+
+		
+
+
+		rt_entry* preExisting = NULL;
+
+		//bAdvanced: for optimized accumulative route re-calculation
+		
+		if (g_iAccumulativeRouteCalculation == 1)
+		{
+
+			if (NULL != OlsrLookupRoutingTable(node, tmp_addrsp->alias))
+			{
+
+				bExist = true;
+			}
+		}
+		else	//g_iAccumulativeRouteCalculation == 2
+		{
+
+			
+			if (list_destination_n->destination->rt_entry_infos.bDescendentRequireFurtherUpdate)
+			{
+
+					//printf("call OlsrLookupRoutingTableAdvForLastReplace \n");
+				//???
+				//rt_entry* preConcludeFirst = NULL;
+
+
+				if (dCorrespondingChild != NULL)
+				{
+
+					preExisting = dCorrespondingChild->destination;
+				}
+				else
+				{
+
+					preExisting = OlsrLookupRoutingTableAdvForLastReplace(node, tmp_addrsp->alias, list_destination_n->destination->rt_dst, 
+						list_destination_n->destination->rt_router, list_destination_n->destination->rt_metric + 1, TRUE);
+				}
+
+
+				
+				//may need to check whether it already had been added to work set
+				//??Or just try to check whether already satisfy the following conditions
+				if (NULL != preExisting)
+				{
+					//already must have been common-last
+					if (preExisting->rt_entry_infos.rtu_router.interfaceAddr.ipv4 == list_destination_n->destination->rt_entry_infos.rtu_router.interfaceAddr.ipv4
+						&& preExisting->rt_metric == list_destination_n->destination->rt_metric + 1)
+					{
+						//consider this as the entry already be added into the n_1 table,
+						//since the exchange function may cause lasthop change, so update again will cause the disappear of further update and cause problem.
+						//and the exchange means it has already be added to lists, so add again will cause problem as well
+						
+						preExisting = NULL;
+					}							
+				}
+				
+
+
+				if (NULL != preExisting)
+				{
+
+					preExisting->rt_entry_infos.bCostChanged = FALSE;
+					preExisting->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+					preExisting->rt_entry_infos.bRequireDelete = FALSE;
+
+					preExisting->rt_entry_infos.uiCostChg = 0;
+					
+
+					if (list_destination_n->destination->rt_entry_infos.uiCostChg == 2)
+					{
+
+						BOOL bExchangeFound = FindRouteExchangeV20(node, dCorrespondingChild, preExisting, TRUE, puiLookupCnt);
+						if (bExchangeFound)
+						{
+							if (g_iToAchieveSameRoute == 1)
+							{
+								//Peter Comment: a very special case for same route support,
+								//since the +0 exchange for children of entry X in +2 list,
+								//may potentially become parent of X, which may cause route change. 
+								//in addition, it will also become the parent of any entry Y in +1 list
+
+								tco_node_addr * adjacents_backup = NULL;
+								topology_last_entry * t_last_sym = OlsrLookupLastTopologyTableSYM(node, preExisting->rt_dst);
+								
+								if (t_last_sym != NULL)
+								{
+
+									destination_list* topo_dest = NULL;
+
+									topo_dest = t_last_sym->topology_list_of_destinations;
+
+									
+
+									while (topo_dest != NULL)
+									{
+
+										Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+										insert_into_tco_node_addr_set(&(adjacents_backup), addrReached.interfaceAddr.ipv4);
+
+										topo_dest = topo_dest->next;
+										
+									}
+								}
+
+
+								destination_n* tmp_destination_1 = e2_current.list_p2;
+
+								while (tmp_destination_1 != NULL)
+								{
+
+									//it has to be adjacent with the new +0 exchange 
+									if (exist_in_tco_node_addr_set(&adjacents_backup, tmp_destination_1->destination->rt_entry_infos.rtu_dst.interfaceAddr.ipv4))
+									{
+										if (PreferredRouteForNew(preExisting->rt_entry_infos.rtu_router.interfaceAddr.ipv4, tmp_destination_1->destination->rt_entry_infos.rtu_router.interfaceAddr.ipv4))
+										{
+											//change route for its old parent to become the new parent
+
+											tmp_destination_1->destination->rt_interface = preExisting->rt_interface;
+
+							
+								
+											/*
+											if (_OLSR_MULTIPATH)
+											{
+
+											
+												tmp_destination_1->destination->rt_entry_infos.rtu_DegreeWRTNode = preExisting->rt_entry_infos.rtu_DegreeWRTNode;
+												tmp_destination_1->destination->rt_entry_infos.rtu_DistanceWRTNode = preExisting->rt_entry_infos.rtu_DistanceWRTNode;
+												tmp_destination_1->destination->rt_entry_infos.related_neighbor = preExisting->rt_entry_infos.related_neighbor;
+											}
+											*/
+																
+								
+											tmp_destination_1->destination->rt_entry_infos.rtu_lasthop = preExisting->rt_entry_infos.rtu_dst;									
+											
+											tmp_destination_1->destination->rt_router = preExisting->rt_router;									
+											
+										}	
+									}								
+
+
+									tmp_destination_1 = tmp_destination_1->next;
+								}
+
+
+								tmp_destination_1 = e2_current.list_p1;
+
+								while (tmp_destination_1 != NULL)
+								{
+
+									//it has to be adjacent with the new +0 exchange 
+									if (exist_in_tco_node_addr_set(&adjacents_backup, tmp_destination_1->destination->rt_entry_infos.rtu_dst.interfaceAddr.ipv4))
+									{
+
+										if (PreferredRouteForNew(preExisting->rt_entry_infos.rtu_router.interfaceAddr.ipv4, tmp_destination_1->destination->rt_entry_infos.rtu_router.interfaceAddr.ipv4))
+										{
+											//change route for its old parent to become the new parent
+
+											tmp_destination_1->destination->rt_interface = preExisting->rt_interface;
+
+							
+								
+											/*
+											if (_OLSR_MULTIPATH)
+											{
+
+											
+												tmp_destination_1->destination->rt_entry_infos.rtu_DegreeWRTNode = preExisting->rt_entry_infos.rtu_DegreeWRTNode;
+												tmp_destination_1->destination->rt_entry_infos.rtu_DistanceWRTNode = preExisting->rt_entry_infos.rtu_DistanceWRTNode;
+												tmp_destination_1->destination->rt_entry_infos.related_neighbor = preExisting->rt_entry_infos.related_neighbor;
+											}
+											*/
+																
+								
+											tmp_destination_1->destination->rt_entry_infos.rtu_lasthop = preExisting->rt_entry_infos.rtu_dst;									
+											
+											tmp_destination_1->destination->rt_router = preExisting->rt_router;									
+											
+										}	
+									}								
+
+
+									tmp_destination_1 = tmp_destination_1->next;
+								}
+
+								
+
+								clear_tco_node_addr_set(&adjacents_backup);															
+								
+							}
+
+							if (preExisting->rt_entry_infos.bDescendentRequireFurtherUpdate)
+							{
+								//only route change in this case
+								//add to n_1???
+								//add to n_1
+							}
+							else
+							{
+								//perfect change							
+								preExisting = NULL;
+							
+							}
+
+						}
+						else
+						{
+							//add to 
+
+							if (ptna != NULL)
+							{
+								insert_into_tco_node_addr_set(ptna, addrReached.interfaceAddr.ipv4);
+
+								//add to avoid consider list
+
+								destination_n* destination_n_1 = (destination_n *)
+									MEM_malloc(sizeof(destination_n));
+
+								memset(destination_n_1, 0, sizeof(destination_n));
+
+								
+								if (g_iToAchieveSameRoute != 1)
+								{
+
+									//special case, save the (+2) last hop's route related infos, except the cost+1
+									//for convenient update of +2
+
+									//preExisting->rt_entry_infos.rtu_lasthop = prtetmp->rt_dst;
+									rt_entry*  prtetmp = list_destination_n->destination;
+
+
+									preExisting->rt_interface = prtetmp->rt_interface;
+									preExisting->rt_router = prtetmp->rt_router;
+
+
+									if (_OLSR_MULTIPATH)
+									{
+										preExisting->rt_entry_infos.rtu_DegreeWRTNode = prtetmp->rt_entry_infos.rtu_DegreeWRTNode;
+										preExisting->rt_entry_infos.rtu_DistanceWRTNode = prtetmp->rt_entry_infos.rtu_DistanceWRTNode;
+										preExisting->rt_entry_infos.related_neighbor = prtetmp->rt_entry_infos.related_neighbor;
+									}
+								
+
+								}
+
+								if (dCorrespondingChild != NULL)
+								{
+									destination_n_1->children = dCorrespondingChild->children;
+									destination_n_1->bChildrenDetermined = dCorrespondingChild->bChildrenDetermined;
+
+									dCorrespondingChild->children = NULL;
+								}
+
+								
+								destination_n_1->destination = preExisting;
+
+
+								destination_n_1->next = *p_list_tmp;
+								*p_list_tmp = destination_n_1;
+							}
+						}
+					
+					}
+					else
+					{
+						//should not happen
+
+					}		
+
+					
+				
+					
+					bExist = true;
+				}
+				else
+				{
+					bExist = false;
+				}
+
+			}
+			else
+			{
+				bExist = false;
+			}
+			
+		}
+				
+
+		if (bExist && preExisting != NULL)
+		{
+
+			// PRINT OUT: Last Hop to Final Destination. The
+			// function convert_address_to_string has to be
+			// separately
+
+			if (DEBUG)
+			{
+				char addrString[MAX_STRING_LENGTH];
+				IO_ConvertIpAddressToString(
+					&list_destination_n->destination->rt_dst,
+					addrString);
+
+				printf("%s -> ", addrString);
+
+				IO_ConvertIpAddressToString(
+					&addrReached,
+					addrString);
+
+				printf("%s\n", addrString);
+			}
+
+			destination_n* destination_n_1 = NULL;
+
+			rt_entry* tmp = NULL;
+
+			
+			if (preExisting->rt_entry_infos.bDescendentRequireFurtherUpdate)
+			{
+				
+				tmp = preExisting;
+			}				
+				
+			
+			// insert in routing table using topology
+			if (tmp != NULL)
+			{
+				destination_n_1 = (destination_n *)
+					MEM_malloc(sizeof(destination_n));
+
+				memset(destination_n_1, 0, sizeof(destination_n));
+
+				destination_n_1->destination = tmp;
+
+				if (dCorrespondingChild != NULL)
+				{
+					destination_n_1->children = dCorrespondingChild->children;
+					destination_n_1->bChildrenDetermined = dCorrespondingChild->bChildrenDetermined;
+
+					dCorrespondingChild->children = NULL;
+				}
+			}
+		
+
+			if (destination_n_1 != NULL)
+			{
+				
+				//!!! in this function, cost change mean only cost plus one change 
+				
+				//Peter comment: add the new added entry to p_list_destination_n_0 or p_list_destination_n_1
+				//BOOL bLastHopCostChg = list_destination_n->destination->rt_entry_infos.bCostChanged;
+
+				UInt16 uiLastHopCostChg = list_destination_n->destination->rt_entry_infos.uiCostChg;
+
+				if (uiLastHopCostChg == 2)
+				{
+					
+					
+					//DebugBreak();
+					//if (preExisting->rt_entry_infos.bDescendentRequireFurtherUpdate)
+					{
+
+						//find 0 exchange
+						destination_n_1->next = *p_minus_1_p0;
+						*p_minus_1_p0 = destination_n_1;
+
+					}
+					//else
+					{
+
+						
+					}
+						
+				
+				}
+				
+
+				
+				/*
+				if (preExisting->rt_entry_infos.bCostChanged)
+				{
+					
+					destination_n_1->next = *p_list_destination_n_2;
+					*p_list_destination_n_2 = destination_n_1;
+
+				}
+				else
+				{
+					destination_n_1->next = *p_list_destination_n_1;
+					*p_list_destination_n_1 = destination_n_1;
+				}
+				*/
+				
+			}
+		}
+		tmp_addrsp = tmp_addrsp->next_alias;
+	}
+}
+
+
+static void OlsrCalculateRoutingTableForSinglePathTopologySearchHelpFuncV22(Node * node, destination_n * dCorrespondingChild, Address addrReached, destination_n* list_destination_n, e2_s* p_e2s_n_minus_1, e2_s* p_e2s_n_0, e2_s* p_e2s_n_1, UInt32 * puiLookupCnt = NULL, tco_node_addr ** ptna_set = NULL, tco_node_addr ** ptna_set2 = NULL)
+{
+
+	mid_address tmp_addrs;
+	memset( &tmp_addrs, 0, sizeof(mid_address));
+	mid_address* tmp_addrsp;
+
+	tmp_addrs.alias = addrReached;
+
+
+	tmp_addrs.next_alias = OlsrLookupMidAliases(node, addrReached);
+	tmp_addrsp = &tmp_addrs;
+
+	while (tmp_addrsp != NULL)
+	{
+
+		// topo_dest is not in the routing table
+
+		//Peter Modified and added to support olsr multi-path
+		bool bExist = false;
+		RouteEntryType ret = NOT_ALLOWED;
+
+
+		double dDistance = 0.0;
+		double dRWON = 0.0;
+
+		
+		//if (bForPlus2)
+		{
+
+		}
+		//else
+		{
+
+			if (_OLSR_MULTIPATH)
+			{
+				if (_TEST_TIME_COMPLEXITY)
+				{
+
+					dRWON = list_destination_n->destination->rt_entry_infos.related_neighbor->neighbor_infos.dDegreeWRTNode;
+					dDistance = list_destination_n->destination->rt_entry_infos.related_neighbor->neighbor_infos.dDistanceWRTNode;
+				}
+				else
+				{
+
+					dRWON = ComputeRouterDegreeWRTOriginNode(node, list_destination_n->destination->rt_entry_infos.rtu_router.interfaceAddr.ipv4, &dDistance);
+					dRWON = SimulateLocalDirectionOfAoA(node, dRWON);
+				}
+			}
+
+			
+		}
+		
+
+		rt_entry* preExisting = NULL;
+
+		//bAdvanced: for optimized accumulative route re-calculation
+		
+		if (g_iAccumulativeRouteCalculation == 1)
+		{
+
+			if (NULL != OlsrLookupRoutingTable(node, tmp_addrsp->alias))
+			{
+
+				bExist = true;
+			}
+		}
+		else	//g_iAccumulativeRouteCalculation == 2
+		{
+
+			/*
+			if (bForPlus2)
+			{
+				preExisting = list_destination_n->destination;
+
+				preExisting->rt_entry_infos.bCostChanged = FALSE;
+				preExisting->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+				preExisting->rt_entry_infos.bRequireDelete = FALSE;
+
+				preExisting->rt_entry_infos.uiCostChg = 0;
+			}
+			*/
+			//else
+			{
+				if (list_destination_n->destination->rt_entry_infos.bDescendentRequireFurtherUpdate)
+				{
+
+						//printf("call OlsrLookupRoutingTableAdvForLastReplace \n");
+					//???
+					//rt_entry* preConcludeFirst = NULL;
+
+					if (dCorrespondingChild != NULL)
+					{
+						preExisting = dCorrespondingChild->destination;
+					}
+					else
+					{
+
+						preExisting = OlsrLookupRoutingTableAdvForLastReplace(node, tmp_addrsp->alias, list_destination_n->destination->rt_dst, 
+							list_destination_n->destination->rt_router, list_destination_n->destination->rt_metric + 1, TRUE);
+					}
+
+					
+					//may need to check whether it already had been added to work set
+					//??Or just try to check whether already satisfy the following conditions
+					if (NULL != preExisting)
+					{
+						//already must have been commonlast
+						if (preExisting->rt_entry_infos.rtu_router.interfaceAddr.ipv4 == list_destination_n->destination->rt_entry_infos.rtu_router.interfaceAddr.ipv4
+							&& preExisting->rt_metric == list_destination_n->destination->rt_metric + 1)
+						{
+							//consider this as the entry already be added into the n_1 table,
+							//since the exchange function may cause lasthop change, so update again will cause the disappear of further update and cause problem.
+							//and the exchange means it has already be added to lists, so add again will cause problem as well
+							
+							preExisting = NULL;
+						}							
+					}
+					
+
+
+					if (NULL != preExisting)
+					{
+
+						preExisting->rt_entry_infos.bCostChanged = FALSE;
+						preExisting->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+						preExisting->rt_entry_infos.bRequireDelete = FALSE;
+
+						preExisting->rt_entry_infos.uiCostChg = 0;
+						
+
+						if (list_destination_n->destination->rt_entry_infos.uiCostChg != 0)
+						{
+							//preExisting->rt_entry_infos.bRequireExchange = TRUE;
+						
+						
+
+							if (list_destination_n->destination->rt_entry_infos.uiCostChg == 1)
+							{
+								
+								//DebugBreak();
+								BOOL bExchangeFound = FindRouteExchangeV21(node, dCorrespondingChild, preExisting, TRUE, list_destination_n->destination, puiLookupCnt, FALSE, ptna_set, ptna_set2);
+
+								if (!bExchangeFound)
+								{
+
+									//this branch should never happen, since the success of find earlier level exchange
+									//can ensure there is at least one suitable (maybe not perfect) option
+									
+									
+								}
+								else
+								{
+									if (preExisting->rt_entry_infos.bDescendentRequireFurtherUpdate)
+									{
+
+										/*
+										if (preExisting->rt_entry_infos.bCostChanged)
+										{
+											//add to n_2???
+											//add to n_1
+										}
+										else
+										{
+											//route change 
+											//add to n_1???
+											//DebugBreak();
+											//add to n_0
+										
+										}
+										*/
+										
+										
+									}
+									else
+									{
+										preExisting = NULL;
+									}
+								}
+							}
+							else //2
+							{
+
+
+								BOOL bExchangeFound = FindRouteExchangeV22(node, dCorrespondingChild, preExisting, TRUE, list_destination_n->destination, puiLookupCnt, FALSE, ptna_set, ptna_set2);
+
+								if (!bExchangeFound)
+								{
+
+									//this branch should never happen, since the success of find earlier level exchange
+									//can ensure there is at least one suitable (maybe not perfect) option
+									
+									
+								}
+								else
+								{
+									if (preExisting->rt_entry_infos.bDescendentRequireFurtherUpdate)
+									{
+
+										/*
+										if (preExisting->rt_entry_infos.bCostChanged)
+										{
+											//add to n_2???
+											//add to n_1
+										}
+										else
+										{
+											//route change 
+											//add to n_1???
+											//DebugBreak();
+											//add to n_0
+										
+										}
+										*/
+										
+										
+									}
+									else
+									{
+										preExisting = NULL;
+									}
+								}
+
+														
+							
+							}
+
+
+
+						}
+						else
+						{
+							//only route changed
+
+							
+							//preExisting->rt_entry_infos.bRequireExchange = FALSE;
+
+							//preExisting->rt_entry_infos.bRequireUpdate = TRUE;
+
+							BOOL bExchangeFound = FindRouteExchangeV20(node, dCorrespondingChild, preExisting, TRUE, puiLookupCnt, FALSE, ptna_set, ptna_set2);
+
+							if (bExchangeFound)
+							{
+								if (preExisting->rt_entry_infos.bDescendentRequireFurtherUpdate)
+								{
+									//only route change in this case
+									//add to n_1???
+									//add to n_1
+								}
+								else
+								{
+									preExisting = NULL;
+								}
+
+							}
+							else
+							{
+								//will never happen
+							}
+
+						}		
+
+						
+					
+						
+						bExist = true;
+					}
+					else
+					{
+						bExist = false;
+					}
+
+				}
+				else
+				{
+					bExist = false;
+				}
+			}
+
+
+			
+			
+		}
+				
+
+		if (bExist && preExisting != NULL)
+		{
+
+			// PRINT OUT: Last Hop to Final Destination. The
+			// function convert_address_to_string has to be
+			// separately
+
+			if (DEBUG)
+			{
+				char addrString[MAX_STRING_LENGTH];
+				IO_ConvertIpAddressToString(
+					&list_destination_n->destination->rt_dst,
+					addrString);
+
+				printf("%s -> ", addrString);
+
+				IO_ConvertIpAddressToString(
+					&addrReached,
+					addrString);
+
+				printf("%s\n", addrString);
+			}
+
+			destination_n* destination_n_1 = NULL;
+
+			rt_entry* tmp = NULL;
+
+			
+			if (preExisting->rt_entry_infos.bDescendentRequireFurtherUpdate)
+			{
+				
+				tmp = preExisting;
+			}				
+				
+			
+			// insert in routing table using topology
+			if (tmp != NULL)
+			{
+
+				destination_n_1 = (destination_n *)
+					MEM_malloc(sizeof(destination_n));
+
+				memset(destination_n_1, 0, sizeof(destination_n));
+
+
+				destination_n_1->destination = tmp;
+
+				if (dCorrespondingChild != NULL)
+				{
+					destination_n_1->children = dCorrespondingChild->children;
+					destination_n_1->bChildrenDetermined = dCorrespondingChild->bChildrenDetermined;
+
+					dCorrespondingChild->children = NULL;
+				}
+			}
+		
+
+			if (destination_n_1 != NULL)
+			{
+				
+				//!!! in this function, cost change mean only cost plus one change 
+				
+				//Peter comment: add the new added entry to p_list_destination_n_0 or p_list_destination_n_1
+				//BOOL bLastHopCostChg = list_destination_n->destination->rt_entry_infos.bCostChanged;
+
+				UInt16 uiLastHopCostChg = list_destination_n->destination->rt_entry_infos.uiCostChg;
+
+				if (uiLastHopCostChg != 0)
+				{
+					if (uiLastHopCostChg == 1)
+					{
+						//add to p_list_destination_n_1
+
+						if (preExisting->rt_entry_infos.uiCostChg == 0)
+						{
+							destination_n_1->next = p_e2s_n_0->list_p0;
+							p_e2s_n_0->list_p0 = destination_n_1;
+
+						}
+						else	//1
+						{
+							//destination_n_1->next = *p_list_destination_n_1;
+							//*p_list_destination_n_1 = destination_n_1;
+
+							destination_n_1->next = p_e2s_n_1->list_p1;
+							p_e2s_n_1->list_p1 = destination_n_1;
+						}
+
+						
+					}
+					else	//uiLastHopCostChg == 2
+					{
+						//DebugBreak();
+						if (preExisting->rt_entry_infos.uiCostChg == 0)
+						{
+
+							//skip
+						}
+						else
+						{
+
+							if (preExisting->rt_entry_infos.uiCostChg == 1)
+							{
+								destination_n_1->next = p_e2s_n_0->list_p1;
+								p_e2s_n_0->list_p1 = destination_n_1;
+
+							}
+							else //2
+							{
+								destination_n_1->next = p_e2s_n_1->list_p2;
+								p_e2s_n_1->list_p2 = destination_n_1;
+							}
+						}
+						
+						//add to p_list_destination_n_0, the current list, so it is tricky
+						//destination_n* destination_n_tmp = NULL;
+						//destination_n_tmp = (*p_list_destination_n_0)->next;
+						//destination_n_1->next = destination_n_tmp;
+						//(*p_list_destination_n_0)->next = destination_n_1;
+						
+						//*p_list_destination_n_0 = destination_n_1;
+
+					}
+				}
+				else
+				{
+					
+					{
+						//add to p_list_destination_n_1
+						destination_n_1->next = p_e2s_n_1->list_p0;
+						p_e2s_n_1->list_p0 = destination_n_1;
+					}
+				}
+
+				
+				/*
+				if (preExisting->rt_entry_infos.bCostChanged)
+				{
+					
+					destination_n_1->next = *p_list_destination_n_2;
+					*p_list_destination_n_2 = destination_n_1;
+
+				}
+				else
+				{
+					destination_n_1->next = *p_list_destination_n_1;
+					*p_list_destination_n_1 = destination_n_1;
+				}
+				*/
+				
+			}
+		}
+		tmp_addrsp = tmp_addrsp->next_alias;
+	}
+}
+
+
+static void OlsrCalculateRoutingTableForSinglePathTopologySearchHelpFuncV21(Node * node, Address addrReached, destination_n* list_destination_n, destination_n** p_list_destination_n_0, destination_n** p_list_destination_n_1, UInt32 * puiLookupCnt = NULL)
+{
+
+	mid_address tmp_addrs;
+	memset( &tmp_addrs, 0, sizeof(mid_address));
+	mid_address* tmp_addrsp;
+
+	tmp_addrs.alias = addrReached;
+
+
+	tmp_addrs.next_alias = OlsrLookupMidAliases(node, addrReached);
+	tmp_addrsp = &tmp_addrs;
+
+	while (tmp_addrsp != NULL)
+	{
+
+		// topo_dest is not in the routing table
+
+		//Peter Modified and added to support olsr multi-path
+		bool bExist = false;
+		RouteEntryType ret = NOT_ALLOWED;
+
+
+		double dDistance = 0.0;
+		double dRWON = 0.0;
+
+		if (_OLSR_MULTIPATH)
+		{
+			if (_TEST_TIME_COMPLEXITY)
+			{
+
+				dRWON = list_destination_n->destination->rt_entry_infos.related_neighbor->neighbor_infos.dDegreeWRTNode;
+				dDistance = list_destination_n->destination->rt_entry_infos.related_neighbor->neighbor_infos.dDistanceWRTNode;
+			}
+			else
+			{
+
+				dRWON = ComputeRouterDegreeWRTOriginNode(node, list_destination_n->destination->rt_entry_infos.rtu_router.interfaceAddr.ipv4, &dDistance);
+				dRWON = SimulateLocalDirectionOfAoA(node, dRWON);
+			}
+		}	
+		
+
+
+		rt_entry* preExisting = NULL;
+
+		//bAdvanced: for optimized accumulative route re-calculation
+		
+		if (g_iAccumulativeRouteCalculation == 1)
+		{
+
+			if (NULL != OlsrLookupRoutingTable(node, tmp_addrsp->alias))
+			{
+
+				bExist = true;
+			}
+		}
+		else	//g_iAccumulativeRouteCalculation == 2
+		{
+
+			
+			if (list_destination_n->destination->rt_entry_infos.bDescendentRequireFurtherUpdate)
+			{
+
+					//printf("call OlsrLookupRoutingTableAdvForLastReplace \n");
+				//???
+				//rt_entry* preConcludeFirst = NULL;
+				preExisting = OlsrLookupRoutingTableAdvForLastReplace(node, tmp_addrsp->alias, list_destination_n->destination->rt_dst, 
+					list_destination_n->destination->rt_router, list_destination_n->destination->rt_metric + 1, TRUE);
+
+
+				
+				//may need to check whether it already had been added to work set
+				//??Or just try to check whether already satisfy the following conditions
+				if (NULL != preExisting)
+				{
+					//already must have been commonlast
+					if (preExisting->rt_entry_infos.rtu_router.interfaceAddr.ipv4 == list_destination_n->destination->rt_entry_infos.rtu_router.interfaceAddr.ipv4
+						&& preExisting->rt_metric == list_destination_n->destination->rt_metric + 1)
+					{
+						//consider this as the entry already be added into the n_1 table,
+						//since the exchange function may cause lasthop change, so update again will cause the disappear of further update and cause problem.
+						//and the exchange means it has already be added to lists, so add again will cause problem as well
+						
+						preExisting = NULL;
+					}							
+				}
+				
+
+
+				if (NULL != preExisting)
+				{
+
+					preExisting->rt_entry_infos.bCostChanged = FALSE;
+					preExisting->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+					preExisting->rt_entry_infos.bRequireDelete = FALSE;
+
+					preExisting->rt_entry_infos.uiCostChg = 0;
+					
+
+					if (list_destination_n->destination->rt_entry_infos.bCostChanged)
+					{
+						//preExisting->rt_entry_infos.bRequireExchange = TRUE;
+					
+					
+						//DebugBreak();
+						BOOL bExchangeFound = FindRouteExchangeV21(node,  NULL, preExisting, TRUE, list_destination_n->destination, puiLookupCnt);
+
+						if (!bExchangeFound)
+						{
+
+							//this branch should never happen, since the success of find earlier level exchange
+							//can ensure there is at least one suitable (maybe not perfect) option
+							
+							
+						}
+						else
+						{
+							if (preExisting->rt_entry_infos.bDescendentRequireFurtherUpdate)
+							{
+
+								/*
+								if (preExisting->rt_entry_infos.bCostChanged)
+								{
+									//add to n_2???
+									//add to n_1
+								}
+								else
+								{
+									//route change 
+									//add to n_1???
+									//DebugBreak();
+									//add to n_0
+								
+								}
+								*/
+								
+								
+							}
+							else
+							{
+								preExisting = NULL;
+							}
+						}
+
+					}
+					else
+					{
+						//only route changed
+
+						
+						//preExisting->rt_entry_infos.bRequireExchange = FALSE;
+
+						//preExisting->rt_entry_infos.bRequireUpdate = TRUE;
+
+						BOOL bExchangeFound = FindRouteExchangeV20(node, NULL, preExisting, TRUE, puiLookupCnt);
+
+						if (bExchangeFound)
+						{
+							if (preExisting->rt_entry_infos.bDescendentRequireFurtherUpdate)
+							{
+								//only route change in this case
+								//add to n_1???
+								//add to n_1
+							}
+							else
+							{
+								preExisting = NULL;
+							}
+
+						}
+						else
+						{
+							//will never happen
+						}
+
+					}		
+
+					
+				
+					
+					bExist = true;
+				}
+				else
+				{
+					bExist = false;
+				}
+
+			}
+			else
+			{
+				bExist = false;
+			}
+			
+		}
+				
+
+		if (bExist && preExisting != NULL)
+		{
+
+			// PRINT OUT: Last Hop to Final Destination. The
+			// function convert_address_to_string has to be
+			// separately
+
+			if (DEBUG)
+			{
+				char addrString[MAX_STRING_LENGTH];
+				IO_ConvertIpAddressToString(
+					&list_destination_n->destination->rt_dst,
+					addrString);
+
+				printf("%s -> ", addrString);
+
+				IO_ConvertIpAddressToString(
+					&addrReached,
+					addrString);
+
+				printf("%s\n", addrString);
+			}
+
+			destination_n* destination_n_1 = NULL;
+
+			rt_entry* tmp = NULL;
+
+			
+			if (preExisting->rt_entry_infos.bDescendentRequireFurtherUpdate)
+			{
+				
+				tmp = preExisting;
+			}				
+				
+			
+			// insert in routing table using topology
+			if (tmp != NULL)
+			{
+				destination_n_1 = (destination_n *)
+					MEM_malloc(sizeof(destination_n));
+
+				memset(destination_n_1, 0, sizeof(destination_n));
+
+				destination_n_1->destination = tmp;
+			}
+			
+
+			if (destination_n_1 != NULL)
+			{
+				
+				//!!! in this function, cost change mean only cost plus one change 
+				
+				//Peter comment: add the new added entry to p_list_destination_n_0 or p_list_destination_n_1
+				BOOL bLastHopCostChg = list_destination_n->destination->rt_entry_infos.bCostChanged;
+
+				if (bLastHopCostChg)
+				{
+					if (preExisting->rt_entry_infos.bCostChanged)
+					{
+						//add to p_list_destination_n_1
+						destination_n_1->next = *p_list_destination_n_1;
+						*p_list_destination_n_1 = destination_n_1;
+					}
+					else
+					{
+						//DebugBreak();
+						
+						//add to p_list_destination_n_0, the current list, so it is tricky
+						destination_n* destination_n_tmp = NULL;
+						destination_n_tmp = (*p_list_destination_n_0)->next;
+						destination_n_1->next = destination_n_tmp;
+						(*p_list_destination_n_0)->next = destination_n_1;
+						
+						//*p_list_destination_n_0 = destination_n_1;
+
+					}
+				}
+				else
+				{
+					if (preExisting->rt_entry_infos.bCostChanged)
+					{
+						//impossible
+					}
+					else
+					{
+						//add to p_list_destination_n_1
+						destination_n_1->next = *p_list_destination_n_1;
+						*p_list_destination_n_1 = destination_n_1;
+					}
+				}
+
+				
+				/*
+				if (preExisting->rt_entry_infos.bCostChanged)
+				{
+					
+					destination_n_1->next = *p_list_destination_n_2;
+					*p_list_destination_n_2 = destination_n_1;
+
+				}
+				else
+				{
+					destination_n_1->next = *p_list_destination_n_1;
+					*p_list_destination_n_1 = destination_n_1;
+				}
+				*/
+				
+			}
+		}
+		tmp_addrsp = tmp_addrsp->next_alias;
+	}
+}
+
+
+static void OlsrCalculateRoutingTableForSinglePathTopologySearchHelpFuncV20(Node * node, Address addrReached, destination_n* list_destination_n, destination_n** p_list_destination_n_1, UInt32 * puiLookupCnt = NULL)
+{
+
+	mid_address tmp_addrs;
+	memset( &tmp_addrs, 0, sizeof(mid_address));
+	mid_address* tmp_addrsp;
+
+	tmp_addrs.alias = addrReached;
+
+
+	tmp_addrs.next_alias = OlsrLookupMidAliases(node, addrReached);
+	tmp_addrsp = &tmp_addrs;
+
+	while (tmp_addrsp != NULL)
+	{
+
+		// topo_dest is not in the routing table
+
+		//Peter Modified and added to support olsr multi-path
+		bool bExist = false;
+		RouteEntryType ret = NOT_ALLOWED;
+
+
+		double dDistance = 0.0;
+		double dRWON = 0.0;
+
+
+		if (_OLSR_MULTIPATH)
+		{
+			if (_TEST_TIME_COMPLEXITY)
+			{
+
+				dRWON = list_destination_n->destination->rt_entry_infos.related_neighbor->neighbor_infos.dDegreeWRTNode;
+				dDistance = list_destination_n->destination->rt_entry_infos.related_neighbor->neighbor_infos.dDistanceWRTNode;
+			}
+			else
+			{
+
+				dRWON = ComputeRouterDegreeWRTOriginNode(node, list_destination_n->destination->rt_entry_infos.rtu_router.interfaceAddr.ipv4, &dDistance);
+				dRWON = SimulateLocalDirectionOfAoA(node, dRWON);
+			}
+		}
+		
+
+
+		rt_entry* preExisting = NULL;
+
+		//bAdvanced: for optimized accumulative route re-calculation
+		
+		if (g_iAccumulativeRouteCalculation == 1)
+		{
+
+			if (NULL != OlsrLookupRoutingTable(node, tmp_addrsp->alias))
+			{
+
+				bExist = true;
+			}
+		}
+		else	//g_iAccumulativeRouteCalculation == 2
+		{
+		
+
+			if (list_destination_n->destination->rt_entry_infos.bDescendentRequireFurtherUpdate)
+			{
+
+					//printf("call OlsrLookupRoutingTableAdvForLastReplace \n");
+				//???
+				//rt_entry* preConcludeFirst = NULL;
+				preExisting = OlsrLookupRoutingTableAdvForLastReplace(node, tmp_addrsp->alias, list_destination_n->destination->rt_dst, 
+					list_destination_n->destination->rt_router, list_destination_n->destination->rt_metric + 1, TRUE);
+
+				
+				if (NULL != preExisting)
+				{
+
+					preExisting->rt_entry_infos.bCostChanged = FALSE;
+					preExisting->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+					preExisting->rt_entry_infos.bRequireDelete = FALSE;
+					preExisting->rt_entry_infos.uiCostChg = 0;
+				
+
+					/*
+					if (list_destination_n->destination->rt_entry_infos.bCostChanged)
+					{
+						//preExisting->rt_entry_infos.bRequireExchange = TRUE;
+					
+					
+						//DebugBreak();
+						BOOL bExchangeFound = FindRouteExchangeV20(node, preExisting, TRUE, puiLookupCnt);
+
+						if (!bExchangeFound)
+						{
+
+							//this branch should never happen, since the success of find earlier level exchange
+							//can ensure there is at least one suitable (maybe not perfect) option
+							
+							
+							//OlsrDeleteRoutingTable(preExisting);
+							//preExisting = NULL;
+
+							//*pbRequireRediscovery = TRUE;
+							//return NULL;
+						}
+
+					}
+					else
+					*/
+					{
+						//only route changed
+
+						
+						//preExisting->rt_entry_infos.bRequireExchange = FALSE;
+
+						//preExisting->rt_entry_infos.bRequireUpdate = TRUE;
+
+						BOOL bExchangeFound = FindRouteExchangeV20(node, NULL, preExisting, TRUE, puiLookupCnt);
+
+						if (bExchangeFound)
+						{
+							if (preExisting->rt_entry_infos.bDescendentRequireFurtherUpdate)
+							{
+
+							}
+							else
+							{
+								preExisting = NULL;
+							}
+
+						}
+						else
+						{
+							//will never happen
+						}
+
+
+					}		
+
+					
+					
+					
+					bExist = true;
+				}
+				else
+				{
+					bExist = false;
+				}
+
+			}
+			else
+			{
+				bExist = false;
+			}
+
+			
+		}
+		
+		
+
+		if (bExist && preExisting != NULL)
+		{
+
+			// PRINT OUT: Last Hop to Final Destination. The
+			// function convert_address_to_string has to be
+			// separately
+
+			if (DEBUG)
+			{
+				char addrString[MAX_STRING_LENGTH];
+				IO_ConvertIpAddressToString(
+					&list_destination_n->destination->rt_dst,
+					addrString);
+
+				printf("%s -> ", addrString);
+
+				IO_ConvertIpAddressToString(
+					&addrReached,
+					addrString);
+
+				printf("%s\n", addrString);
+			}
+
+			destination_n* destination_n_1 = NULL;
+
+			rt_entry* tmp = NULL;
+
+			
+			if (preExisting->rt_entry_infos.bDescendentRequireFurtherUpdate)
+			{
+				
+				tmp = preExisting;
+			}				
+						
+
+			// insert in routing table using topology
+			if (tmp != NULL)
+			{
+				destination_n_1 = (destination_n *)
+					MEM_malloc(sizeof(destination_n));
+
+				memset(destination_n_1, 0, sizeof(destination_n));
+
+
+				destination_n_1->destination = tmp;
+			}
+		
+			if (destination_n_1!= NULL)
+			{
+				//Peter comment: add the new added entry to list_destination_n_1
+				destination_n_1->next = *p_list_destination_n_1;
+				*p_list_destination_n_1 = destination_n_1;
+			}
+		}
+		tmp_addrsp = tmp_addrsp->next_alias;
+	}
+}
+
+
+
+
+// Peter Add for Specifically support _OLSR_MULTIPATH, use 
+// both lastTable and DestTable to search
+static void OlsrCalculateRoutingTableForMultiPathTopologySearchHelpFunc(Node * node, Address addrReached, destination_n* list_destination_n, destination_n** p_list_destination_n_1, BOOL bAdvanced = FALSE)
+{
+
+	mid_address tmp_addrs;
+	memset( &tmp_addrs, 0, sizeof(mid_address));
+	mid_address* tmp_addrsp;
+
+	tmp_addrs.alias = addrReached;
+
+
+	tmp_addrs.next_alias = OlsrLookupMidAliases(node, addrReached);
+	tmp_addrsp = &tmp_addrs;
+
+	while (tmp_addrsp != NULL)
+	{
+
+		// topo_dest is not in the routing table
+
+		//Peter Modified and added to suppoer olsr multipath
+		bool bExist = false;
+		RouteEntryType ret = NOT_ALLOWED;
+
+
+		double dDistance = 0.0;
+		double dRWON = 0.0;
+
+		if (_TEST_TIME_COMPLEXITY)
+		{
+			dRWON = list_destination_n->destination->rt_entry_infos.related_neighbor->neighbor_infos.dDegreeWRTNode;
+			dDistance = list_destination_n->destination->rt_entry_infos.related_neighbor->neighbor_infos.dDistanceWRTNode;
+		}
+		else
+		{
+
+
+			dRWON = ComputeRouterDegreeWRTOriginNode(node, list_destination_n->destination->rt_entry_infos.rtu_router.interfaceAddr.ipv4, &dDistance);
+			dRWON = SimulateLocalDirectionOfAoA(node, dRWON);
+		}
+
+		rt_entry * prte = NULL; 
+		
+		// Peter Comment: adjust uiHopCountDiff to 2 is quite important for disjoint path.	
+
+		if (bAdvanced)
+		{
+
+			
+
+
+			ret = OlsrAdvancedLookupRoutingTable(node, tmp_addrsp->alias, 
+				list_destination_n->destination->rt_router, 
+				(UInt16)(list_destination_n->destination->rt_metric + 1), dRWON, 
+				_OLSR_TEMP_ROUTES_LIMIT, list_destination_n->destination->rt_dst, TRUE, &prte);
+		}
+		else
+		{
+
+			ret = OlsrAdvancedLookupRoutingTable(node, tmp_addrsp->alias, 
+				list_destination_n->destination->rt_router, 
+				(UInt16)(list_destination_n->destination->rt_metric + 1), dRWON, 
+				_OLSR_TEMP_ROUTES_LIMIT, list_destination_n->destination->rt_dst);
+
+		}
+			
+
+		if (ret != NOT_ALLOWED)
+		{
+
+			// PRINT OUT: Last Hop to Final Destination. The
+			// function convert_address_to_string has to be
+			// seperately
+
+			if (DEBUG)
+			{
+				char addrString[MAX_STRING_LENGTH];
+				IO_ConvertIpAddressToString(
+					&list_destination_n->destination->rt_dst,
+					addrString);
+
+				printf("%s -> ", addrString);
+
+				IO_ConvertIpAddressToString(
+					&addrReached,
+					addrString);
+
+				printf("%s\n", addrString);
+			}
+
+
+			if (bAdvanced)
+			{
+				
+				if (prte != NULL)
+				{
+					//update
+					destination_n* destination_n_1 = NULL;
+
+					// changed by SRD for multiple iface problem
+					rt_entry* tmp = prte;
+						
+
+					// Peter Comment: For new entry with cost larger than exist one,
+					// add to routing table, but not to work set
+					/*
+					if (ret == ALLOWED_BUT_NOT_TO_WORKING_SET)
+					{
+						tmp = NULL;
+					}
+					*/
+
+					// insert in routing table using topology
+					if (tmp != NULL)
+					{
+
+						destination_n_1 = (destination_n *)
+							MEM_malloc(sizeof(destination_n));
+
+						memset(destination_n_1, 0, sizeof(destination_n));
+
+						destination_n_1->destination = tmp;
+					}
+					
+
+					if (destination_n_1!= NULL)
+					{
+						//Peter comment: add the new added entry to list_destination_n_1
+						destination_n_1->next = *p_list_destination_n_1;
+						*p_list_destination_n_1 = destination_n_1;
+					}
+
+				}
+				else
+				{
+					
+
+					destination_n* destination_n_1 = NULL;
+
+					
+					// changed by SRD for multiple iface problem
+					rt_entry* tmp =
+						OlsrInsertRoutingTablefromTopology(
+						node,
+						list_destination_n->destination,
+						tmp_addrsp->alias,
+						list_destination_n->destination->rt_dst,
+						dRWON, dDistance				
+						);
+
+					// Peter Comment: For new entry with cost larger than exist one,
+					// add to routing table, but not to work set
+					/*
+					if (ret == ALLOWED_BUT_NOT_TO_WORKING_SET)
+					{
+						tmp = NULL;
+					}
+					*/
+
+					// insert in routing table using topology
+					if (tmp != NULL)
+					{
+						destination_n_1 = (destination_n *)
+							MEM_malloc(sizeof(destination_n));
+
+						memset(destination_n_1, 0, sizeof(destination_n));
+
+
+						destination_n_1->destination = tmp;
+					}
+					
+
+					if (destination_n_1!= NULL)
+					{
+						//Peter comment: add the new added entry to list_destination_n_1
+						destination_n_1->next = *p_list_destination_n_1;
+						*p_list_destination_n_1 = destination_n_1;
+					}
+
+				}
+
+			}
+			else
+			{
+				destination_n* destination_n_1 = NULL;
+
+				// changed by SRD for multiple iface problem
+				rt_entry* tmp =
+					OlsrInsertRoutingTablefromTopology(
+					node,
+					list_destination_n->destination,
+					tmp_addrsp->alias,
+					list_destination_n->destination->rt_dst,
+					dRWON, dDistance				
+					);
+
+				// Peter Comment: For new entry with cost larger than exist one,
+				// add to routing table, but not to work set
+				/*
+				if (ret == ALLOWED_BUT_NOT_TO_WORKING_SET)
+				{
+					tmp = NULL;
+				}
+				*/
+
+				// insert in routing table using topology
+				if (tmp != NULL)
+				{
+
+					destination_n_1 = (destination_n *)
+						MEM_malloc(sizeof(destination_n));
+
+					memset(destination_n_1, 0, sizeof(destination_n));
+
+					destination_n_1->destination = tmp;
+				}
+				
+				if (destination_n_1 != NULL)
+				{
+					//Peter comment: add the new added entry to list_destination_n_1
+					destination_n_1->next = *p_list_destination_n_1;
+					*p_list_destination_n_1 = destination_n_1;
+				}
+			}
+
+			
+		}
+		tmp_addrsp = tmp_addrsp->next_alias;
+	}
+}
+
+
+static
+void OlsrCalculateRoutingTableForMultiPathAdv(Node *node)
+{
+
+	// Peter Add for Specifically support _OLSR_MULTIPATH, use 
+	// both lastTable and DestTable to search
+
+	//GenerateCombinedTopologyTable(node);
+	//g_iTopologyChgApplyARC++;
+	
+	tc_trace_item tti;
+
+
+	if (_TEST_TIME_COMPLEXITY)
+	{
+		if (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END)
+		{
+
+			/*
+			sprintf(strTxt, "%s\n", strTxt);
+
+			sprintf(strTxt, "%sOlsrCalculateRoutingTableForMultiPathAdv Start ************************************************* \n", strTxt); 
+			*/
+
+			memset(&tti, 0, sizeof(tc_trace_item));
+			tti.bIsAdvOrNot = true;
+		}
+	}
+
+	//For execution time compute
+
+	double dSimTimeStart = 0.0;
+	double dRealTimeStart = 0.0;
+
+	double dSimTimeEnd = 0.0;
+	double dRealTimeEnd = 0.0;
+
+	double dRealTimeAfter2HopNeighbor = 0.0;
+
+
+
+	char timeStr[MAX_STRING_LENGTH];
+	TIME_PrintClockInSecond(getSimTime(node), timeStr, node);
+
+	BOOL bTimeConsumptionValidate = FALSE;
+
+	int iSimTime = atoi(timeStr);
+
+	
+	
+	//if (_TEST_TIME_COMPLEXITY && (node->nodeId == NODE_ID_FOR_TEST_OUTER_ANGLE || node->nodeId == NODE_ID_FOR_TEST_OUTER_EDGE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_ANGLE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_EDGE || node->nodeId == NODE_ID_FOR_TEST_CENTER) && iSimTime > VALID_SIMULATE_CHECK_TIME)
+	if (_TEST_TIME_COMPLEXITY && (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END) && iSimTime > VALID_SIMULATE_CHECK_TIME)
+	{
+
+
+		bTimeConsumptionValidate = TRUE;
+
+		char timeStr[MAX_STRING_LENGTH];
+
+		TIME_PrintClockInSecond(getSimTime(node), timeStr, node);
+
+		char timeStr2[MAX_STRING_LENGTH];
+
+		TIME_PrintClockInSecond(EXTERNAL_QueryRealTime(), timeStr2, node);
+
+		dSimTimeStart = atof(timeStr);
+		dRealTimeStart = atof(timeStr2);
+		//int iSimTime = atoi(timeStr);
+
+		//sprintf(strTxt, "%sOlsrCalculateRoutingTableForMultiPathAdv Start for node %d at time %f and %f: \n", strTxt, node->nodeId, dSimTimeStart, dRealTimeStart);
+		tti.dCurrentSimTime = dSimTimeStart;
+
+		//DebugBreak();
+	}
+
+
+	destination_n* list_destination_n = NULL;
+	destination_n* list_destination_n_1 = NULL;
+	
+
+	RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+
+	// RFC 3626 Section 10
+	// Move routing table
+	
+	//ACCUMULATIVE_ROUTE_CALC == 1, modify the routing table directly,
+	//so backup is not allowed which may cause current routing table become empty
+	//OlsrRoutingMirror(node);
+
+	if (DEBUG)
+	{
+		printf(" Node %d : Printing Routing Table\n", node->nodeId);
+
+		OlsrPrintRoutingTable(olsr->routingtable);
+
+		printf(" Node %d : Printing Mirror Routing Table\n", node->nodeId);
+
+		OlsrPrintRoutingTable(olsr->mirror_table);
+	}
+
+	// Step 1 Delete old entries from the table
+	// empty previous routing table before creating a new one
+
+	if (DEBUG)
+	{
+		printf("Empty IP forwarding table\n");
+	}
+
+
+	if (_TEST_TIME_COMPLEXITY)
+	{		
+	}
+	else
+	{
+		
+		//ACCUMULATIVE_ROUTE_CALC == 1
+		//NetworkEmptyForwardingTable(node, ROUTING_PROTOCOL_OLSR_INRIA);
+	}
+
+
+	// Step 2 Add One hop neighbors
+	if (DEBUG)
+	{
+		printf("Fill table with neighbors\n");
+	}
+
+
+	//ACCUMULATIVE_ROUTE_CALC == 1
+	//OlsrFillRoutingTableWithNeighbors(node);
+
+	if (olsr->dSectorDegree == 0.0)
+	{
+		//Maybe determined by neighbor density and upbound of the RouteCountThreshold
+		//olsr->dSectorDegree = 1.0;
+		olsr->dSectorDegree = (double)((double)M_PI) / ((double)(DEGREE_SECTOR_PER_PI));
+	}
+
+
+	if (DEBUG)
+	{
+		printf("Fill table with two hop neighbors\n");
+	}
+
+
+	RoutingOlsr* olsrTmp = NULL;
+
+
+	UInt32 uiLookupCntFor2Hop;
+	UInt32 uiLookupCntForAddList;
+
+	if (_TEST_TIME_COMPLEXITY)
+	{
+		uiLookupCntFor2Hop = 0;
+		uiLookupCntForAddList = 0;
+	}
+
+
+	// Step 3 Add two hop neighbors
+
+	//ACCUMULATIVE_ROUTE_CALC == 1
+	/*
+	//if (_TEST_TIME_COMPLEXITY && (node->nodeId == NODE_ID_FOR_TEST_OUTER_ANGLE || node->nodeId == NODE_ID_FOR_TEST_OUTER_EDGE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_ANGLE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_EDGE || node->nodeId == NODE_ID_FOR_TEST_CENTER))
+	if (_TEST_TIME_COMPLEXITY && (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END))
+	{
+		
+		list_destination_n_1 = OlsrFillRoutingTableWith2HopNeighbors(node, &uiLookupCntFor2Hop);
+	}
+	else
+	{
+
+		list_destination_n_1 = OlsrFillRoutingTableWith2HopNeighbors(node);
+	}
+	*/
+
+
+	if (g_iAccumulativeRouteCalculation == 1)
+	{
+
+
+		list_destination_n_1 = ProcessRoutingTableAccordingToConfidentCost(node, olsr->uiConfidentCost);
+	}
+	else	//g_iAccumulativeRouteCalculation == 2
+	{
+
+		if (olsr->recent_add_list != NULL)
+		{
+
+
+			if (_TEST_TIME_COMPLEXITY && (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END))
+			{
+				//uiLookupCntForAddList = 0;
+
+				list_destination_n_1  = ProcessRoutingTableAccordingToRecentAddListMP(node, &uiLookupCntForAddList);
+			}
+			else
+			{
+				list_destination_n_1  = ProcessRoutingTableAccordingToRecentAddListMP(node);
+			}
+
+
+		}
+	}
+	
+
+	//?????????????????
+	// for multipath adv, since do not need to consider fill neigbor and 2hop neighbos, this part can be commented
+ 	/*
+	if (_TEST_TIME_COMPLEXITY && (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END) && bTimeConsumptionValidate)
+	{
+
+		//char timeStr[MAX_STRING_LENGTH];
+
+		//TIME_PrintClockInSecond(getSimTime(node), timeStr, node);
+
+		char timeStr2[MAX_STRING_LENGTH];
+
+		TIME_PrintClockInSecond(EXTERNAL_QueryRealTime(), timeStr2, node);
+
+		//dSimTimeEnd = atof(timeStr);
+		dRealTimeAfter2HopNeighbor = atof(timeStr2);
+
+
+		sprintf(strTxt, "%sOlsrCalculateRoutingTableForMultiPath after 2Hop Neighbor for node %d: at real time %f: \n", strTxt, node->nodeId, dRealTimeAfter2HopNeighbor);
+
+	}
+	*/
+	
+
+	
+	UInt32 uiLookupCnt;
+
+
+	UInt32 uiLookpCntForDelete = 0;
+
+	if (_TEST_TIME_COMPLEXITY)
+	{
+		uiLookupCnt = 0;
+	}
+
+	
+	// Peter Added for support _OLSR_MULTIPATH
+	//UInt16 ui_metric_cost_limitation = 3;
+
+	//if (ACCUMULATIVE_ROUTE_CALC == 1)
+	{
+		//ui_metric_cost_limitation = olsr->uiConfidentCost + 1;
+	}
+
+	// Step 3 Add the remaining destinations looking up the topology table
+	list_destination_n = list_destination_n_1;
+
+	while (list_destination_n_1 != NULL)
+	{
+		list_destination_n_1 = NULL;
+
+		//Peter comment: every loop add group of destination nodes that one hop more from the source node,
+		//compare to the group in the previous loop  
+		while (list_destination_n != NULL)
+		{
+			destination_n* destination_n_1 = NULL;
+
+			if (DEBUG)
+			{
+				char addrString[MAX_STRING_LENGTH];
+
+				IO_ConvertIpAddressToString(
+					&list_destination_n->destination->rt_dst,
+					addrString);
+
+				printf("Node %d, Last hop %s\n",
+					node->nodeId,
+					addrString);
+			}
+
+
+
+			/*
+			topology_destination_entry* topo_dest_ForCombinedTable;
+			last_list *list_of_last_ForCombinedTable;
+
+
+			if (NULL != (topo_dest_ForCombinedTable = OlsrLookupCombinedTopologyTable(
+				node, list_destination_n->destination->rt_dst)))
+			{
+
+				list_of_last_ForCombinedTable = topo_dest_ForCombinedTable->topology_destination_list_of_last;
+
+				while (list_of_last_ForCombinedTable != NULL)
+				{
+
+					//Address addrReached;
+					//SetIPv4AddressInfo(&addrReached, list_of_last_ForDestTable->last_neighbor->topologylast_hash);
+					
+					if (RoutingOlsrCheckMyIfaceAddress(
+						node,
+						list_of_last_ForCombinedTable->last_neighbor->topology_last) != -1)
+					{
+						list_of_last_ForCombinedTable = list_of_last_ForCombinedTable->next;
+						continue;
+					}
+
+					OlsrCalculateRoutingTableForMultiPathTopologySearchHelpFunc(node, list_of_last_ForCombinedTable->last_neighbor->topology_last, list_destination_n, &list_destination_n_1);
+
+					list_of_last_ForCombinedTable = list_of_last_ForCombinedTable->next;
+				}
+			}
+			*/
+			
+			
+			if (SYMMETRIC_TOPOLOGY_TABLE)
+			{
+			
+				//Peter comment: Original last topology table as well 
+				topology_last_entry* topo_last;
+				destination_list* topo_dest;
+
+				if (NULL != (topo_last = OlsrLookupLastTopologyTableSYM(
+					node, list_destination_n->destination->rt_dst)))
+				{
+					topo_dest = topo_last->topology_list_of_destinations;
+				
+
+					while (topo_dest != NULL)
+					{
+						
+						Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+						if (RoutingOlsrCheckMyIfaceAddress(
+							node,
+							addrReached) != -1)
+						{
+							topo_dest = topo_dest->next;
+							continue;
+						}
+
+						OlsrCalculateRoutingTableForMultiPathTopologySearchHelpFunc(node, addrReached, list_destination_n, &list_destination_n_1, TRUE);
+					
+
+						//Peter Added for test time complexity
+						if (_TEST_TIME_COMPLEXITY)
+						{
+
+							//if (node->nodeId == NODE_ID_FOR_TEST_OUTER_ANGLE || node->nodeId == NODE_ID_FOR_TEST_OUTER_EDGE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_ANGLE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_EDGE || node->nodeId == NODE_ID_FOR_TEST_CENTER)
+							if (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END)
+							{
+								uiLookupCnt++;
+							}
+						}
+
+
+						topo_dest = topo_dest->next;
+					}
+				}
+			}
+			else
+			{
+				//Peter comment: find from the topology table if there is some entry 
+				//whose last hop equal the specific dest hop of 2 or more (* since every loop will
+				// increase the one more hop count) hop neighbors
+				
+				//Peter comment: add to use dest topology table as well 
+				topology_destination_entry* topo_dest_ForDestTable;
+				last_list *list_of_last_ForDestTable;
+
+				
+				if (NULL != (topo_dest_ForDestTable = OlsrLookupDestTopologyTable(
+					node, list_destination_n->destination->rt_dst)))
+				{
+					
+					list_of_last_ForDestTable = topo_dest_ForDestTable->topology_destination_list_of_last;
+
+					while (list_of_last_ForDestTable != NULL)
+					{
+						
+						Address addrReached;
+						SetIPv4AddressInfo(&addrReached, list_of_last_ForDestTable->last_neighbor->topologylast_hash);
+
+						if (RoutingOlsrCheckMyIfaceAddress(
+							node,
+							addrReached) != -1)
+						{
+							list_of_last_ForDestTable = list_of_last_ForDestTable->next;
+							continue;
+						}
+
+						OlsrCalculateRoutingTableForMultiPathTopologySearchHelpFunc(node, addrReached, list_destination_n, &list_destination_n_1);
+						
+
+						//Peter Added for test time complexity
+						if (_TEST_TIME_COMPLEXITY)
+						{
+
+							//if (node->nodeId == NODE_ID_FOR_TEST_OUTER_ANGLE || node->nodeId == NODE_ID_FOR_TEST_OUTER_EDGE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_ANGLE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_EDGE || node->nodeId == NODE_ID_FOR_TEST_CENTER)
+							if (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END)
+							{
+								uiLookupCnt++;
+
+							}
+						}
+
+						list_of_last_ForDestTable = list_of_last_ForDestTable->next;
+					}
+				}
+				
+				//Peter comment: Original last topology table as well 
+				topology_last_entry* topo_last;
+				destination_list* topo_dest;
+
+				if (NULL != (topo_last = OlsrLookupLastTopologyTable(
+					node, list_destination_n->destination->rt_dst)))
+				{
+					topo_dest = topo_last->topology_list_of_destinations;
+				
+
+					while (topo_dest != NULL)
+					{
+
+						
+						Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+						if (RoutingOlsrCheckMyIfaceAddress(
+							node,
+							addrReached) != -1)
+						{
+							topo_dest = topo_dest->next;
+							continue;
+						}
+
+						OlsrCalculateRoutingTableForMultiPathTopologySearchHelpFunc(node, addrReached, list_destination_n, &list_destination_n_1);
+					
+
+						//Peter Added for test time complexity
+						if (_TEST_TIME_COMPLEXITY)
+						{
+
+							if (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END)
+							{
+								uiLookupCnt++;
+							}
+						}
+
+
+						topo_dest = topo_dest->next;
+					}
+				}
+			}
+
+
+			destination_n_1 = list_destination_n;
+			list_destination_n = list_destination_n->next;
+			MEM_free(destination_n_1);
+		}
+
+		list_destination_n = list_destination_n_1;
+		//ui_metric_cost_limitation++;
+	}
+
+	if (DEBUG)
+	{
+		printf(" Node %d : Printing Routing Table\n", node->nodeId);
+		OlsrPrintRoutingTable(olsr->routingtable);
+
+		printf(" Node %d : Printing Mirror Routing Table\n", node->nodeId);
+		OlsrPrintRoutingTable(olsr->mirror_table);
+	}
+
+
+
+	//for delete list
+
+
+	if (g_iAccumulativeRouteCalculation == 1)
+	{
+
+	}
+	else	//g_iAccumulativeRouteCalculation == 2
+	{
+		if (olsr->recent_delete_list != NULL)
+		{
+
+
+
+			topology_last_entry* topo_last;
+			destination_list* topo_dest;
+			//printf("OlsrCalculateRoutingTableAdv stage #2.1 \n");
+
+			BOOL bRequiredRediscovery = FALSE;
+
+			
+			if (FALSE)
+				//if (node->nodeId == 75 && olsr->naRecentChangedAddressByTC == 65)
+				//if (node->nodeId == 75)
+			{
+
+				printf("olsr->naRecentChangedAddressByTC = %d \n",olsr->naRecentChangedAddressByTC);
+
+				OlsrPrintNeighborTable(node);
+
+				printf("\n");
+
+				OlsrPrint2HopNeighborTable(node);
+
+				printf("\n");
+
+				OlsrPrintTopologyTable(node);
+
+				printf("\n");
+
+
+				OlsrPrintDestTopologyTable(node);
+
+
+				printf("\n");
+
+				OlsrPrintTopologyTableSYM(node);
+
+
+				printf("\n");
+				//if (olsr->recent_add_list != NULL)
+				{
+					OlsrPrintRoutingTable(olsr->routingtable);
+				}
+
+				printf("\n");
+
+
+				//DebugBreak();
+			}
+			
+
+
+			list_destination_n_1  = ProcessRoutingTableAccordingToRecentDeleteListMP(node, &bRequiredRediscovery, &uiLookpCntForDelete);
+
+			//printf("OlsrCalculateRoutingTableAdv stage #2.2 \n");
+
+			if (list_destination_n_1 != NULL)
+			{
+
+				//DebugBreak();
+
+				//printf("OlsrCalculateRoutingTableAdv stage #2.2.1 \n");
+
+				
+				//do update WRT to lasthop for this case
+				list_destination_n = list_destination_n_1;
+
+				while (list_destination_n_1 != NULL)
+				{
+					list_destination_n_1 = NULL;
+
+					destination_n* tmp_destination_tail = NULL;
+
+					//Peter comment: every loop add group of destination nodes that one hop more from the source node,
+					//compare to the group in the previous loop  
+					while (list_destination_n != NULL)
+					{
+						destination_n* destination_n_1 = NULL;
+
+						if (DEBUG)
+						{
+							char addrString[MAX_STRING_LENGTH];
+
+							IO_ConvertIpAddressToString(
+								&list_destination_n->destination->rt_dst,
+								addrString);
+
+							printf("Node %d, Last hop %s\n",
+								node->nodeId,
+								addrString);
+						}
+
+
+						//Peter comment: find from the topology table if there is some entry 
+						//whose last hop equal the specific dest hop of 2 or more (* since every loop will
+						// increase the one more hop count) hop neighbors
+						if (SYMMETRIC_TOPOLOGY_TABLE)
+						{
+							topo_last = OlsrLookupLastTopologyTableSYM(node, list_destination_n->destination->rt_dst);
+						}
+						else
+						{
+							topo_last = OlsrLookupLastTopologyTable(node, list_destination_n->destination->rt_dst);
+						}
+
+
+						if (NULL != topo_last)
+						{
+							topo_dest = topo_last->topology_list_of_destinations;
+
+							while (topo_dest != NULL)
+							{
+
+								Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+								if (RoutingOlsrCheckMyIfaceAddress(
+									node,
+									topo_dest->destination_node->topology_destination_dst) != -1)
+								{
+									topo_dest = topo_dest->next;
+									continue;
+								}
+
+
+								UInt32 uiInnerExchangeLUCnt = 0;
+								//BOOL bRediscovery = FALSE;
+								OlsrCalculateRoutingTableForSinglePathTopologySearchHelpFunc(node, addrReached, list_destination_n, &list_destination_n_1, &tmp_destination_tail, TRUE, TRUE, TRUE, &uiInnerExchangeLUCnt, TRUE, &bRequiredRediscovery);
+
+
+								//Peter Added for test time complexity
+								if (_TEST_TIME_COMPLEXITY)
+								{
+									uiLookupCnt += uiInnerExchangeLUCnt;
+
+									//if (node->nodeId == NODE_ID_FOR_TEST_OUTER_ANGLE || node->nodeId == NODE_ID_FOR_TEST_OUTER_EDGE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_ANGLE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_EDGE || node->nodeId == NODE_ID_FOR_TEST_CENTER)
+									if (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END)
+									{
+										uiLookupCnt++;
+
+									}
+								}
+
+								if (bRequiredRediscovery)
+								{
+									while (list_destination_n != NULL) 
+									{
+
+										destination_n* destination_n_1_tmp = list_destination_n;
+										list_destination_n = list_destination_n->next;
+										MEM_free(destination_n_1_tmp);
+									}
+
+									break;
+								}
+
+								topo_dest = topo_dest->next;
+							}
+
+							if (bRequiredRediscovery)
+							{
+								break;
+							}
+						}
+
+						destination_n_1 = list_destination_n;
+						list_destination_n = list_destination_n->next;
+						MEM_free(destination_n_1);
+					}
+
+					
+
+					list_destination_n = list_destination_n_1;
+					//ui_metric_cost_limitation++;
+
+					//bFirstRound = FALSE;
+
+					if (bRequiredRediscovery)
+					{
+
+						//DebugBreak();
+
+						while (list_destination_n != NULL) 
+						{
+
+							//DebugBreak();
+
+							destination_n* destination_n_1_tmpp = list_destination_n;
+							list_destination_n = list_destination_n->next;
+							MEM_free(destination_n_1_tmpp);
+						}
+
+						list_destination_n = NULL;
+
+						break;
+
+					}
+				}
+
+
+				if (bRequiredRediscovery)
+				{
+					/*
+
+					DebugBreak();
+					while (list_destination_n != NULL) 
+					{
+
+						destination_n* destination_n_1 = list_destination_n;
+						list_destination_n = list_destination_n->next;
+						MEM_free(destination_n_1);
+					}
+
+					list_destination_n = NULL;
+
+					*/
+					//printf("OlsrCalculateRoutingTableAdv stage #2.2.1.1 \n");
+
+					OlsrCalculateRoutingTableForMultiPath(node, TRUE, &uiLookpCntForDelete);
+
+				}
+				else
+				{
+					//printf("OlsrCalculateRoutingTableAdv stage #2.2.1.2 \n");
+				}
+
+				//printf("OlsrCalculateRoutingTableAdv stage #2.2.2 \n");
+			}
+			else
+			{
+
+				//printf("OlsrCalculateRoutingTableAdv stage #2.2.3 \n");
+
+				if (bRequiredRediscovery)
+				{
+
+					//printf("OlsrCalculateRoutingTableAdv stage #2.2.3.1 \n");
+
+					OlsrCalculateRoutingTableForMultiPath(node, TRUE, &uiLookpCntForDelete);
+
+					//BOOL bDisableTimeEstimate = FALSE, UInt32 * uiTotalLookupCnt = NULL
+					
+					
+					//OlsrCalculateRoutingTable
+				}
+				else
+				{
+					//do nothing here, since it is possible that there is no other node nearby the deleted node,
+					//or every neighbor can find perfect nodes for replace.
+
+					//printf("OlsrCalculateRoutingTableAdv stage #2.2.3.2 \n");
+				}
+
+				//already have done by OlsrCalculateRoutingTable version
+				//printf("OlsrCalculateRoutingTableAdv stage #2.2.4 \n");
+			}
+
+
+			//printf("OlsrCalculateRoutingTableAdv stage #2.4 \n");
+		}
+	}
+	
+
+
+
+	OlsrInsertRoutingTableFromHnaTable(node);
+
+	OlsrReleaseRoutingTable(olsr->mirror_table);
+
+
+	
+	//if (_TEST_TIME_COMPLEXITY && (node->nodeId == NODE_ID_FOR_TEST_OUTER_ANGLE || node->nodeId == NODE_ID_FOR_TEST_OUTER_EDGE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_ANGLE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_EDGE || node->nodeId == NODE_ID_FOR_TEST_CENTER) && bTimeConsumptionValidate)
+	if (_TEST_TIME_COMPLEXITY && (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END) && bTimeConsumptionValidate)
+	{
+
+		char timeStr[MAX_STRING_LENGTH];
+
+		TIME_PrintClockInSecond(getSimTime(node), timeStr, node);
+
+		char timeStr2[MAX_STRING_LENGTH];
+
+		TIME_PrintClockInSecond(EXTERNAL_QueryRealTime(), timeStr2, node);
+
+		dSimTimeEnd = atof(timeStr);
+		dRealTimeEnd = atof(timeStr2);
+		//int iSimTime = atoi(timeStr);
+
+		/*
+		sprintf(strTxt, "%sOlsrCalculateRoutingTableForMultiPathAdv End for node %d at time %f and %f: \n", strTxt, node->nodeId, dSimTimeEnd, dRealTimeEnd);
+
+
+		sprintf(strTxt, "%sOlsrCalculateRoutingTableForMultiPathAdv Time consumption for node %d: real_time = %f \n", strTxt, node->nodeId, 
+			(double)((dRealTimeEnd - dRealTimeStart) / (double) 2.0));
+		*/
+
+		if (SYMMETRIC_TOPOLOGY_TABLE)
+		{
+			tti.dRealTimeDuration = dRealTimeEnd - dRealTimeStart;
+		}
+		else
+		{
+			tti.dRealTimeDuration = (double)((dRealTimeEnd - dRealTimeStart) / (double) 2.0);
+		}
+		
+
+	}
+
+
+	if (_TEST_TIME_COMPLEXITY)
+	{
+
+		//if (node->nodeId == NODE_ID_FOR_TEST_OUTER_ANGLE || node->nodeId == NODE_ID_FOR_TEST_OUTER_EDGE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_ANGLE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_EDGE || node->nodeId == NODE_ID_FOR_TEST_CENTER)
+		if (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END)
+		{
+			/*
+			sprintf(strTxt, "%sOlsrCalculateRoutingTableForMultiPathAdv End : uiLookupCnt = %d, uiLookupCntFor2Hop = %d ******************************* \n", strTxt, uiLookupCnt, uiLookupCntFor2Hop); 
+			sprintf(strTxt, "%sOlsrCalculateRoutingTableForMultiPathAdv Combiled Count for node %d: CombiledCnt = %d ******************************* \n\n", strTxt, node->nodeId, (uiLookupCnt / 2) + uiLookupCntFor2Hop); 
+			*/
+
+			//uiLookupCntFor2Hop == 0
+
+			
+			if (SYMMETRIC_TOPOLOGY_TABLE)
+			{
+				//tti.iCombinedCnt = uiLookupCnt + uiLookupCntFor2Hop;
+
+				tti.iCombinedCnt = uiLookupCnt + uiLookupCntFor2Hop;
+
+				if (g_iAccumulativeRouteCalculation == 1)
+				{
+				}
+				else
+				{
+
+					tti.iCombinedCnt += uiLookpCntForDelete;
+					
+					tti.iCombinedCnt += uiLookupCntForAddList;
+
+					/*
+					if (uiLookupCntForAddList != 0)
+					{
+						DebugBreak();
+					}
+					*/
+				}
+			}
+			else
+			{
+				tti.iCombinedCnt = (uiLookupCnt / 2) + uiLookupCntFor2Hop;
+			}
+			
+
+
+			
+
+			PUSH_BACK_CURRENT_ITEM(olsr, tti);
+		}
+
+	}
+}
+
+
+static
+void OlsrCalculateRoutingTableForMultiPath(Node *node, BOOL bDisableTimeEstimate, UInt32 * uiTotalLookupCnt)
+{
+
+	// Peter Add for Specifically support _OLSR_MULTIPATH, use 
+	// both lastTable and DestTable to search
+
+	//GenerateCombinedTopologyTable(node);
+
+	/*
+	char strTxt[2048];
+	memset(strTxt, 0, 2048 * sizeof(char));
+	*/
+
+	tc_trace_item tti;
+
+	if (!bDisableTimeEstimate && _TEST_TIME_COMPLEXITY)
+	{
+		if (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END)
+		//if (node->nodeId == NODE_ID_FOR_TEST_OUTER_ANGLE || node->nodeId == NODE_ID_FOR_TEST_OUTER_EDGE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_ANGLE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_EDGE || node->nodeId == NODE_ID_FOR_TEST_CENTER)
+		{
+
+			/*
+			sprintf(strTxt, "%s\n", strTxt);
+
+			sprintf(strTxt, "%sOlsrCalculateRoutingTableForMultiPath Start ************************************************* \n", strTxt); 
+			*/
+			memset(&tti, 0, sizeof(tc_trace_item));
+			tti.bIsAdvOrNot = false;
+		}
+	}
+
+	//For execution time compute
+
+	double dSimTimeStart = 0.0;
+	double dRealTimeStart = 0.0;
+
+	double dSimTimeEnd = 0.0;
+	double dRealTimeEnd = 0.0;
+
+	double dRealTimeAfter2HopNeighbor = 0.0;
+
+
+
+	char timeStr[MAX_STRING_LENGTH];
+	TIME_PrintClockInSecond(getSimTime(node), timeStr, node);
+
+	BOOL bTimeConsumptionValidate = FALSE;
+
+	int iSimTime = atoi(timeStr);
+
+	
+	
+	//if (_TEST_TIME_COMPLEXITY && (node->nodeId == NODE_ID_FOR_TEST_OUTER_ANGLE || node->nodeId == NODE_ID_FOR_TEST_OUTER_EDGE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_ANGLE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_EDGE || node->nodeId == NODE_ID_FOR_TEST_CENTER) && iSimTime > VALID_SIMULATE_CHECK_TIME)
+	if (!bDisableTimeEstimate && _TEST_TIME_COMPLEXITY && (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END) && iSimTime > VALID_SIMULATE_CHECK_TIME)
+	{
+
+
+		bTimeConsumptionValidate = TRUE;
+
+		char timeStr[MAX_STRING_LENGTH];
+
+		TIME_PrintClockInSecond(getSimTime(node), timeStr, node);
+
+		char timeStr2[MAX_STRING_LENGTH];
+
+		TIME_PrintClockInSecond(EXTERNAL_QueryRealTime(), timeStr2, node);
+
+		dSimTimeStart = atof(timeStr);
+		dRealTimeStart = atof(timeStr2);
+		//int iSimTime = atoi(timeStr);
+
+		//sprintf(strTxt, "%sOlsrCalculateRoutingTableForMultiPath Start for node %d at time %f and %f: \n", strTxt, node->nodeId, dSimTimeStart, dRealTimeStart);
+
+		tti.dCurrentSimTime = dSimTimeStart;
+
+		//DebugBreak();
+	}
+
+
+	destination_n* list_destination_n = NULL;
+	destination_n* list_destination_n_1 = NULL;
+	
+
+	RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+
+	// RFC 3626 Section 10
+	// Move routing table
+	OlsrRoutingMirror(node);
+
+	if (DEBUG)
+	{
+		printf(" Node %d : Printing Routing Table\n", node->nodeId);
+
+		OlsrPrintRoutingTable(olsr->routingtable);
+
+		printf(" Node %d : Printing Mirror Routing Table\n", node->nodeId);
+
+		OlsrPrintRoutingTable(olsr->mirror_table);
+	}
+
+	// Step 1 Delete old entries from the table
+	// empty previous routing table before creating a new one
+
+	if (DEBUG)
+	{
+		printf("Empty IP forwarding table\n");
+	}
+
+
+	if (_TEST_TIME_COMPLEXITY)
+	{		
+	}
+	else
+	{
+
+		NetworkEmptyForwardingTable(node, ROUTING_PROTOCOL_OLSR_INRIA);
+	}
+
+
+	// Step 2 Add One hop neighbors
+	if (DEBUG)
+	{
+		printf("Fill table with neighbors\n");
+	}
+
+
+
+	OlsrFillRoutingTableWithNeighbors(node);
+
+	if (olsr->dSectorDegree == 0.0)
+	{
+		//Maybe determined by neighbor density and upbound of the RouteCountThreshold
+		//olsr->dSectorDegree = 1.0;
+		olsr->dSectorDegree = (double)((double)M_PI) / ((double)(DEGREE_SECTOR_PER_PI));
+	}
+
+
+	if (DEBUG)
+	{
+		printf("Fill table with two hop neighbors\n");
+	}
+
+
+	RoutingOlsr* olsrTmp = NULL;
+
+
+	UInt32 uiLookupCntFor2Hop;
+
+	if (_TEST_TIME_COMPLEXITY)
+	{
+		uiLookupCntFor2Hop = 0;
+	}
+
+
+	// Step 3 Add two hop neighbors
+
+	
+	//if (_TEST_TIME_COMPLEXITY && (node->nodeId == NODE_ID_FOR_TEST_OUTER_ANGLE || node->nodeId == NODE_ID_FOR_TEST_OUTER_EDGE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_ANGLE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_EDGE || node->nodeId == NODE_ID_FOR_TEST_CENTER))
+	if (_TEST_TIME_COMPLEXITY && (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END))
+	{
+		
+		list_destination_n_1 = OlsrFillRoutingTableWith2HopNeighbors(node, &uiLookupCntFor2Hop);
+	}
+	else
+	{
+
+		list_destination_n_1 = OlsrFillRoutingTableWith2HopNeighbors(node);
+	}
+	
+
+	
+	//if (_TEST_TIME_COMPLEXITY && (node->nodeId == NODE_ID_FOR_TEST_OUTER_ANGLE || node->nodeId == NODE_ID_FOR_TEST_OUTER_EDGE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_ANGLE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_EDGE || node->nodeId == NODE_ID_FOR_TEST_CENTER) && bTimeConsumptionValidate)
+	if (!bDisableTimeEstimate && _TEST_TIME_COMPLEXITY && (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END) && bTimeConsumptionValidate)
+	{
+
+		//char timeStr[MAX_STRING_LENGTH];
+
+		//TIME_PrintClockInSecond(getSimTime(node), timeStr, node);
+
+		char timeStr2[MAX_STRING_LENGTH];
+
+		TIME_PrintClockInSecond(EXTERNAL_QueryRealTime(), timeStr2, node);
+
+		//dSimTimeEnd = atof(timeStr);
+		dRealTimeAfter2HopNeighbor = atof(timeStr2);
+
+
+		//sprintf(strTxt, "%sOlsrCalculateRoutingTableForMultiPath after 2Hop Neighbor for node %d: at real time %f: \n", strTxt, node->nodeId, dRealTimeAfter2HopNeighbor);
+
+	}
+	
+
+
+	
+	UInt32 uiLookupCnt;
+
+	if (_TEST_TIME_COMPLEXITY)
+	{
+		uiLookupCnt = 0;
+	}
+
+
+	
+	// Peter Added for support _OLSR_MULTIPATH
+	//UInt16 ui_metric_cost_limitation = 3;
+
+	// Step 3 Add the remaining destinations looking up the topology table
+	list_destination_n = list_destination_n_1;
+
+	while (list_destination_n_1 != NULL)
+	{
+		list_destination_n_1 = NULL;
+
+		//Peter comment: every loop add group of destination nodes that one hop more from the source node,
+		//compare to the group in the previous loop  
+		while (list_destination_n != NULL)
+		{
+			destination_n* destination_n_1 = NULL;
+
+			if (DEBUG)
+			{
+				char addrString[MAX_STRING_LENGTH];
+
+				IO_ConvertIpAddressToString(
+					&list_destination_n->destination->rt_dst,
+					addrString);
+
+				printf("Node %d, Last hop %s\n",
+					node->nodeId,
+					addrString);
+			}
+
+
+
+			/*
+			topology_destination_entry* topo_dest_ForCombinedTable;
+			last_list *list_of_last_ForCombinedTable;
+
+
+			if (NULL != (topo_dest_ForCombinedTable = OlsrLookupCombinedTopologyTable(
+				node, list_destination_n->destination->rt_dst)))
+			{
+
+				list_of_last_ForCombinedTable = topo_dest_ForCombinedTable->topology_destination_list_of_last;
+
+				while (list_of_last_ForCombinedTable != NULL)
+				{
+
+					//Address addrReached;
+					//SetIPv4AddressInfo(&addrReached, list_of_last_ForDestTable->last_neighbor->topologylast_hash);
+					
+					if (RoutingOlsrCheckMyIfaceAddress(
+						node,
+						list_of_last_ForCombinedTable->last_neighbor->topology_last) != -1)
+					{
+						list_of_last_ForCombinedTable = list_of_last_ForCombinedTable->next;
+						continue;
+					}
+
+					OlsrCalculateRoutingTableForMultiPathTopologySearchHelpFunc(node, list_of_last_ForCombinedTable->last_neighbor->topology_last, list_destination_n, &list_destination_n_1);
+
+					list_of_last_ForCombinedTable = list_of_last_ForCombinedTable->next;
+				}
+			}
+			*/
+				
+			if (SYMMETRIC_TOPOLOGY_TABLE)
+			{
+				topology_last_entry* topo_last;
+				destination_list* topo_dest;
+
+				if (NULL != (topo_last = OlsrLookupLastTopologyTableSYM(
+					node, list_destination_n->destination->rt_dst)))
+				{
+					topo_dest = topo_last->topology_list_of_destinations;
+
+
+					while (topo_dest != NULL)
+					{
+
+
+						Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+						if (RoutingOlsrCheckMyIfaceAddress(
+							node,
+							addrReached) != -1)
+						{
+							topo_dest = topo_dest->next;
+							continue;
+						}
+
+						OlsrCalculateRoutingTableForMultiPathTopologySearchHelpFunc(node, addrReached, list_destination_n, &list_destination_n_1);
+
+
+						//Peter Added for test time complexity
+						if (_TEST_TIME_COMPLEXITY)
+						{
+
+							//if (node->nodeId == NODE_ID_FOR_TEST_OUTER_ANGLE || node->nodeId == NODE_ID_FOR_TEST_OUTER_EDGE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_ANGLE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_EDGE || node->nodeId == NODE_ID_FOR_TEST_CENTER)
+							if (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END)
+							{
+								uiLookupCnt++;
+							}
+						}
+
+
+						topo_dest = topo_dest->next;
+					}
+				}
+			}
+			else
+			{
+				//Peter comment: find from the topology table if there is some entry 
+				//whose last hop equal the specific dest hop of 2 or more (* since every loop will
+				// increase the one more hop count) hop neighbors
+
+				//Peter comment: add to use dest topology table as well 
+				topology_destination_entry* topo_dest_ForDestTable;
+				last_list *list_of_last_ForDestTable;
+
+
+				if (NULL != (topo_dest_ForDestTable = OlsrLookupDestTopologyTable(
+					node, list_destination_n->destination->rt_dst)))
+				{
+
+					list_of_last_ForDestTable = topo_dest_ForDestTable->topology_destination_list_of_last;
+
+					while (list_of_last_ForDestTable != NULL)
+					{
+
+						Address addrReached;
+						SetIPv4AddressInfo(&addrReached, list_of_last_ForDestTable->last_neighbor->topologylast_hash);
+
+						if (RoutingOlsrCheckMyIfaceAddress(
+							node,
+							addrReached) != -1)
+						{
+							list_of_last_ForDestTable = list_of_last_ForDestTable->next;
+							continue;
+						}
+
+						OlsrCalculateRoutingTableForMultiPathTopologySearchHelpFunc(node, addrReached, list_destination_n, &list_destination_n_1);
+
+
+						//Peter Added for test time complexity
+						if (_TEST_TIME_COMPLEXITY)
+						{
+
+							//if (node->nodeId == NODE_ID_FOR_TEST_OUTER_ANGLE || node->nodeId == NODE_ID_FOR_TEST_OUTER_EDGE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_ANGLE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_EDGE || node->nodeId == NODE_ID_FOR_TEST_CENTER)
+							if (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END)
+							{
+								uiLookupCnt++;
+
+							}
+						}
+
+						list_of_last_ForDestTable = list_of_last_ForDestTable->next;
+					}
+				}
+
+
+				//SYMMETRIC TOPOLOGY TABLE
+
+				//Peter comment: Original last topology table as well 
+				topology_last_entry* topo_last;
+				destination_list* topo_dest;
+
+				if (NULL != (topo_last = OlsrLookupLastTopologyTable(
+					node, list_destination_n->destination->rt_dst)))
+				{
+					topo_dest = topo_last->topology_list_of_destinations;
+
+
+					while (topo_dest != NULL)
+					{
+
+
+						Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+						if (RoutingOlsrCheckMyIfaceAddress(
+							node,
+							addrReached) != -1)
+						{
+							topo_dest = topo_dest->next;
+							continue;
+						}
+
+						OlsrCalculateRoutingTableForMultiPathTopologySearchHelpFunc(node, addrReached, list_destination_n, &list_destination_n_1);
+
+
+						//Peter Added for test time complexity
+						if (_TEST_TIME_COMPLEXITY)
+						{
+
+							//if (node->nodeId == NODE_ID_FOR_TEST_OUTER_ANGLE || node->nodeId == NODE_ID_FOR_TEST_OUTER_EDGE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_ANGLE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_EDGE || node->nodeId == NODE_ID_FOR_TEST_CENTER)
+							if (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END)
+							{
+								uiLookupCnt++;
+							}
+						}
+
+
+						topo_dest = topo_dest->next;
+					}
+				}
+			}
+			
+
+			destination_n_1 = list_destination_n;
+			list_destination_n = list_destination_n->next;
+			MEM_free(destination_n_1);
+		}
+
+		list_destination_n = list_destination_n_1;
+		//ui_metric_cost_limitation++;
+	}
+
+	if (DEBUG)
+	{
+		printf(" Node %d : Printing Routing Table\n", node->nodeId);
+		OlsrPrintRoutingTable(olsr->routingtable);
+
+		printf(" Node %d : Printing Mirror Routing Table\n", node->nodeId);
+		OlsrPrintRoutingTable(olsr->mirror_table);
+	}
+
+
+	OlsrInsertRoutingTableFromHnaTable(node);
+
+	OlsrReleaseRoutingTable(olsr->mirror_table);
+
+
+	
+	//if (_TEST_TIME_COMPLEXITY && (node->nodeId == NODE_ID_FOR_TEST_OUTER_ANGLE || node->nodeId == NODE_ID_FOR_TEST_OUTER_EDGE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_ANGLE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_EDGE || node->nodeId == NODE_ID_FOR_TEST_CENTER) && bTimeConsumptionValidate)
+	if (!bDisableTimeEstimate && _TEST_TIME_COMPLEXITY && (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END) && bTimeConsumptionValidate)
+	{
+
+		char timeStr[MAX_STRING_LENGTH];
+
+		TIME_PrintClockInSecond(getSimTime(node), timeStr, node);
+
+		char timeStr2[MAX_STRING_LENGTH];
+
+		TIME_PrintClockInSecond(EXTERNAL_QueryRealTime(), timeStr2, node);
+
+		dSimTimeEnd = atof(timeStr);
+		dRealTimeEnd = atof(timeStr2);
+		//int iSimTime = atoi(timeStr);
+
+		/*
+		sprintf(strTxt, "%sOlsrCalculateRoutingTableForMultiPath End for node %d at time %f and %f: \n", strTxt, node->nodeId, dSimTimeEnd, dRealTimeEnd);
+
+
+		sprintf(strTxt, "%sOlsrCalculateRoutingTableForMultiPath Time consumption for node %d: real_time = %f \n", strTxt, node->nodeId, 
+			(double)((dRealTimeEnd - dRealTimeAfter2HopNeighbor) / (double) 2.0) + (dRealTimeAfter2HopNeighbor - dRealTimeStart));
+		*/
+
+		if (SYMMETRIC_TOPOLOGY_TABLE)
+		{
+			tti.dRealTimeDuration = dRealTimeEnd - dRealTimeStart;
+		}
+		else
+		{
+			tti.dRealTimeDuration = (double)((dRealTimeEnd - dRealTimeAfter2HopNeighbor) / (double) 2.0) + (dRealTimeAfter2HopNeighbor - dRealTimeStart);
+		}
+
+	}
+
+	if (bDisableTimeEstimate && uiTotalLookupCnt != NULL)
+	{
+		*uiTotalLookupCnt = uiLookupCnt + uiLookupCntFor2Hop;
+	}
+
+	if (!bDisableTimeEstimate && _TEST_TIME_COMPLEXITY)
+	{
+
+		//if (node->nodeId == NODE_ID_FOR_TEST_OUTER_ANGLE || node->nodeId == NODE_ID_FOR_TEST_OUTER_EDGE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_ANGLE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_EDGE || node->nodeId == NODE_ID_FOR_TEST_CENTER)
+		if (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END)
+		{
+			/*
+			sprintf(strTxt, "%sOlsrCalculateRoutingTableForMultiPath End : uiLookupCnt = %d, uiLookupCntFor2Hop = %d ******************************* \n", strTxt, uiLookupCnt, uiLookupCntFor2Hop); 
+			sprintf(strTxt, "%sOlsrCalculateRoutingTableForMultiPath Combiled Count for node %d: CombiledCnt = %d ******************************* \n\n", strTxt, node->nodeId, (uiLookupCnt / 2) + uiLookupCntFor2Hop); 
+			*/
+
+			if (SYMMETRIC_TOPOLOGY_TABLE)
+			{
+				tti.iCombinedCnt = uiLookupCnt + uiLookupCntFor2Hop;
+			}
+			else
+			{
+				tti.iCombinedCnt = (uiLookupCnt / 2) + uiLookupCntFor2Hop;
+			}
+			
+
+			PUSH_BACK_CURRENT_ITEM(olsr, tti);
+		}
+
+		//sprintf(g_strTxt, "%s \n %s", g_strTxt, strTxt);
+
+	
+
+	}
+
+}
+
+
+static
+void OlsrCalculateRoutingTable(Node *node, BOOL bDisableTimeEstimate = FALSE, UInt32 * uiTotalLookupCnt = NULL)
+{
+
+	
+
+	g_iTopologyChgApplyNormal++;
+
+	//printf("OlsrCalculateRoutingTable for node %d Begin \n", node->nodeId);
+	
+	/*
+	if (node->nodeId == 1)
+	{
+
+		printf("OlsrCalculateRoutingTable for node 1 \n");
+	}
+	*/
+
+	if (g_iTestRCSimAndRealTime == 1)
+	{
+		
+		if (node->nodeId == DEBUG_NODE_ID)
+		{
+			char timeStr3[MAX_STRING_LENGTH];
+
+			TIME_PrintClockInSecond(getSimTime(node), timeStr3, node);
+
+			char timeStr4[MAX_STRING_LENGTH];
+
+			TIME_PrintClockInSecond(EXTERNAL_QueryRealTime(), timeStr4, node);
+
+			double ddSimTimeStart = atof(timeStr3);
+			double ddRealTimeStart = atof(timeStr4);
+
+			//printf("OlsrCalculateRoutingTable start for node No.%d, ddSimTimeStart = %f, ddRealTimeStart = %f \n", 
+			//	node->nodeId, ddSimTimeStart, ddRealTimeStart);
+		}
+	}
+
+
+	//Peter Adder for test time complexity
+	/*
+	char strTxt[2048];
+	memset(strTxt, 0, 2048 * sizeof(char));
+	*/
+	tc_trace_item tti;
+
+
+	if (!bDisableTimeEstimate && _TEST_TIME_COMPLEXITY && g_iSimplifiedTimeTest == 0)
+	{
+		
+		//if (node->nodeId == NODE_ID_FOR_TEST_OUTER_ANGLE || node->nodeId == NODE_ID_FOR_TEST_OUTER_EDGE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_ANGLE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_EDGE || node->nodeId == NODE_ID_FOR_TEST_CENTER)
+		if (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END)
+		{
+			
+			
+		
+			memset(&tti, 0, sizeof(tc_trace_item));
+			tti.bIsAdvOrNot = false;
+			
+		
+			
+			/*
+			sprintf(strTxt, "%s\n", strTxt);
+
+			sprintf(strTxt, "%sOlsrCalculateRoutingTable Start ************************************************* \n", strTxt); 
+			*/
+		}
+	}
+
+	
+	
+	//For execution time compute
+	
+	double dSimTimeStart = 0.0;
+	double dRealTimeStart = 0.0;
+
+	double dSimTimeEnd = 0.0;
+	double dRealTimeEnd = 0.0;
+	
+	
+	
+	char timeStr[MAX_STRING_LENGTH];
+	TIME_PrintClockInSecond(getSimTime(node), timeStr, node);
+
+	BOOL bTimeConsumptionValidate = FALSE;
+
+	int iSimTime = atoi(timeStr);
+
+	dSimTimeStart = atof(timeStr);
+	
+	
+    //if (_TEST_TIME_COMPLEXITY && (node->nodeId == NODE_ID_FOR_TEST_OUTER_ANGLE || node->nodeId == NODE_ID_FOR_TEST_OUTER_EDGE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_ANGLE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_EDGE || node->nodeId == NODE_ID_FOR_TEST_CENTER) && iSimTime > VALID_SIMULATE_CHECK_TIME)
+	if (!bDisableTimeEstimate && _TEST_TIME_COMPLEXITY && (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END) && iSimTime > VALID_SIMULATE_CHECK_TIME)
+	{
+		
+		bTimeConsumptionValidate = TRUE;
+		
+		if (g_iSimplifiedTimeTest == 1)
+		{
+			char timeStr2[MAX_STRING_LENGTH];
+
+			TIME_PrintClockInSecond(EXTERNAL_QueryRealTime(), timeStr2, node);
+
+			
+			dRealTimeStart = atof(timeStr2);
+
+			
+
+		}
+		else
+		{
+			char timeStr[MAX_STRING_LENGTH];
+
+			TIME_PrintClockInSecond(getSimTime(node), timeStr, node);
+
+			char timeStr2[MAX_STRING_LENGTH];
+
+			TIME_PrintClockInSecond(EXTERNAL_QueryRealTime(), timeStr2, node);
+
+			dSimTimeStart = atof(timeStr);
+			dRealTimeStart = atof(timeStr2);
+			//int iSimTime = atoi(timeStr);
+
+			//sprintf(strTxt, "%sOlsrCalculateRoutingTable Start for node %d at time %f and %f: \n", strTxt, node->nodeId, dSimTimeStart, dRealTimeStart);
+
+			tti.dCurrentSimTime = dSimTimeStart;
+		}
+		
+
+				
+    }
+	
+	
+	
+	
+	
+	//printf("!!!!!!!!!!!!!!    start OlsrCalculateRoutingTable \n");
+	
+	destination_n* list_destination_n = NULL;
     destination_n* list_destination_n_1 = NULL;
     topology_last_entry* topo_last;
     destination_list* topo_dest;
@@ -6714,23 +15305,102 @@ void OlsrCalculateRoutingTable(Node *node)
         printf("Empty IP forwarding table\n");
     }
 
-    NetworkEmptyForwardingTable(node, ROUTING_PROTOCOL_OLSR_INRIA);
 
+	
+
+	if (_TEST_TIME_COMPLEXITY || FORWARD_WITH_PURE_ROUTE_TABLE)
+	{
+	}
+	else
+	{
+
+		NetworkEmptyForwardingTable(node, ROUTING_PROTOCOL_OLSR_INRIA);
+	}
+
+    
     // Step 2 Add One hop neighbors
     if (DEBUG)
     {
         printf("Fill table with neighbors\n");
     }
 
+
+
     OlsrFillRoutingTableWithNeighbors(node);
+
 
     if (DEBUG)
     {
         printf("Fill table with two hop neighbors\n");
     }
 
+
+	RoutingOlsr* olsrTmp = NULL;
+
+
+	/*
+	if (node->nodeId == 1)
+	{
+		printf("node 1 After OlsrFillRoutingTableWithNeighbors: \n");
+
+		olsrTmp = (RoutingOlsr* ) node->appData.olsr;
+		OlsrPrintRoutingTable(olsrTmp->routingtable);
+	}
+	*/
+
+
+	UInt32 uiLookupCntFor2Hop;
+
+	if (_TEST_TIME_COMPLEXITY)
+	{
+		uiLookupCntFor2Hop = 0;
+	}
+
     // Step 3 Add two hop neighbors
-    list_destination_n_1 = OlsrFillRoutingTableWith2HopNeighbors(node);
+    
+	
+	//if (_TEST_TIME_COMPLEXITY && (node->nodeId == NODE_ID_FOR_TEST_OUTER_ANGLE || node->nodeId == NODE_ID_FOR_TEST_OUTER_EDGE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_ANGLE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_EDGE || node->nodeId == NODE_ID_FOR_TEST_CENTER))
+	if (_TEST_TIME_COMPLEXITY && g_iSimplifiedTimeTest == 0 && (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END))
+	{
+
+		list_destination_n_1 = OlsrFillRoutingTableWith2HopNeighbors(node, &uiLookupCntFor2Hop);
+	}
+	else
+	{
+
+		list_destination_n_1 = OlsrFillRoutingTableWith2HopNeighbors(node);
+	}
+	
+	
+	
+	
+	/*
+	if (node->nodeId == 1)
+	{
+		printf("node 1 After OlsrFillRoutingTableWith2HopNeighbors: \n");
+
+
+		olsrTmp = (RoutingOlsr* ) node->appData.olsr;
+		OlsrPrintRoutingTable(olsrTmp->routingtable);
+
+		OlsrPrintTopologyTable(node);
+	}
+	*/
+
+
+	//Peter Adder for test time complexity
+	
+	UInt32 uiLookupCnt;
+	
+	if (_TEST_TIME_COMPLEXITY)
+	{
+		uiLookupCnt = 0;
+	}
+
+
+
+	// Peter Added for support _OLSR_MULTIPATH
+	//UInt16 ui_metric_cost_limitation = 3;
 
     // Step 3 Add the remaining destinations looking up the topology table
     list_destination_n = list_destination_n_1;
@@ -6738,8 +15408,12 @@ void OlsrCalculateRoutingTable(Node *node)
     while (list_destination_n_1 != NULL)
     {
         list_destination_n_1 = NULL;
+		destination_n* tmp_destination_tail = NULL;
 
-        while (list_destination_n != NULL)
+
+        //Peter comment: every loop add group of destination nodes that one hop more from the source node,
+		//compare to the group in the previous loop  
+		while (list_destination_n != NULL)
         {
             destination_n* destination_n_1 = NULL;
 
@@ -6755,17 +15429,42 @@ void OlsrCalculateRoutingTable(Node *node)
                     node->nodeId,
                     addrString);
             }
+			
 
-            if (NULL != (topo_last = OlsrLookupLastTopologyTable(
-                node, list_destination_n->destination->rt_dst)))
+			//SYMMETRIC TOPOLOGY TABLE
+
+			//Peter comment: find from the topology table if there is some entry 
+			//whose last hop equal the specific dest hop of 2 or more (* since every loop will
+			// increase the one more hop count) hop neighbors
+         	if (SYMMETRIC_TOPOLOGY_TABLE)
+			{
+
+				topo_last = OlsrLookupLastTopologyTableSYM(node, list_destination_n->destination->rt_dst);
+			}
+			else
+			{
+
+				topo_last = OlsrLookupLastTopologyTable(node, list_destination_n->destination->rt_dst);
+			}
+
+			if (NULL != topo_last)
             {
-                topo_dest = topo_last->topology_list_of_destinations;
+
+				topo_dest = topo_last->topology_list_of_destinations;
+
+				//Peter comment: Just For debug
+				/*
+				if (list_destination_n->destination->rt_entry_infos.rtu_dst.interfaceAddr.ipv4 == 7)
+				{
+					int sdffs = 21321;
+
+				}
+				*/
+
                 while (topo_dest != NULL)
                 {
 
-                    mid_address tmp_addrs;
-                    memset( &tmp_addrs, 0, sizeof(mid_address));
-                    mid_address* tmp_addrsp;
+					Address addrReached = topo_dest->destination_node->topology_destination_dst;
 
                     if (RoutingOlsrCheckMyIfaceAddress(
                             node,
@@ -6775,71 +15474,21 @@ void OlsrCalculateRoutingTable(Node *node)
                         continue;
                     }
 
-                    tmp_addrs.alias = topo_dest->destination_node->
-                                          topology_destination_dst;
-                    tmp_addrs.next_alias = OlsrLookupMidAliases(node,
-                                               topo_dest->destination_node->
-                                                   topology_destination_dst);
-                    tmp_addrsp = &tmp_addrs;
 
-                    while (tmp_addrsp != NULL)
-                    {
-                        // topo_dest is not in the routing table
-                        if (NULL == OlsrLookupRoutingTable(node,
-                             tmp_addrsp->alias))
-                        {
-                            // PRINT OUT: Last Hop to Final Destination. The
-                            // function convert_address_to_string has to be
-                            // seperately
+					OlsrCalculateRoutingTableForSinglePathTopologySearchHelpFunc(node, addrReached, list_destination_n, &list_destination_n_1, &tmp_destination_tail);
 
-                            if (DEBUG)
-                            {
-                                char addrString[MAX_STRING_LENGTH];
-                                IO_ConvertIpAddressToString(
-                                    &list_destination_n->destination->rt_dst,
-                                    addrString);
 
-                                printf("%s -> ", addrString);
+					//Peter Added for test time complexity
+					if (_TEST_TIME_COMPLEXITY && g_iSimplifiedTimeTest == 0)
+					{
 
-                                IO_ConvertIpAddressToString(
-                                    &topo_dest->destination_node->
-                                        topology_destination_dst,
-                                    addrString);
+						//if (node->nodeId == NODE_ID_FOR_TEST_OUTER_ANGLE || node->nodeId == NODE_ID_FOR_TEST_OUTER_EDGE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_ANGLE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_EDGE || node->nodeId == NODE_ID_FOR_TEST_CENTER)
+						if (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END)
+						{
+							uiLookupCnt++;
 
-                                printf("%s\n", addrString);
-                            }
-
-                            destination_n_1 = (destination_n *)
-                                MEM_malloc(sizeof(destination_n));
-
-                            memset(destination_n_1, 0, sizeof(destination_n));
-
-                            // changed by SRD for multiple iface problem
-                            rt_entry* tmp =
-                                OlsrInsertRoutingTablefromTopology(
-                                    node,
-                                    list_destination_n->destination,
-                                    tmp_addrsp->alias);
-
-                            // insert in routing table using topology
-                            if (tmp != NULL)
-                            {
-                                destination_n_1->destination = tmp;
-                            }
-                            else
-                            {
-                                MEM_free(destination_n_1);
-                                destination_n_1 = NULL;
-                            }
-
-                            if (destination_n_1!=NULL)
-                            {
-                                destination_n_1->next = list_destination_n_1;
-                                list_destination_n_1 = destination_n_1;
-                            }
-                        }
-                        tmp_addrsp = tmp_addrsp->next_alias;
-                    }
+						}
+					}
 
                     topo_dest = topo_dest->next;
                 }
@@ -6851,6 +15500,7 @@ void OlsrCalculateRoutingTable(Node *node)
         }
 
         list_destination_n = list_destination_n_1;
+		//ui_metric_cost_limitation++;
     }
 
     if (DEBUG)
@@ -6861,10 +15511,1495 @@ void OlsrCalculateRoutingTable(Node *node)
         printf(" Node %d : Printing Mirror Routing Table\n", node->nodeId);
         OlsrPrintRoutingTable(olsr->mirror_table);
     }
-    OlsrInsertRoutingTableFromHnaTable(node);
+    
+	
+	//Peter Need to check !!!!!!!!!!!!!
+	OlsrInsertRoutingTableFromHnaTable(node);
+
+
+
     OlsrReleaseRoutingTable(olsr->mirror_table);
+
+
+	//printf("!!!!!!!!!!!!!!    end OlsrCalculateRoutingTable \n");
+
+	
+
+	//if (_TEST_TIME_COMPLEXITY && (node->nodeId == NODE_ID_FOR_TEST_OUTER_ANGLE || node->nodeId == NODE_ID_FOR_TEST_OUTER_EDGE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_ANGLE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_EDGE || node->nodeId == NODE_ID_FOR_TEST_CENTER) && bTimeConsumptionValidate)
+	if (!bDisableTimeEstimate && _TEST_TIME_COMPLEXITY && (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END) && bTimeConsumptionValidate)
+	{
+
+
+		if (g_iSimplifiedTimeTest == 1)
+		{
+			char timeStr2[MAX_STRING_LENGTH];
+
+			TIME_PrintClockInSecond(EXTERNAL_QueryRealTime(), timeStr2, node);
+
+		
+			dRealTimeEnd = atof(timeStr2);
+
+			double dDuration = dRealTimeEnd - dRealTimeStart;
+
+			olsr->dRCRealRuntime += dDuration;
+			
+			
+
+			if (dSimTimeStart < olsr->dRecentRCStartTime)
+			{
+				//printf("|||||||||||||||||=======================OlsrCalculateRoutingTable Start Time Exception =======================|||||||||||||| dSimTimeStart = %f dRecentRCStartTime = %f \n", dSimTimeStart, olsr->dRecentRCStartTime);
+
+				//this will never happen
+			}
+
+
+			double dExpectedEndTime = 0.0;
+
+			if (dSimTimeStart > olsr->dRecentRCStartTime && dSimTimeStart < olsr->dRecentRCEndTime)
+			{
+				//printf("|||||||||||||||||=======================OlsrCalculateRoutingTable when computing RC TIME=======================|||||||||||||| dRecentRCStartTime = %f dRecentRCEndTime = %f CurrentSimTime = %f \n", olsr->dRecentRCStartTime, olsr->dRecentRCEndTime, dSimTimeStart);
+				dExpectedEndTime = olsr->dRecentRCEndTime + dDuration;
+			}
+			else
+			{
+				olsr->dRecentRCStartTime = dSimTimeStart;
+				dExpectedEndTime = dSimTimeStart + dDuration;
+			}
+
+
+
+			if (dExpectedEndTime > olsr->dRecentRCEndTime)
+			{
+				olsr->dRecentRCEndTime = dExpectedEndTime;
+			}
+			else
+			{
+				//printf("|||||||||||||||||=======================OlsrCalculateRoutingTable End Time Exception =======================|||||||||||||| dExpectedEndTime = %f dRecentRCEndTime = %f \n", dExpectedEndTime, olsr->dRecentRCEndTime);
+
+			}
+			
+			
+			
+			//olsr->dRecentRCEndTime = olsr->dRecentRCStartTime + dDuration;
+		
+
+			olsr->uiRCNormalCount++;
+		}
+		else
+		{
+			char timeStr[MAX_STRING_LENGTH];
+
+			TIME_PrintClockInSecond(getSimTime(node), timeStr, node);
+
+			char timeStr2[MAX_STRING_LENGTH];
+
+			TIME_PrintClockInSecond(EXTERNAL_QueryRealTime(), timeStr2, node);
+
+			dSimTimeEnd = atof(timeStr);
+			dRealTimeEnd = atof(timeStr2);
+			//int iSimTime = atoi(timeStr);
+
+			/*
+			sprintf(strTxt, "%sOlsrCalculateRoutingTable End for node %d at time %f and %f: \n", strTxt, node->nodeId, dSimTimeEnd, dRealTimeEnd);
+
+
+			sprintf(strTxt, "%sOlsrCalculateRoutingTable Time consumption for node %d: real_time = %f \n", strTxt, node->nodeId, 
+				dRealTimeEnd - dRealTimeStart);
+			*/
+			tti.dRealTimeDuration = dRealTimeEnd - dRealTimeStart;
+		}
+
+		
+		//DebugBreak();
+	}
+	
+
+	if (g_iTestRCSimAndRealTime == 1)
+	{
+
+		if (node->nodeId == DEBUG_NODE_ID)
+		{
+			char timeStr3[MAX_STRING_LENGTH];
+
+			TIME_PrintClockInSecond(getSimTime(node), timeStr3, node);
+
+			char timeStr4[MAX_STRING_LENGTH];
+
+			TIME_PrintClockInSecond(EXTERNAL_QueryRealTime(), timeStr4, node);
+
+			double ddSimTimeStart = atof(timeStr3);
+			double ddRealTimeStart = atof(timeStr4);
+
+			//printf("OlsrCalculateRoutingTable end for node No.%d, ddSimTimeStart = %f, ddRealTimeStart = %f \n", 
+			//	node->nodeId, ddSimTimeStart, ddRealTimeStart);
+
+			if (ddSimTimeStart > 21 && ddSimTimeStart < 23)
+			{
+				
+				printf("OlsrCalculateRoutingTable end for node No.%d, ddSimTimeStart = %f, ddRealTimeStart = %f \n", 
+					node->nodeId, ddSimTimeStart, ddRealTimeStart);
+
+				if (olsr->pszRTWithARC == NULL)
+				{
+					olsr->pszRTWithARC = new char[RT_SIZE];
+				}
+
+
+				memset(olsr->pszRTWithARC, 0, RT_SIZE * sizeof(char));
+				OlsrPrintRoutingTable(olsr->routingtable, olsr->pszRTWithARC);
+
+				printf(olsr->pszRTWithARC);
+			}
+		}
+	}
+
+
+	//Peter Adder for test time complexity
+
+	if (bDisableTimeEstimate && g_iSimplifiedTimeTest == 0 && uiTotalLookupCnt != NULL)
+	{
+		*uiTotalLookupCnt = uiLookupCnt + uiLookupCntFor2Hop;
+	}
+	
+	if (!bDisableTimeEstimate && _TEST_TIME_COMPLEXITY && g_iSimplifiedTimeTest == 0)
+	{
+		
+		//if (node->nodeId == NODE_ID_FOR_TEST_OUTER_ANGLE || node->nodeId == NODE_ID_FOR_TEST_OUTER_EDGE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_ANGLE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_EDGE || node->nodeId == NODE_ID_FOR_TEST_CENTER)
+		if (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END)
+		{
+			
+			/*
+			sprintf(strTxt, "%sOlsrCalculateRoutingTable End : uiLookupCnt = %d, uiLookupCntFor2Hop = %d ******************************* \n", strTxt, uiLookupCnt, uiLookupCntFor2Hop); 
+			sprintf(strTxt, "%sOlsrCalculateRoutingTable Combiled Count for node %d: CombiledCnt = %d ******************************* \n\n", strTxt, node->nodeId, uiLookupCnt + uiLookupCntFor2Hop); 
+			*/
+			tti.iCombinedCnt = uiLookupCnt + uiLookupCntFor2Hop;
+
+			PUSH_BACK_CURRENT_ITEM(olsr, tti);
+
+
+		}
+
+		//sprintf(g_strTxt, "%s \n %s", g_strTxt, strTxt);
+
+	}
+
+
+	//printf("OlsrCalculateRoutingTable for node %d End\n", node->nodeId);
+
+
 }
 
+
+//for compare, use the mirror table
+static
+void OlsrCalculateRoutingTableForCompare(Node *node)
+{
+	
+	
+	
+	//printf("!!!!!!!!!!!!!!    start OlsrCalculateRoutingTable \n");
+	
+	destination_n* list_destination_n = NULL;
+    destination_n* list_destination_n_1 = NULL;
+    topology_last_entry* topo_last;
+    destination_list* topo_dest;
+
+    RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+
+    // RFC 3626 Section 10
+    // Move routing table
+    //OlsrRoutingMirror(node);
+
+	OlsrReleaseRoutingTable(olsr->mirror_table);
+
+
+
+    OlsrFillRoutingTableWithNeighbors(node, TRUE);
+
+
+    if (DEBUG)
+    {
+        printf("Fill table with two hop neighbors\n");
+    }
+
+
+	RoutingOlsr* olsrTmp = NULL;
+
+
+
+
+
+	UInt32 uiLookupCntFor2Hop;
+
+	if (_TEST_TIME_COMPLEXITY)
+	{
+		uiLookupCntFor2Hop = 0;
+	}
+
+    // Step 3 Add two hop neighbors
+    
+	
+	//if (_TEST_TIME_COMPLEXITY && (node->nodeId == NODE_ID_FOR_TEST_OUTER_ANGLE || node->nodeId == NODE_ID_FOR_TEST_OUTER_EDGE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_ANGLE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_EDGE || node->nodeId == NODE_ID_FOR_TEST_CENTER))
+	if (_TEST_TIME_COMPLEXITY && (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END))
+	{
+
+		list_destination_n_1 = OlsrFillRoutingTableWith2HopNeighbors(node, &uiLookupCntFor2Hop, TRUE);
+	}
+	else
+	{
+
+		list_destination_n_1 = OlsrFillRoutingTableWith2HopNeighbors(node, NULL, TRUE);
+	}
+	
+
+
+	//Peter Adder for test time complexity
+	
+	UInt32 uiLookupCnt;
+	
+	if (_TEST_TIME_COMPLEXITY)
+	{
+		uiLookupCnt = 0;
+	}
+
+
+
+	// Peter Added for support _OLSR_MULTIPATH
+	//UInt16 ui_metric_cost_limitation = 3;
+
+    // Step 3 Add the remaining destinations looking up the topology table
+    list_destination_n = list_destination_n_1;
+
+    while (list_destination_n_1 != NULL)
+    {
+        list_destination_n_1 = NULL;
+		destination_n* tmp_destination_tail = NULL;
+
+
+        //Peter comment: every loop add group of destination nodes that one hop more from the source node,
+		//compare to the group in the previous loop  
+		while (list_destination_n != NULL)
+        {
+            destination_n* destination_n_1 = NULL;
+
+            if (DEBUG)
+            {
+                char addrString[MAX_STRING_LENGTH];
+
+                IO_ConvertIpAddressToString(
+                    &list_destination_n->destination->rt_dst,
+                    addrString);
+
+                printf("Node %d, Last hop %s\n",
+                    node->nodeId,
+                    addrString);
+            }
+			
+
+			//SYMMETRIC TOPOLOGY TABLE
+
+			//Peter comment: find from the topology table if there is some entry 
+			//whose last hop equal the specific dest hop of 2 or more (* since every loop will
+			// increase the one more hop count) hop neighbors
+         	if (SYMMETRIC_TOPOLOGY_TABLE)
+			{
+
+				topo_last = OlsrLookupLastTopologyTableSYM(node, list_destination_n->destination->rt_dst);
+			}
+			else
+			{
+
+				topo_last = OlsrLookupLastTopologyTable(node, list_destination_n->destination->rt_dst);
+			}
+
+			if (NULL != topo_last)
+            {
+
+				topo_dest = topo_last->topology_list_of_destinations;
+
+		
+
+                while (topo_dest != NULL)
+                {
+
+					Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+                    if (RoutingOlsrCheckMyIfaceAddress(
+                            node,
+                            topo_dest->destination_node->topology_destination_dst) != -1)
+                    {
+                        topo_dest = topo_dest->next;
+                        continue;
+                    }
+
+
+					OlsrCalculateRoutingTableForSinglePathTopologySearchHelpFuncForCompare(node, addrReached, list_destination_n, &list_destination_n_1, &tmp_destination_tail);
+
+
+				
+                    topo_dest = topo_dest->next;
+                }
+            }
+
+            destination_n_1 = list_destination_n;
+            list_destination_n = list_destination_n->next;
+            MEM_free(destination_n_1);
+        }
+
+        list_destination_n = list_destination_n_1;
+		//ui_metric_cost_limitation++;
+    }
+
+  
+	
+	//Peter Need to check !!!!!!!!!!!!!
+	//OlsrInsertRoutingTableFromHnaTable(node);
+
+
+
+    //OlsrReleaseRoutingTable(olsr->mirror_table);
+
+}
+
+
+
+static
+void OlsrCalculateRoutingTableAdv(Node *node)
+{
+
+	//Peter Adder for test time complexity
+
+	//g_iTopologyChgApplyARC++;
+
+	//if (node->nodeId == 1)
+	{
+
+		//printf("OlsrCalculateRoutingTableAdv Begin \n");
+	}
+	
+
+	/*
+	char strTxt[2048];
+	memset(strTxt, 0, 2048 * sizeof(char));
+	*/
+
+	if (g_iTestRCSimAndRealTime == 1)
+	{
+
+		if (node->nodeId == DEBUG_NODE_ID)
+		{
+			char timeStr3[MAX_STRING_LENGTH];
+
+			TIME_PrintClockInSecond(getSimTime(node), timeStr3, node);
+
+			char timeStr4[MAX_STRING_LENGTH];
+
+			TIME_PrintClockInSecond(EXTERNAL_QueryRealTime(), timeStr4, node);
+
+			double ddSimTimeStart = atof(timeStr3);
+			double ddRealTimeStart = atof(timeStr4);
+
+			//printf("OlsrCalculateRoutingTableAdv start for node No.%d, ddSimTimeStart = %f, ddRealTimeStart = %f \n", 
+			//	node->nodeId, ddSimTimeStart, ddRealTimeStart);
+		}
+	}
+
+
+	tc_trace_item tti;
+
+	if (_TEST_TIME_COMPLEXITY && g_iSimplifiedTimeTest == 0)
+	{
+		
+		//if (node->nodeId == NODE_ID_FOR_TEST_OUTER_ANGLE || node->nodeId == NODE_ID_FOR_TEST_OUTER_EDGE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_ANGLE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_EDGE || node->nodeId == NODE_ID_FOR_TEST_CENTER)
+		if (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END)
+		{
+			/*
+			sprintf(strTxt, "%s\n", strTxt);
+
+			sprintf(strTxt, "%sOlsrCalculateRoutingTableAdv Start ************************************************* \n", strTxt); 
+			*/
+
+			memset(&tti, 0, sizeof(tc_trace_item));
+			tti.bIsAdvOrNot = true;
+		}
+	}
+
+	
+	
+	//For execution time compute
+	
+	double dSimTimeStart = 0.0;
+	double dRealTimeStart = 0.0;
+
+	double dSimTimeEnd = 0.0;
+	double dRealTimeEnd = 0.0;
+	
+	
+	
+	char timeStr[MAX_STRING_LENGTH];
+	TIME_PrintClockInSecond(getSimTime(node), timeStr, node);
+
+	BOOL bTimeConsumptionValidate = FALSE;
+
+	int iSimTime = atoi(timeStr);
+	
+	dSimTimeStart = atof(timeStr);
+
+
+    //if (_TEST_TIME_COMPLEXITY && (node->nodeId == NODE_ID_FOR_TEST_OUTER_ANGLE || node->nodeId == NODE_ID_FOR_TEST_OUTER_EDGE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_ANGLE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_EDGE || node->nodeId == NODE_ID_FOR_TEST_CENTER) && iSimTime > VALID_SIMULATE_CHECK_TIME)
+	if (_TEST_TIME_COMPLEXITY && (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END) && iSimTime > VALID_SIMULATE_CHECK_TIME)
+	{
+
+
+		bTimeConsumptionValidate = TRUE;
+
+
+		if (g_iSimplifiedTimeTest == 1)
+		{
+			char timeStr2[MAX_STRING_LENGTH];
+
+			TIME_PrintClockInSecond(EXTERNAL_QueryRealTime(), timeStr2, node);
+
+			
+			dRealTimeStart = atof(timeStr2);
+		}
+		else
+		{
+
+			char timeStr[MAX_STRING_LENGTH];
+
+			TIME_PrintClockInSecond(getSimTime(node), timeStr, node);
+
+			char timeStr2[MAX_STRING_LENGTH];
+
+			TIME_PrintClockInSecond(EXTERNAL_QueryRealTime(), timeStr2, node);
+
+			dSimTimeStart = atof(timeStr);
+			dRealTimeStart = atof(timeStr2);
+			//int iSimTime = atoi(timeStr);
+
+			//sprintf(strTxt, "%sOlsrCalculateRoutingTableAdv Start for node %d at time %f and %f: \n", strTxt, node->nodeId, dSimTimeStart, dRealTimeStart);
+
+			tti.dCurrentSimTime = dSimTimeStart;
+		}
+
+		
+    }
+	
+		
+	//printf("!!!!!!!!!!!!!!    start OlsrCalculateRoutingTable \n");
+	
+	destination_n* list_destination_n = NULL;
+    destination_n* list_destination_n_1 = NULL;
+    topology_last_entry* topo_last;
+    destination_list* topo_dest;
+
+    RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+
+	if (olsr->changes_neighborhood)
+	{
+		g_iNeighborhoodChgApplyARC++;
+
+		
+	}
+	else
+	{
+		g_iTopologyChgApplyARC++;
+	}
+
+    // RFC 3626 Section 10
+    // Move routing table
+
+	//ACCUMULATIVE_ROUTE_CALC == 1, modify the routing table directly,
+	//so backup is not allowed which may cause current routing table become empty
+	//OlsrRoutingMirror(node);
+	   
+
+    if (DEBUG)
+    {
+        printf(" Node %d : Printing Routing Table\n", node->nodeId);
+
+        OlsrPrintRoutingTable(olsr->routingtable);
+
+        printf(" Node %d : Printing Mirror Routing Table\n", node->nodeId);
+
+        OlsrPrintRoutingTable(olsr->mirror_table);
+    }
+
+    // Step 1 Delete old entries from the table
+    // empty previous routing table before creating a new one
+
+    if (DEBUG)
+    {
+        printf("Empty IP forwarding table\n");
+    }
+
+
+	if (_TEST_TIME_COMPLEXITY)
+	{
+	}
+	else
+	{
+		//ACCUMULATIVE_ROUTE_CALC == 1
+		
+		//NetworkEmptyForwardingTable(node, ROUTING_PROTOCOL_OLSR_INRIA);		
+	}
+
+    
+    // Step 2 Add One hop neighbors
+    if (DEBUG)
+    {
+        printf("Fill table with neighbors\n");
+    }
+
+
+	//ACCUMULATIVE_ROUTE_CALC == 1	
+	// OlsrFillRoutingTableWithNeighbors(node);
+	
+ 
+
+
+    if (DEBUG)
+    {
+        printf("Fill table with two hop neighbors\n");
+    }
+
+
+	RoutingOlsr* olsrTmp = NULL;
+
+
+
+	UInt32 uiLookupCntForAddList;
+	
+	UInt32 uiLookupCntFor2Hop;
+
+
+
+
+	if (_TEST_TIME_COMPLEXITY && g_iSimplifiedTimeTest == 0)
+	{
+		uiLookupCntFor2Hop = 0;
+
+		uiLookupCntForAddList = 0;
+	}
+
+    // Step 3 Add two hop neighbors
+    
+	//ACCUMULATIVE_ROUTE_CALC == 1
+	/*
+	//if (_TEST_TIME_COMPLEXITY && (node->nodeId == NODE_ID_FOR_TEST_OUTER_ANGLE || node->nodeId == NODE_ID_FOR_TEST_OUTER_EDGE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_ANGLE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_EDGE || node->nodeId == NODE_ID_FOR_TEST_CENTER))
+	if (_TEST_TIME_COMPLEXITY && (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END))
+	{
+
+		list_destination_n_1 = OlsrFillRoutingTableWith2HopNeighbors(node, &uiLookupCntFor2Hop);
+	}
+	else
+	{
+
+		if (g_iAccumulativeRouteCalculation == 0)
+		{
+
+			list_destination_n_1 = OlsrFillRoutingTableWith2HopNeighbors(node);
+		}
+		else
+		{
+			
+			
+
+		}
+		
+	}
+	*/
+	
+	//generate the specific work set for future use
+
+
+	/*
+	if (node->nodeId == 1 && getSimTime(node) > 5)
+	{
+
+	printf("Routing Table for node No. %d before custome delete from routing table, for uiConfidentCost %d \n", node->nodeId, olsr->uiConfidentCost);
+
+	OlsrPrintRoutingTable(olsr->routingtable);
+	}
+	*/
+
+	//if (node->nodeId == 16 && olsr->naRecentChangedAddressByTC == 15 && olsr->recent_delete_list != NULL && olsr->recent_add_list != NULL)
+	{
+		//DebugBreak();
+	}
+
+	//printf("OlsrCalculateRoutingTableAdv stage #1 \n");
+
+	BOOL bAddDeleteSameTime = FALSE;
+	if (olsr->recent_add_list != NULL && olsr->recent_delete_list != NULL)
+	{
+		bAddDeleteSameTime = TRUE;
+	}
+
+	destination_n* list_destination_delete = NULL;
+
+	//g_iAccumulativeRouteCalculation should be != 0 for Adv option
+	if (g_iAccumulativeRouteCalculation == 1)
+	{
+
+		if (olsr->recent_add_list != NULL)
+		{
+			if (olsr->changes_neighborhood)
+			{
+
+				if (_TEST_TIME_COMPLEXITY && g_iSimplifiedTimeTest == 0 && (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END))
+				{
+					list_destination_n_1 = ProcessRoutingTableAccordingToRecentAddListV44(node, &uiLookupCntForAddList);
+				}
+				else
+				{
+					list_destination_n_1 = ProcessRoutingTableAccordingToRecentAddListV44(node);
+				}
+
+			}
+			else
+			{
+				if (_TEST_TIME_COMPLEXITY && g_iSimplifiedTimeTest == 0 && (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END))
+				{
+					//uiLookupCntForAddList = 0;
+
+					list_destination_n_1  = ProcessRoutingTableAccordingToRecentAddListV2(node, &uiLookupCntForAddList);
+				}
+				else
+				{
+					list_destination_n_1  = ProcessRoutingTableAccordingToRecentAddListV2(node);
+				}
+
+			}
+		}
+
+		//list_destination_n_1 = ProcessRoutingTableAccordingToConfidentCost(node, olsr->uiConfidentCost);
+	}
+	else	//g_iAccumulativeRouteCalculation == 2
+	{
+
+		if (olsr->recent_add_list != NULL)
+		{
+			if (olsr->changes_neighborhood)
+			{
+
+				if (_TEST_TIME_COMPLEXITY && g_iSimplifiedTimeTest == 0 && (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END))
+				{
+					list_destination_n_1 = ProcessRoutingTableAccordingToRecentAddListV46(node, &list_destination_delete, &uiLookupCntForAddList);
+				}
+				else
+				{
+					list_destination_n_1 = ProcessRoutingTableAccordingToRecentAddListV46(node, &list_destination_delete);
+				}
+
+				
+			}
+			else
+			{
+				if (_TEST_TIME_COMPLEXITY && g_iSimplifiedTimeTest == 0 && (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END))
+				{
+					//uiLookupCntForAddList = 0;
+
+					list_destination_n_1  = ProcessRoutingTableAccordingToRecentAddListV2(node, &uiLookupCntForAddList);
+				}
+				else
+				{
+					list_destination_n_1  = ProcessRoutingTableAccordingToRecentAddListV2(node);
+				}
+
+			}
+		}
+	}
+
+	
+	/*
+	//if (node->nodeId == 1)
+	{
+		if (list_destination_n_1 == NULL)
+		{
+			printf("!!!!!!!!!!!!!!!!!!!!!!!!!!!!! list_destination_n_1 == NULL, uiConfidentCost = %d !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! \n", olsr->uiConfidentCost);
+
+		}
+		
+
+	}
+	*/
+
+
+	/*
+	if (node->nodeId == 1 && getSimTime(node) > 5)
+	{
+
+		printf("Routing Table for node No. %d after custome delete from routing table \n", node->nodeId);
+
+		OlsrPrintRoutingTable(olsr->routingtable);
+	}
+	*/
+	
+	
+	/*
+	if (node->nodeId == 1)
+	{
+		printf("node 1 After OlsrFillRoutingTableWith2HopNeighbors: \n");
+
+
+		olsrTmp = (RoutingOlsr* ) node->appData.olsr;
+		OlsrPrintRoutingTable(olsrTmp->routingtable);
+
+		OlsrPrintTopologyTable(node);
+	}
+	*/
+
+
+	//Peter Adder for test time complexity
+		
+	UInt32 uiLookupCnt;
+	
+	if (_TEST_TIME_COMPLEXITY && g_iSimplifiedTimeTest == 0)
+	{
+		uiLookupCnt = 0;
+	}
+
+
+
+	// Peter Added for support _OLSR_MULTIPATH
+	//UInt16 ui_metric_cost_limitation = 3;
+
+	//if (g_iAccumulativeRouteCalculation == 1)
+	{
+		//ui_metric_cost_limitation = olsr->uiConfidentCost + 1;
+	}
+
+    // Step 3 Add the remaining destinations looking up the topology table
+    list_destination_n = list_destination_n_1;
+
+    while (list_destination_n_1 != NULL)
+    {
+        list_destination_n_1 = NULL;
+
+		destination_n*  tmp_destination_tail = NULL;
+
+        //Peter comment: every loop add group of destination nodes that one hop more from the source node,
+		//compare to the group in the previous loop  
+		while (list_destination_n != NULL)
+        {
+            destination_n* destination_n_1 = NULL;
+
+            if (DEBUG)
+            {
+                char addrString[MAX_STRING_LENGTH];
+
+                IO_ConvertIpAddressToString(
+                    &list_destination_n->destination->rt_dst,
+                    addrString);
+
+                printf("Node %d, Last hop %s\n",
+                    node->nodeId,
+                    addrString);
+            }
+			
+			//Peter comment: find from the topology table if there is some entry 
+			//whose last hop equal the specific dest hop of 2 or more (* since every loop will
+			// increase the one more hop count) hop neighbors
+            if (SYMMETRIC_TOPOLOGY_TABLE)
+			{
+				topo_last = OlsrLookupLastTopologyTableSYM(node, list_destination_n->destination->rt_dst);
+			}
+			else
+			{
+				topo_last = OlsrLookupLastTopologyTable(node, list_destination_n->destination->rt_dst);
+			}
+			
+			
+			if (NULL != topo_last)
+            {
+                topo_dest = topo_last->topology_list_of_destinations;
+
+			
+                while (topo_dest != NULL)
+                {
+                 
+					Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+					if (RoutingOlsrCheckMyIfaceAddress(
+						node,
+						topo_dest->destination_node->topology_destination_dst) != -1)
+					{
+						topo_dest = topo_dest->next;
+						continue;
+					}
+
+
+					OlsrCalculateRoutingTableForSinglePathTopologySearchHelpFunc(node, addrReached, list_destination_n, &list_destination_n_1, &tmp_destination_tail, TRUE);
+
+
+					//Peter Added for test time complexity
+					if (_TEST_TIME_COMPLEXITY && g_iSimplifiedTimeTest == 0)
+					{
+
+						//if (node->nodeId == NODE_ID_FOR_TEST_OUTER_ANGLE || node->nodeId == NODE_ID_FOR_TEST_OUTER_EDGE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_ANGLE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_EDGE || node->nodeId == NODE_ID_FOR_TEST_CENTER)
+						if (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END)
+						{
+							uiLookupCnt++;
+
+						}
+					}
+
+                    topo_dest = topo_dest->next;
+                }
+            }
+
+            destination_n_1 = list_destination_n;
+            list_destination_n = list_destination_n->next;
+            MEM_free(destination_n_1);
+        }
+
+        list_destination_n = list_destination_n_1;
+		//ui_metric_cost_limitation++;
+    }
+
+
+	/*
+	if (olsr->recent_delete_list != NULL && olsr->recent_add_list != NULL)
+	{
+
+	}
+	*/
+
+	
+	if (bAddDeleteSameTime)
+	{
+		if (g_iRunTimeCompare == 1)
+		{
+			
+			CompareRTMiddle(node);		
+		}
+	}
+	
+
+	//printf("OlsrCalculateRoutingTableAdv stage #2 \n");
+
+
+	UInt32 uiLookpCntForDelete = 0;
+
+	if (g_iAccumulativeRouteCalculation == 1)
+	{
+
+		if (olsr->recent_delete_list != NULL)
+		{
+
+			
+			UInt32 uiRequiredRediscovery = 0;
+			BOOL bRequiredRediscovery = FALSE;			
+			
+
+			if (olsr->changes_neighborhood)
+			{
+				
+				UInt32 uiDel43 = 0;
+				//g_iTopologyChgApplyARC_With_Delete_Success++;
+
+				if (olsr->bNeighborChgCausedRemoveFromHigherHop)
+				{
+					if (g_iSimplifiedTimeTest == 1)
+					{
+						ProcessRoutingTableAccordingToRecentDeleteListV44(node, &bRequiredRediscovery, NULL, NULL);
+					}
+					else
+					{
+						ProcessRoutingTableAccordingToRecentDeleteListV44(node, &bRequiredRediscovery, NULL, &uiDel43);
+					}
+					
+				}
+				else
+				{						
+					
+					//printf("++++++++++++++++++++++ProcessRoutingTableAccordingToRecentDeleteListV43 called ! +++++++++++++++++++++++++\n");
+					if (g_iSimplifiedTimeTest == 1)
+					{
+						ProcessRoutingTableAccordingToRecentDeleteListV43(node, &bRequiredRediscovery, NULL, NULL);
+					}
+					else
+					{
+						ProcessRoutingTableAccordingToRecentDeleteListV43(node, &bRequiredRediscovery, NULL, &uiDel43);
+					}
+					
+					
+				}
+
+
+				/*
+				while (list_destination_delete != NULL)
+				{
+					destination_n* destination_n_1 = NULL;
+
+					destination_n_1 = list_destination_delete;
+					list_destination_delete = (list_destination_delete)->next;
+
+
+					if (destination_n_1 != NULL)
+					{
+
+
+						rt_entry* pdsttmp = NULL;
+
+						pdsttmp = destination_n_1->destination;
+
+						destination_n_1->destination = NULL;
+
+						if (pdsttmp != NULL && pdsttmp->rt_metric == MAX_COST)
+						{
+							OlsrDeleteRoutingTable(pdsttmp);
+
+							pdsttmp = NULL;
+						}
+
+
+
+						MEM_free(destination_n_1);
+						destination_n_1 = NULL;
+
+					}
+				}
+				*/
+
+				uiLookpCntForDelete += uiDel43;
+
+			}
+			else
+			{
+
+				UInt32 uiDel33 = 0;
+				
+				//g_iTopologyChgApplyARC_With_Delete_Success++;
+				ProcessRoutingTableAccordingToRecentDeleteListV33(node, NULL, NULL);
+				
+			}		
+			
+		}
+		
+		
+	}
+	else	//g_iAccumulativeRouteCalculation == 2
+	{
+
+		if (olsr->changes_neighborhood && olsr->bNeighborChgCausedRemoveFromHigherHop)
+		{
+
+			//clear_tco_node_addr_set(&olsr->recent_delete_list);
+
+			//it is possible that olsr->recent_delete_list is NULL but list_destination_delete is not NULL
+			//because of the InsideNode may cause this mismatch
+			
+			/*
+			while (list_destination_delete != NULL)
+			{
+				destination_n* destination_n_1 = NULL;
+
+				destination_n_1 = list_destination_delete;
+				list_destination_delete = (list_destination_delete)->next;
+
+
+				if (destination_n_1 != NULL)
+				{
+
+
+					rt_entry* pdsttmp = NULL;
+
+					pdsttmp = destination_n_1->destination;
+
+					destination_n_1->destination = NULL;
+
+					if (pdsttmp != NULL && pdsttmp->rt_metric == MAX_COST)
+					{
+						OlsrDeleteRoutingTable(pdsttmp);
+
+						pdsttmp = NULL;
+					}
+				
+
+
+					MEM_free(destination_n_1);
+					destination_n_1 = NULL;
+
+				}
+			}
+			*/
+		}
+
+		
+
+		if (olsr->recent_delete_list != NULL || olsr->changes_neighborhood && list_destination_delete != NULL)
+		{
+
+			//printf("OlsrCalculateRoutingTableAdv stage #2.1 \n");
+
+			BOOL bRequiredRediscovery = FALSE;
+
+			if (FALSE)
+			//if (node->nodeId == 20 && olsr->naRecentChangedAddressByTC == 2)
+			//if (node->nodeId == 75)
+			{
+
+				
+				
+				/*
+				printf("olsr->naRecentChangedAddressByTC = %d \n",olsr->naRecentChangedAddressByTC);
+
+				OlsrPrintNeighborTable(node);
+
+				printf("\n");
+				
+				OlsrPrint2HopNeighborTable(node);
+
+				printf("\n");
+
+				*/
+				/*
+				OlsrPrintTopologyTable(node);
+
+				printf("\n");
+
+
+				OlsrPrintDestTopologyTable(node);
+
+				
+				printf("\n");
+				*/
+
+				//OlsrPrintTopologyTableSYM(node);
+
+
+				//printf("\n");
+				//if (olsr->recent_add_list != NULL)
+				//if (FALSE)
+				{
+					//printf("===========================================================================\n\n");
+
+					g_iChaseRouteTable = 0;
+					OlsrPrintRoutingTable(olsr->routingtable);
+					g_iChaseRouteTable = 1;
+
+					//DebugBreak();
+
+					//printf("*************************************************************************\n\n");
+				}
+
+				
+
+				//printf("\n");
+
+
+
+
+				//DebugBreak();
+			}
+			
+
+			
+			UInt32 uiRequiredRediscovery = 0;
+			
+			
+
+			if (olsr->changes_neighborhood)
+			{
+				
+				UInt32 uiDel43 = 0;
+				//g_iTopologyChgApplyARC_With_Delete_Success++;
+
+				if (olsr->bNeighborChgCausedRemoveFromHigherHop)
+				{
+
+					if (g_iSimplifiedTimeTest == 1)
+					{
+						ProcessRoutingTableAccordingToRecentDeleteListV44(node, &bRequiredRediscovery, &list_destination_delete, NULL);
+					}
+					else
+					{
+						ProcessRoutingTableAccordingToRecentDeleteListV44(node, &bRequiredRediscovery, &list_destination_delete, &uiDel43);
+					}
+					
+					
+
+					
+				}
+				else
+				{	
+					
+					
+					//printf("++++++++++++++++++++++ProcessRoutingTableAccordingToRecentDeleteListV43 called ! +++++++++++++++++++++++++\n");
+					
+					if (g_iSimplifiedTimeTest == 1)
+					{
+						ProcessRoutingTableAccordingToRecentDeleteListV43(node, &bRequiredRediscovery, &list_destination_delete, NULL);
+					}
+					else
+					{
+						ProcessRoutingTableAccordingToRecentDeleteListV43(node, &bRequiredRediscovery, &list_destination_delete, &uiDel43);
+					}
+
+					
+				}
+
+
+				while (list_destination_delete != NULL)
+				{
+					destination_n* destination_n_1 = NULL;
+
+					destination_n_1 = list_destination_delete;
+					list_destination_delete = (list_destination_delete)->next;
+
+
+					if (destination_n_1 != NULL)
+					{
+
+
+						rt_entry* pdsttmp = NULL;
+
+						pdsttmp = destination_n_1->destination;
+
+						destination_n_1->destination = NULL;
+
+						if (pdsttmp != NULL && pdsttmp->rt_metric == MAX_COST)
+						{
+							OlsrDeleteRoutingTable(pdsttmp);
+
+							pdsttmp = NULL;
+						}
+
+
+
+						MEM_free(destination_n_1);
+						destination_n_1 = NULL;
+
+					}
+				}
+
+				uiLookpCntForDelete += uiDel43;
+
+			}
+			else
+			{
+
+
+				//list_destination_n_1  = ProcessRoutingTableAccordingToRecentDeleteListV2(node, &bRequiredRediscovery, &uiLookpCntForDelete);
+				//list_destination_n_1  = ProcessRoutingTableAccordingToRecentDeleteListV3(node, &bRequiredRediscovery, &uiLookpCntForDelete);
+
+
+				//list_destination_n_1  = ProcessRoutingTableAccordingToRecentDeleteListV20(node, &bRequiredRediscovery, &uiLookpCntForDelete);
+
+				//list_destination_n_1  = ProcessRoutingTableAccordingToRecentDeleteListV21(node, &bRequiredRediscovery, &uiLookpCntForDelete);
+
+
+
+				//list_destination_n_1  = ProcessRoutingTableAccordingToRecentDeleteListV21(node, &uiRequiredRediscovery, &uiLookpCntForDelete);
+				
+				
+				if (g_iSimplifiedTimeTest == 1)
+				{
+					list_destination_n_1  = ProcessRoutingTableAccordingToRecentDeleteListV23(node, &uiRequiredRediscovery, NULL);
+				}
+				else
+				{
+					list_destination_n_1  = ProcessRoutingTableAccordingToRecentDeleteListV23(node, &uiRequiredRediscovery, &uiLookpCntForDelete);
+				}
+
+				
+
+
+
+				g_iTopologyChgApplyARC_With_Delete++;
+
+				//printf("OlsrCalculateRoutingTableAdv stage #2.2 \n");
+
+
+				if (list_destination_n_1 != NULL)
+				{
+					//DebugBreak();
+
+					if (g_iSimplifiedTimeTest == 1)
+					{
+						ProcessRoutingTableAccordingToRecentDeleteListV53(node, &olsr->recent_add_list, NULL, list_destination_n_1);
+					}
+					else
+					{
+						ProcessRoutingTableAccordingToRecentDeleteListV53(node, &olsr->recent_add_list, &uiLookpCntForDelete, list_destination_n_1);
+					}
+
+					
+
+				}
+				else
+				{
+
+					//printf("OlsrCalculateRoutingTableAdv stage #2.2.3 \n");
+
+					/*
+					if (uiRequiredRediscovery != 0)
+					{
+
+						//printf("OlsrCalculateRoutingTableAdv stage #2.2.3.1 \n");
+
+						//OlsrCalculateRoutingTable(node, TRUE, &uiLookpCntForDelete);
+
+						if (uiRequiredRediscovery == 2)
+						{
+							UInt32 uiDel33 = 0;
+							g_iTopologyChgApplyARC_With_Delete_Success++;
+							ProcessRoutingTableAccordingToRecentDeleteListV33(node, &bRequiredRediscovery, &uiDel33);
+
+
+							uiLookpCntForDelete += uiDel33;
+						}
+						else	//1
+						{
+							g_iTopologyChgApplyARC_With_Delete_Failed_Cause_Rediscovery++;
+
+							OlsrCalculateRoutingTable(node, TRUE, &uiLookpCntForDelete);
+						}
+
+
+
+					}
+					else
+					{
+						g_iTopologyChgApplyARC_With_Delete_Success++;
+						//do nothing here, since it is possible that there is no other node nearby the deleted node,
+						//or every neighbor can find perfect nodes for replace.
+
+						//printf("OlsrCalculateRoutingTableAdv stage #2.2.3.2 \n");
+					}
+					*/
+
+					//already have done by OlsrCalculateRoutingTable version
+					//printf("OlsrCalculateRoutingTableAdv stage #2.2.4 \n");
+				}
+
+
+				//printf("OlsrCalculateRoutingTableAdv stage #2.4 \n");
+			}
+
+			
+			
+		}
+	}
+
+
+	//printf("OlsrCalculateRoutingTableAdv stage #3 \n");
+
+    if (DEBUG)
+    {
+        printf(" Node %d : Printing Routing Table\n", node->nodeId);
+        OlsrPrintRoutingTable(olsr->routingtable);
+
+        printf(" Node %d : Printing Mirror Routing Table\n", node->nodeId);
+        OlsrPrintRoutingTable(olsr->mirror_table);
+    }
+
+
+
+	/*
+	if (node->nodeId == 1 && getSimTime(node) > 5)
+	{
+
+		printf("Routing Table for node No. %d after Advanced routing table re-calculation \n", node->nodeId);
+
+		OlsrPrintRoutingTable(olsr->routingtable);
+	}
+	*/
+    
+
+	//Peter Need to check !!!!!!!!!!!!!
+	OlsrInsertRoutingTableFromHnaTable(node);
+
+
+	if (g_iAccumulativeRouteCalculation == 0)
+	{
+		OlsrReleaseRoutingTable(olsr->mirror_table);
+	}
+   
+
+
+	//printf("!!!!!!!!!!!!!!    end OlsrCalculateRoutingTable \n");
+	
+	
+
+	//if (_TEST_TIME_COMPLEXITY && (node->nodeId == NODE_ID_FOR_TEST_OUTER_ANGLE || node->nodeId == NODE_ID_FOR_TEST_OUTER_EDGE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_ANGLE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_EDGE || node->nodeId == NODE_ID_FOR_TEST_CENTER) && bTimeConsumptionValidate)
+	if (_TEST_TIME_COMPLEXITY && (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END) && bTimeConsumptionValidate)
+	{
+
+		if (g_iSimplifiedTimeTest == 1)
+		{
+			char timeStr2[MAX_STRING_LENGTH];
+
+			TIME_PrintClockInSecond(EXTERNAL_QueryRealTime(), timeStr2, node);
+
+			
+			dRealTimeEnd = atof(timeStr2);
+
+			double dDuration = dRealTimeEnd - dRealTimeStart;
+
+			olsr->dRCRealRuntime += dDuration;
+
+
+			if (dSimTimeStart < olsr->dRecentRCStartTime)
+			{
+				//printf("|||||||||||||||||=======================OlsrCalculateRoutingTableAdv Start Time Exception =======================|||||||||||||| dSimTimeStart = %f dRecentRCStartTime = %f \n", dSimTimeStart, olsr->dRecentRCStartTime);
+				
+				//this will never happen
+			}
+
+
+			double dExpectedEndTime = 0.0;
+
+			if (dSimTimeStart > olsr->dRecentRCStartTime && dSimTimeStart < olsr->dRecentRCEndTime)
+			{
+				//printf("|||||||||||||||||=======================OlsrCalculateRoutingTable when computing RC TIME=======================|||||||||||||| dRecentRCStartTime = %f dRecentRCEndTime = %f CurrentSimTime = %f \n", olsr->dRecentRCStartTime, olsr->dRecentRCEndTime, dSimTimeStart);
+				dExpectedEndTime = olsr->dRecentRCEndTime + dDuration;
+			}
+			else
+			{
+				olsr->dRecentRCStartTime = dSimTimeStart;
+				dExpectedEndTime = dSimTimeStart + dDuration;
+			}
+
+
+
+
+			if (dExpectedEndTime > olsr->dRecentRCEndTime)
+			{
+				olsr->dRecentRCEndTime = dExpectedEndTime;
+			}
+			else
+			{
+				//printf("|||||||||||||||||=======================OlsrCalculateRoutingTableAdv End Time Exception =======================|||||||||||||| dExpectedEndTime = %f dRecentRCEndTime = %f \n", dExpectedEndTime, olsr->dRecentRCEndTime);
+
+			}
+
+			
+
+			//olsr->dRecentRCEndTime = olsr->dRecentRCStartTime + dDuration;
+
+			olsr->uiRCAdvCount++;
+		}
+		else
+		{
+			char timeStr[MAX_STRING_LENGTH];
+
+			TIME_PrintClockInSecond(getSimTime(node), timeStr, node);
+
+			char timeStr2[MAX_STRING_LENGTH];
+
+			TIME_PrintClockInSecond(EXTERNAL_QueryRealTime(), timeStr2, node);
+
+			dSimTimeEnd = atof(timeStr);
+			dRealTimeEnd = atof(timeStr2);
+			//int iSimTime = atoi(timeStr);
+
+			/*
+			sprintf(strTxt, "%sOlsrCalculateRoutingTableAdv End for node %d at time %f and %f: \n", strTxt, node->nodeId, dSimTimeEnd, dRealTimeEnd);
+
+
+			sprintf(strTxt, "%sOlsrCalculateRoutingTableAdv Time consumption for node %d: real_time = %f \n", strTxt, node->nodeId, 
+				dRealTimeEnd - dRealTimeStart);
+			*/
+
+			tti.dRealTimeDuration = dRealTimeEnd - dRealTimeStart;
+		}
+		
+		
+
+		//DebugBreak();
+	}
+	
+	if (g_iTestRCSimAndRealTime == 1)
+	{
+
+		if (node->nodeId == DEBUG_NODE_ID)
+		{
+			char timeStr3[MAX_STRING_LENGTH];
+
+			TIME_PrintClockInSecond(getSimTime(node), timeStr3, node);
+
+			char timeStr4[MAX_STRING_LENGTH];
+
+			TIME_PrintClockInSecond(EXTERNAL_QueryRealTime(), timeStr4, node);
+
+			double ddSimTimeStart = atof(timeStr3);
+			double ddRealTimeStart = atof(timeStr4);
+
+			/*
+			if (ddSimTimeStart > 21 && ddSimTimeStart < 23)
+			{
+
+				printf("OlsrCalculateRoutingTableAdv end for node No.%d, ddSimTimeStart = %f, ddRealTimeStart = %f \n", 
+					node->nodeId, ddSimTimeStart, ddRealTimeStart);
+				
+				
+				if (olsr->pszRTWithARC == NULL)
+				{
+					olsr->pszRTWithARC = new char[RT_SIZE];
+				}
+				
+				memset(olsr->pszRTWithARC, 0, RT_SIZE * sizeof(char));
+			
+
+				OlsrPrintRoutingTable(olsr->routingtable, olsr->pszRTWithARC);
+
+				printf(olsr->pszRTWithARC);
+			}
+			*/
+		}
+	}
+
+	//Peter Adder for test time complexity
+	
+	if (_TEST_TIME_COMPLEXITY && g_iSimplifiedTimeTest == 0)
+	{
+		
+		//if (node->nodeId == NODE_ID_FOR_TEST_OUTER_ANGLE || node->nodeId == NODE_ID_FOR_TEST_OUTER_EDGE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_ANGLE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_EDGE || node->nodeId == NODE_ID_FOR_TEST_CENTER)
+		if (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END)
+		{
+
+			/*
+			sprintf(strTxt, "%sOlsrCalculateRoutingTableAdv End : uiLookupCnt = %d, uiLookupCntFor2Hop = %d ******************************* \n", strTxt, uiLookupCnt, uiLookupCntFor2Hop); 
+			sprintf(strTxt, "%sOlsrCalculateRoutingTableAdv Combiled Count for node %d: CombiledCnt = %d ******************************* \n\n", strTxt, node->nodeId, uiLookupCnt + uiLookupCntFor2Hop); 
+			*/
+
+			tti.iCombinedCnt = uiLookupCnt + uiLookupCntFor2Hop;
+
+			if (g_iAccumulativeRouteCalculation == 1)
+			{
+			}
+			else
+			{
+
+				tti.iCombinedCnt += uiLookpCntForDelete;
+				
+				tti.iCombinedCnt += uiLookupCntForAddList;
+
+				/*
+				if (uiLookupCntForAddList != 0)
+				{
+					DebugBreak();
+				}
+				*/
+			}
+
+			PUSH_BACK_CURRENT_ITEM(olsr, tti);
+
+		}
+
+
+		//sprintf(g_strTxt, "%s \n %s", g_strTxt, strTxt);
+
+	
+	}
+
+	//printf("OlsrCalculateRoutingTableAdv End \n");
+
+}
 
 
 /***************************************************************************
@@ -6884,7 +17019,20 @@ static
 Int32 OlsrProcessChanges(
     Node* node)
 {
-    RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+    RoutingOlsr* olsr = (RoutingOlsr *) node->appData.olsr;
+
+	/*
+	printf("OlsrProcessChanges called for node->nodeId = %d with changes_neighborhood = %d & changes_topology = %d \n", 
+		node->nodeId, olsr->changes_neighborhood, olsr->changes_topology);
+	*/
+
+	/*
+	char * pszInfo = NULL;
+	char * pszOrigRT = NULL;
+	char * pszMiddleRT = NULL;
+	char * pszRTWithARC = NULL;
+	char * pszRTWithoutARC = NULL;
+	*/
 
     if (DEBUG)
     {
@@ -6898,22 +17046,388 @@ Int32 OlsrProcessChanges(
         }
     }
 
+
+	//Peter added for testing
+	if (olsr->changes_neighborhood && olsr->changes_topology)
+	{
+	
+		g_iBothChg++;
+	}
+
+	//Peter added to support route cache
+	if (olsr->changes_neighborhood || olsr->changes_topology)
+	{
+
+		olsr->rci.bIsUseful = FALSE;
+	}
+
     if (olsr->changes_neighborhood)
     {
+
+		//Peter added for test
+		g_iNeighborChangeCnt++;
+
         // Calculate new mprs and routing table
         OlsrCalculateMpr(node);
-        OlsrCalculateRoutingTable(node);
-        olsr->changes_neighborhood = FALSE;
+
+		if (_OLSR_MULTIPATH)
+		{
+			OlsrCalculateRoutingTableForMultiPath(node);
+		}
+		else
+		{
+
+			if (g_iAccumulativeRouteCalculation == 0)
+			{
+
+				OlsrCalculateRoutingTable(node);
+			}
+			else if (g_iAccumulativeRouteCalculation == 1)
+			{
+
+
+				if (olsr->recent_delete_list != NULL  || olsr->recent_add_list != NULL)
+				{
+					int iAddorDelete = 0;
+
+					if (g_iRunTimeCompare == 1)
+					{
+						iAddorDelete = CmpBreakPoint(node);
+
+
+						CompareRTPre(node);
+					}
+
+					//goes to the branch for g_iAccumulativeRouteCalculation == 1
+					OlsrCalculateRoutingTableAdv(node);
+
+
+					if (g_iRunTimeCompare == 1)
+					{
+						CompareRT(node, iAddorDelete);
+
+					}
+				}
+				else
+				{
+					OlsrCalculateRoutingTable(node);
+				}
+								
+			}
+			else	//g_iAccumulativeRouteCalculation == 2
+			{
+				
+				
+				if (olsr->recent_delete_list != NULL  || olsr->recent_add_list != NULL)
+				//if (FALSE)
+				{
+
+					//CmpBreakPoint(node);
+
+					int iAddorDelete = 0;
+
+					if (g_iRunTimeCompare == 1)
+					{
+
+						
+
+						iAddorDelete = CmpBreakPoint(node);
+						
+
+						CompareRTPre(node);
+
+
+
+					}
+
+				
+					
+					if (olsr->recent_delete_list != NULL)
+					{
+
+						//CmpBreakPoint(node);
+
+						if (g_iRunTimeCompare == 1)
+						{
+
+							//CompareRTPre(node);
+
+
+
+						}
+						//OlsrCalculateRoutingTableAdv(node);
+						OlsrCalculateRoutingTableAdv(node);
+
+
+						if (g_iRunTimeCompare == 1)
+						{
+							//CompareRT(node);
+
+						}
+					}
+					else
+					{
+						if (exist_in_tco_node_addr_set(&olsr->recent_add_list, olsr->naRecentChangedAddressByTC))
+						{
+							//OlsrCalculateRoutingTable(node);
+
+							if (olsr->bNeighborChgCausedRemoveFromHigherHop)
+							{
+								//OlsrCalculateRoutingTable(node);
+								OlsrCalculateRoutingTableAdv(node);
+							}
+							else
+							{
+								int iCnt = 0;
+
+								/*
+								tco_node_addr * tco_tmp = olsr->recent_add_list;
+
+								while (tco_tmp != NULL)
+								{
+									iCnt++;
+
+									tco_tmp = tco_tmp->next;
+								}
+								*/
+
+								if (iCnt > 1)
+								{
+									OlsrCalculateRoutingTableAdv(node);
+								}
+								else
+								{
+									OlsrCalculateRoutingTableAdv(node);
+									//OlsrCalculateRoutingTableAdv(node);
+
+								}
+
+							}
+							
+						}
+						else
+						{
+							OlsrCalculateRoutingTableAdv(node);
+							//OlsrCalculateRoutingTable(node);
+						}
+					}
+					
+					if (g_iRunTimeCompare == 1)
+					{
+						CompareRT(node, iAddorDelete);
+
+					}
+
+					
+					//OlsrCalculateRoutingTable(node);
+				}
+				else
+				{
+					OlsrCalculateRoutingTable(node);
+				}
+			}
+
+
+
+			//OlsrCalculateRoutingTable(node);
+		}
+        
+        		
+		olsr->changes_neighborhood = FALSE;
         olsr->changes_topology = FALSE;
+
+
+
+		//printf("After OlsrProcessChanges: \n");
+
+		//OlsrPrintRoutingTable(olsr->routingtable);
+
         return 0;
     }
 
     if (olsr->changes_topology)
-    {
-        // calculate the routing table
-        OlsrCalculateRoutingTable(node);
+    {       	
+
+		//Peter added for test
+		g_iTopologyChangeCnt++;
+
+		//DebugBreak();	
+		// calculate the routing table
+		if (_OLSR_MULTIPATH)
+		{
+
+			if (g_iAccumulativeRouteCalculation == 0)
+			{
+
+				OlsrCalculateRoutingTableForMultiPath(node);
+			}
+			else if (g_iAccumulativeRouteCalculation == 1)
+			{
+
+				/*
+				
+				*/
+
+				/*
+				if (olsr->uiConfidentCost >= 3)
+				{
+
+					OlsrCalculateRoutingTableForMultiPathAdv(node);
+				}
+				else
+				{
+
+					//can be more detailed for 1 and 2 cases,
+					//but just skip currently 
+
+					OlsrCalculateRoutingTableForMultiPath(node);
+				}
+				*/
+			}
+			else //g_iAccumulativeRouteCalculation == 2
+			{
+			
+				if (olsr->recent_delete_list != NULL  || olsr->recent_add_list != NULL)
+				{
+					OlsrCalculateRoutingTableForMultiPathAdv(node);
+				}
+				else
+				{
+					OlsrCalculateRoutingTableForMultiPath(node);
+				}
+			}
+			
+		}
+		else
+		{
+
+			if (g_iAccumulativeRouteCalculation == 0)
+			{
+
+				OlsrCalculateRoutingTable(node);
+			}
+			else if (g_iAccumulativeRouteCalculation == 1)
+			{
+
+				/*
+				if (olsr->uiConfidentCost >= 3)
+				{
+	
+					OlsrCalculateRoutingTableAdv(node);					
+				}
+				else
+				{
+
+					//can be more detailed for 1 and 2 cases,
+					//but just skip currently 
+					OlsrCalculateRoutingTable(node);
+				}
+				*/
+
+				if (olsr->recent_delete_list != NULL  || olsr->recent_add_list != NULL)
+				{
+
+					int iAddorDelete = 0;
+
+					if (g_iRunTimeCompare == 1)
+					{
+						iAddorDelete = CmpBreakPoint(node);
+
+
+						CompareRTPre(node);
+					}
+
+					//goes to the branch for g_iAccumulativeRouteCalculation == 1
+					OlsrCalculateRoutingTableAdv(node);
+
+					if (g_iRunTimeCompare == 1)
+					{
+						CompareRT(node, iAddorDelete);
+					}
+				}
+				else
+				{
+					OlsrCalculateRoutingTable(node);
+				}
+
+			}
+			else	//g_iAccumulativeRouteCalculation == 2
+			{
+				/*
+				if (olsr->recent_delete_list != NULL)
+				{
+					//OlsrCalculateRoutingTable(node);
+				}
+				else
+				{
+					//OlsrCalculateRoutingTableAdv(node);	
+				}
+				*/
+
+
+
+				if (olsr->recent_delete_list != NULL  || olsr->recent_add_list != NULL)
+				//if (FALSE)
+				{
+					//OlsrCalculateRoutingTableAdv(node);
+					int iAddorDelete = 0;
+
+					//CmpBreakPoint(node);
+					if (g_iRunTimeCompare == 1)
+					{
+						iAddorDelete = CmpBreakPoint(node);
+						CompareRTPre(node);
+
+
+
+					}
+					else
+					{
+						//CmpBreakPoint(node);
+					}
+					
+					
+					if (olsr->recent_delete_list != NULL && olsr->recent_add_list == NULL)
+					{
+
+						//OlsrCalculateRoutingTable(node);
+						OlsrCalculateRoutingTableAdv(node);
+					}
+					else
+					{
+						//OlsrCalculateRoutingTable(node);
+						OlsrCalculateRoutingTableAdv(node);
+					}					
+				
+
+					if (g_iRunTimeCompare == 1)
+					{
+						CompareRT(node, iAddorDelete);
+					}
+
+					
+
+					
+
+
+				}
+				else
+				{
+					OlsrCalculateRoutingTable(node);
+				}
+			}
+			
+		}
+
+
+		//printf("After OlsrProcessChanges: \n");
+
+		//OlsrPrintRoutingTable(olsr->routingtable);
+
+
         olsr->changes_topology = FALSE;
     }
+
     return 0;
 }
 
@@ -6969,7 +17483,11 @@ void OlsrReleaseTables(
     OlsrReleaseRoutingTable(olsr->routingtable);
 
     OlsrReleaseTopologyTable(node);
-    OlsrRelease2HopNeighborTable(node);
+	
+	//Peter added for combine...
+	OlsrReleaseCombinedTopologyTable(node);
+    
+	OlsrRelease2HopNeighborTable(node);
 }
 
 // /**
@@ -6985,6 +17503,42 @@ static
 void OlsrInitTables(RoutingOlsr *olsr)
 {
     unsigned char index;
+
+
+	//Peter added for support Angle sector
+	olsr->dSectorDegree = 0.0;
+	
+
+	if (g_iSimplifiedTimeTest == 0)
+	{
+
+		olsr->pvt_TTIs = new tc_trace_item[TC_DEFAULT_SIZE];
+		olsr->iTcItemSize = TC_DEFAULT_SIZE;
+
+		memset(olsr->pvt_TTIs, 0, olsr->iTcItemSize * sizeof(tc_trace_item));
+		olsr->iTcItemCnt = 0;
+	}
+	else
+	{
+		olsr->pvt_TTIs = NULL;
+	}
+
+	
+	
+
+	//Peter added for supporting accumulative route calculation
+	olsr->naRecentChangedAddressByTC = 0;
+	olsr->bNeighborChgCausedRemoveFromHigherHop = FALSE;
+	//olsr->bUpdateOldOrAddNew = FALSE;
+	olsr->bDeleteOld = FALSE;
+	olsr->bAddNew = FALSE;
+
+	olsr->recent_add_list = NULL;
+	olsr->recent_delete_list = NULL;
+
+	
+	olsr->uiConfidentCost = 0;
+
 
     // Setting Link set to NULL
     olsr->link_set = NULL;
@@ -7018,6 +17572,7 @@ void OlsrInitTables(RoutingOlsr *olsr)
             0,
             HASHSIZE * sizeof(mid_alias_hash_type));
 
+	
     for (index = 0; index < HASHSIZE; index++)
     {
         olsr->neighbortable.neighborhash[index].neighbor_forw =
@@ -7063,8 +17618,32 @@ void OlsrInitTables(RoutingOlsr *olsr)
         olsr->topologytable[index].topology_destination_forw =
             (topology_destination_entry *) &olsr->topologytable[index];
 
-        olsr->topologytable[index].topology_destination_back =
+		olsr->topologytable[index].topology_destination_back =
             (topology_destination_entry *) &olsr->topologytable[index];
+
+
+		//Peter Added for combine...
+		olsr->combined_topologytable[index].topology_destination_forw =
+			(topology_destination_entry *) &olsr->combined_topologytable[index];
+
+		olsr->combined_topologytable[index].topology_destination_back =
+			(topology_destination_entry *) &olsr->combined_topologytable[index];
+
+
+
+
+
+		if (SYMMETRIC_TOPOLOGY_TABLE)
+		{
+			olsr->sym_topologylasttable[index].topology_last_forw =
+				(topology_last_entry *) &olsr->sym_topologylasttable[index];
+
+			olsr->sym_topologylasttable[index].topology_last_back =
+				(topology_last_entry *) &olsr->sym_topologylasttable[index];
+
+		}
+
+		
 
         olsr->topologylasttable[index].topology_last_forw =
             (topology_last_entry *) &olsr->topologylasttable[index];
@@ -7235,7 +17814,23 @@ void OlsrProcessNeighborsInHelloMsg(
                           printf("Adding entry in two hop neighbor table\n");
                         }
 
-                        olsr->changes_neighborhood = TRUE;
+						{
+							g_iNeighborChgByOlsrProcessNeighborsInHelloMsg++;
+
+							g_iTopologyChgByOlsrProcessNeighborsInHelloMsg++;
+
+						}
+                        
+						//Peter Comment: may need to deal with ###$$$%%%
+						// the add of new 2hop neighbor may cause the cost of the descendants of this 2hop reduce.
+						if (SYMMETRIC_TOPOLOGY_TABLE)
+						{
+
+							insert_into_tco_node_addr_set(&olsr->recent_add_list, message_neighbors->address.interfaceAddr.ipv4);
+						}
+
+						
+						olsr->changes_neighborhood = TRUE;
                         olsr->changes_topology = TRUE;
                         two_hop_neighbor = (neighbor_2_entry *)
                             MEM_malloc(sizeof(neighbor_2_entry));
@@ -7263,7 +17858,17 @@ void OlsrProcessNeighborsInHelloMsg(
                     }
                     else
                     {
-                        olsr->changes_neighborhood = TRUE;
+	                                        {
+							g_iNeighborChgByOlsrProcessNeighborsInHelloMsg++;
+
+							g_iTopologyChgByOlsrProcessNeighborsInHelloMsg++;
+
+						}
+                        
+						//Peter Comment: may need to deal with ###$$$%%% 
+						// may not deal with it, since only add a new 1st neighbor link to already exist 2hop neighbor will not change cost
+
+						olsr->changes_neighborhood = TRUE;
                         olsr->changes_topology = TRUE;
 
                         // linking to this two_hop_neighbor entry
@@ -7298,11 +17903,47 @@ void OlsrPrintTables(
     printf("********************************* Node %d ********************"
             "**************\n", node->nodeId);
 
-    // OlsrPrintDuplicateTable(node);
+
+	// Peter comment: add for debuging
+	/*
+	if (node->nodeId != 1)
+	{
+		return;
+		//DebugBreak();
+	}
+	*/
+
+	//DebugBreak();
+    
+	
+	// OlsrPrintDuplicateTable(node);
     OlsrPrintNeighborTable(node);
     OlsrPrintMprSelectorTable(node);
-    //OlsrPrint2HopNeighborTable(node);
-    OlsrPrintTopologyTable(node);
+    //Peter Modified
+    OlsrPrint2HopNeighborTable(node);
+    
+	if (SYMMETRIC_TOPOLOGY_TABLE)
+	{
+		/*
+		if (node->nodeId == 1)
+		{
+
+			printf("g_iTopologyTableUpdateCount = %d !!!!!!!!!!!!!!!!!!!!! \n");
+		}
+		*/
+
+		OlsrPrintTopologyTableSYM(node);
+	}
+	else
+	{
+		OlsrPrintTopologyTable(node);
+	}
+
+	//OlsrPrintTopologyTable(node);
+
+	OlsrPrintDestTopologyTable(node);
+	//OlsrPrintCombinedTopologyTable(node);
+	
 
     // print MID table
     OlsrPrintMidTable(node);
@@ -8633,6 +19274,36 @@ Int32 OlsrProcessReceivedHello(
         return 1;
     }
 
+	if (SYMMETRIC_TOPOLOGY_TABLE)
+	{
+
+		clear_tco_node_addr_set(&(olsr->recent_delete_list));
+		clear_tco_node_addr_set(&(olsr->recent_add_list));
+
+		olsr->bNeighborChgCausedRemoveFromHigherHop = FALSE;
+	}
+
+	if (SYMMETRIC_TOPOLOGY_TABLE)
+	{
+		//
+		olsr->naRecentChangedAddressByTC = from_addr.interfaceAddr.ipv4;
+
+		/*
+		char timeStr[MAX_STRING_LENGTH];
+		TIME_PrintClockInSecond(getSimTime(node), timeStr, node);
+
+		double dSimTime = atof(timeStr);
+
+		if (dSimTime > 10)
+		{
+			DebugBreak();
+		}
+
+		*/
+
+		
+	}
+
 
     // RFC 3626 Section 7.1.1
 
@@ -8654,8 +19325,15 @@ Int32 OlsrProcessReceivedHello(
           neighbor->neighbor_willingness = message->willingness;
 
           // This flag is set to UP to recalculate MPR set/routing table
+
+		  g_iNeighborChgByOlsrProcessReceivedHello++;
+
+		  //Peter Comment: this change only related to mpr re-calculation, so skip it
+		  
           olsr->changes_neighborhood = TRUE;
           olsr->changes_topology = TRUE;
+
+		  g_iTopologyChgByOlsrProcessReceivedHello++;
 
     }
 
@@ -8680,7 +19358,58 @@ Int32 OlsrProcessReceivedHello(
 
     // Process changes immedeatly in case of MPR updates
     OlsrDestroyHelloMessage(message);
-    OlsrProcessChanges(node);
+    
+
+	char szTextRT[32768] = {0};
+
+	BOOL bRTPrinted = FALSE;
+
+	if (SYMMETRIC_TOPOLOGY_TABLE)
+	{
+		
+		if (olsr->recent_add_list != NULL || olsr->recent_delete_list != NULL)
+		{
+			
+			
+			
+			//if (iRTAddOrDelete == 2 && node->nodeId == 2 && olsr->naRecentChangedAddressByTC == 8 && olsr->recent_delete_list != NULL)
+			//if (iRTAddOrDelete == 2)
+			//if (FALSE)
+			//if (olsr->recent_delete_list != NULL && node->nodeId == 8)
+			//if (olsr->recent_delete_list != NULL)
+			//if (g_iChaseRouteTable == 1 && node->nodeId == 30 && olsr->recent_delete_list == NULL && olsr->naRecentChangedAddressByTC == 29)
+			if (g_iChaseRouteTable == 1)
+			{
+
+				
+				//printf("node->nodeId == 8 && iRTAddOrDelete == 2 && olsr->naRecentChangedAddressByTC == 10 %f \n", dSimTime);
+				
+				bRTPrinted = TRUE;
+
+				memset(szTextRT, 0, 32768 * sizeof(char));
+				PeterChaseTableChg(node, szTextRT, TRUE);
+				//DebugBreak();
+				//DebugBreak();
+			}
+		}
+	}
+	
+	
+	OlsrProcessChanges(node);
+
+	if (SYMMETRIC_TOPOLOGY_TABLE)
+	{
+
+		clear_tco_node_addr_set(&(olsr->recent_delete_list));
+		clear_tco_node_addr_set(&(olsr->recent_add_list));
+
+		olsr->bNeighborChgCausedRemoveFromHigherHop = FALSE;
+	}
+
+	if (g_iChaseRouteTable && bRTPrinted)
+	{
+		PeterChaseTableChg(node, szTextRT, FALSE);
+	}
 
     if (DEBUG)
     {
@@ -9021,6 +19750,8 @@ Int32 OlsrProcessReceivedMid(
             // should recalculate RT
 
             olsr->changes_topology = TRUE;
+
+			g_iTopologyChgByOlsrProcessReceivedMid++;
         }
         mid_addr = mid_addr->next;
     }
@@ -9039,6 +19770,204 @@ Int32 OlsrProcessReceivedMid(
 
     return 0;
 }
+
+
+
+
+
+void PeterChaseTableChg(Node* node, char * szTextRT, BOOL bNotPartialPrint)
+{
+	//char szTextRT[32768] = {0};
+	//memset(szTextRT, 0, 32768 * sizeof(char));
+
+	RoutingOlsr *olsr = (RoutingOlsr* ) node->appData.olsr;
+
+
+	if (bNotPartialPrint)
+	{
+		int iRTAddOrDelete = 0;
+		if (olsr->recent_add_list != NULL)
+		{
+			iRTAddOrDelete = iRTAddOrDelete + 1;
+		}
+
+		if (olsr->recent_delete_list != NULL)
+		{
+
+			iRTAddOrDelete = iRTAddOrDelete + 2;
+		}
+
+
+		
+		sprintf(szTextRT, "\n");
+		sprintf(szTextRT, "%s****************************************************************************************** \n", szTextRT);
+
+		char timeStr[MAX_STRING_LENGTH];
+		TIME_PrintClockInSecond(getSimTime(node), timeStr, node);
+
+		double dSimTime = atof(timeStr);
+
+		
+		
+		
+		
+		
+		int iNeighborChg = 0;
+
+		if (olsr->changes_neighborhood)
+		{
+			iNeighborChg = 1;
+		}
+		
+
+		
+		
+		if (node->nodeId == 71 && iRTAddOrDelete == 1 && olsr->naRecentChangedAddressByTC == 81 && iNeighborChg == 1 
+			&& olsr->bNeighborChgCausedRemoveFromHigherHop == 1 && dSimTime > 19 && dSimTime < 21)
+		{
+			//DebugBreak();
+		}
+		
+		
+		
+
+		//double dInMS = dSimTime * 1000.0;
+
+		sprintf(szTextRT, "%sFor node->nodeId = %d, iRTAddOrDelete = %d, olsr->naRecentChangedAddressByTC = %d, iNeighborChg = %d, olsr->bNeighborChgCausedRemoveFromHigherHop = %d, at time %f S: \n", 
+			szTextRT, node->nodeId, iRTAddOrDelete, olsr->naRecentChangedAddressByTC, iNeighborChg, olsr->bNeighborChgCausedRemoveFromHigherHop, dSimTime);
+	}
+	else
+	{
+
+		sprintf(szTextRT, "%s\n After OlsrProcessChanges for node %d \n", szTextRT, node->nodeId);
+
+	}
+	
+
+	
+
+	OlsrPrintRoutingTable(olsr->routingtable);
+
+	sprintf(szTextRT, "%s%s", szTextRT, g_szTextRT);
+	
+	//sprintf(szTextRT, "%solsr->naRecentChangedAddressByTC = %d \n", szTextRT, olsr->naRecentChangedAddressByTC);
+
+	/*
+	if (olsr->naRecentChangedAddressByTC == 10)
+	{
+
+		//DebugBreak();
+	}
+	*/
+
+
+
+
+	if (bNotPartialPrint)
+	{
+
+		tco_node_addr * tco_add_list_tmp = olsr->recent_add_list;
+
+		sprintf(szTextRT, "%sadd_list: ", szTextRT);
+
+		while (tco_add_list_tmp != NULL)
+		{
+
+			sprintf(szTextRT, "%stco_add_list_tmp->nid = %d  ", szTextRT, tco_add_list_tmp->nid);
+
+			tco_add_list_tmp = tco_add_list_tmp->next;
+		}
+
+		sprintf(szTextRT, "%s\n", szTextRT);
+
+		tco_node_addr * tco_delete_list_tmp = olsr->recent_delete_list;
+
+
+
+		//if (node->nodeId == 8 && olsr->naRecentChangedAddressByTC == 11 && tco_delete_list_tmp != NULL)
+		{
+			//DebugBreak();
+		}
+
+		sprintf(szTextRT, "%sdelete_list: ", szTextRT);
+
+		while (tco_delete_list_tmp != NULL)
+		{
+
+			sprintf(szTextRT, "%stco_delete_list_tmp->nid = %d  ", szTextRT, tco_delete_list_tmp->nid);
+
+			tco_delete_list_tmp = tco_delete_list_tmp->next;
+		}
+
+		sprintf(szTextRT, "%s\n", szTextRT);
+
+		OlsrPrintNeighborTable(node);
+
+		sprintf(szTextRT, "%s%s", szTextRT, g_szTextRT);
+
+		sprintf(szTextRT, "%s\n", szTextRT);
+
+		OlsrPrint2HopNeighborTable(node);
+
+		sprintf(szTextRT, "%s%s", szTextRT, g_szTextRT);
+
+		sprintf(szTextRT, "%s\n", szTextRT);
+
+
+		OlsrPrintTopologyTableSYM(node);
+
+		sprintf(szTextRT, "%s%s", szTextRT, g_szTextRT);
+	}
+	else
+	{
+		FILE* fp = NULL;
+
+		char sTmp[MAX_PATH] = {0};
+
+		ZeroMemory(sTmp, MAX_PATH * sizeof(char));
+
+		sprintf(sTmp, "Speed-%d", g_iMobilitySpeed);
+
+		if (_OLSR_MULTIPATH)
+		{
+
+			sprintf(sTmp, "%s-%s-TraceRT_MP", sTmp, g_szRoot);
+
+		}
+		else
+		{
+
+			sprintf(sTmp, "%s-%s-TraceRT_SP", sTmp, g_szRoot);
+
+		}
+
+		sprintf(sTmp, "%s_ARC_%d", sTmp, g_iAccumulativeRouteCalculation);
+
+
+		fp = fopen(sTmp, "a");
+
+		if (!fp)
+		{
+			ERROR_ReportError("Can't open EstimateTimeComplexity \n");
+		}
+		else
+		{
+
+
+			fprintf(fp, "%s", szTextRT);
+			fclose(fp);
+		}
+	}
+
+	
+
+}
+
+
+
+
+
+
 // /**
 // FUNCTION   :: OlsrProcessReceivedTc
 // LAYER      :: APPLICATION
@@ -9052,6 +19981,11 @@ Int32 OlsrProcessReceivedMid(
 // RETURN :: Int32 : 1 if error, else 0
 // **/
 
+
+
+
+
+
 static
 Int32 OlsrProcessReceivedTc(
     Node* node,
@@ -9060,7 +19994,26 @@ Int32 OlsrProcessReceivedTc(
     Int32 incomingInterface,
     olsrmsg* m)
 {
-    topology_last_entry *t_last;
+
+	//Peter Comment:add for debug
+	
+	char timeStr[MAX_STRING_LENGTH];
+	TIME_PrintClockInSecond(getSimTime(node), timeStr, node);
+
+	double dSimTime = atof(timeStr);
+	
+	
+	/*
+	if (node->nodeId == 1)
+	{
+		DebugBreak();
+	}
+	*/
+
+
+	
+	
+	topology_last_entry *t_last;
 
     RoutingOlsr *olsr = (RoutingOlsr* ) node->appData.olsr;
     Address addr_ip;
@@ -9080,7 +20033,7 @@ Int32 OlsrProcessReceivedTc(
         addr_ip.interfaceAddr.ipv4 =
                         NetworkIpGetInterfaceAddress(node,incomingInterface);
     }
-//#endif
+
 
     olsr->olsrStat.numTcReceived++;
 
@@ -9089,8 +20042,20 @@ Int32 OlsrProcessReceivedTc(
         return 1;
     }
 
+	//Peter modified for testing
+    //if (node->nodeId == 18 && dSimTime > 15.91 && dSimTime < 15.97 && source_addr.interfaceAddr.ipv4 == 34 && message->originator.interfaceAddr.ipv4 == 31)
+	//if (node->nodeId == 20 && dSimTime > 28.0 && dSimTime < 35.0)
     if (DEBUG)
     {
+
+		//DebugBreak();
+		printf("||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||\n\n");
+
+		g_iChaseRouteTable = 0;
+		OlsrPrint2HopNeighborTable(node);
+		//OlsrPrintTopologyTableSYM(node);
+		g_iChaseRouteTable = 1;
+
         char addrString[MAX_STRING_LENGTH];
         IO_ConvertIpAddressToString(&source_addr,
                 addrString);
@@ -9162,11 +20127,52 @@ Int32 OlsrProcessReceivedTc(
         printf("]\n");
     }
 
+	// Peter comment: add for debuging
+	/*
+	if (node->nodeId == 1 && message->originator.interfaceAddr.ipv4 == 3)
+	{
+		DebugBreak();
+	}
+	*/
     // if originator address is the last address in an entry in topology
     // table then return the last topology entry
 
     // RFC Section 9.5 Condition 2
     t_last = OlsrLookupLastTopologyTable(node, message->originator);
+
+	/*
+	if (node->nodeId == 1 && getSimTime(node) > 5)
+	{
+
+		DebugBreak();
+	}
+	*/
+
+
+	if (SYMMETRIC_TOPOLOGY_TABLE)
+	{
+
+		clear_tco_node_addr_set(&(olsr->recent_delete_list));
+		clear_tco_node_addr_set(&(olsr->recent_add_list));
+	}
+
+	olsr->naRecentChangedAddressByTC = GetIPv4Address(message->originator);
+
+	/*
+	if (node->nodeId == 1 && olsr->naRecentChangedAddressByTC == 12)
+	{
+		
+		printf("OlsrProcessReceivedTc node->nodeId = %d, olsr->naRecentChangedAddressByTC = %d \n", node->nodeId, olsr->naRecentChangedAddressByTC);
+
+
+
+		OlsrPrintTopologyTableSYM(node);
+
+		//DebugBreak();
+	}
+	*/
+
+	//printf("OlsrProcessReceivedTc begin \n");
 
     if (t_last != NULL)
     {
@@ -9185,6 +20191,10 @@ Int32 OlsrProcessReceivedTc(
                 printf("TC_message too old\n");
             }
 
+
+
+			//printf("OlsrProcessReceivedTc End A \n");
+
             return 1;
         }
 
@@ -9198,13 +20208,67 @@ Int32 OlsrProcessReceivedTc(
         // For ANSN comparisons use section 19 of RFC
         // current seq. is newer than the last one
 
+		// Peter Modified to test the function
+
+		olsr->bDeleteOld = FALSE;
+		olsr->bAddNew = FALSE;
+
+
         if (SEQNO_GREATER_THAN(message->ansn, t_last->topology_seq))
         {
-            // delete old entry from topology table
+            
+			//Peter comment
+			//figure out the least hop count for these entries to be deleted,
+			//so as to avoid full route calculation
+
+			//Peter added for supporting accumulative route calculation
+			if (!SYMMETRIC_TOPOLOGY_TABLE)
+			{
+				olsr->changes_topology = TRUE;
+
+				g_iTopologyChgByOlsrProcessReceivedTc++;				
+			}
+								
+			// delete old entry from topology table
             OlsrDeleteLastTopolgyTable(t_last);
 
-            olsr->changes_topology = TRUE;
 
+			BOOL bApplyForSymAsWell = TRUE;
+			if (SYMMETRIC_TOPOLOGY_TABLE)
+			{
+				topology_last_entry * t_last_sym = OlsrLookupLastTopologyTableSYM(node, message->originator);
+				if (t_last_sym != NULL)
+				{
+					
+					/*
+					if (node->nodeId == 15 && message->originator.interfaceAddr.ipv4 == 12)
+					{
+						DebugBreak();
+
+						//printf("node->nodeId == 15 && message->originator.interfaceAddr.ipv4 == 12 \n");
+
+					}
+					*/
+						
+					if (OlsrDeleteLastTopolgyTableSYM(node, t_last_sym))
+					{
+						
+					}
+					else
+					{
+						bApplyForSymAsWell = FALSE;
+					}
+					
+				}
+				else
+				{
+					//this branch will never support to be called
+					//printf("!!!!!!!!!!!! this branch should not exist because of the symmetric property in OlsrProcessReceivedTc 1 \n");
+				}		
+
+			}
+
+            
             // We must insert new entries contained in received message
             t_last = (topology_last_entry *)
                     MEM_malloc(sizeof(topology_last_entry));
@@ -9212,32 +20276,285 @@ Int32 OlsrProcessReceivedTc(
             memset(t_last, 0, sizeof(topology_last_entry));
 
             // Condition 4.1
-            OlsrInsertLastTopologyTable(node, t_last, message);
-            OlsrUpdateLastTable(node, t_last, message, addr_ip);
-        }
-        else
+            OlsrInsertLastTopologyTable(node, t_last, message, bApplyForSymAsWell);
+            
+			OlsrUpdateLastTable(node, t_last, message, addr_ip);
+        }        
+		else
         {
+
             // Condition 4.2
             // This the case where t_last->topology_seq == message->ansn, so
             // we must update the time out and create the new dest entries
+			
+			if (!SYMMETRIC_TOPOLOGY_TABLE)
+			{
+				//in fact, for this case, the topology will never change
+				//or else the message->ansn != t_last->topology_seq
 
-            OlsrUpdateLastTable(node, t_last, message, addr_ip);
+			}
+
+			if (SYMMETRIC_TOPOLOGY_TABLE)
+			{
+				topology_last_entry * t_last_sym = OlsrLookupLastTopologyTableSYM(node, message->originator);
+				if (t_last_sym == NULL)
+				{
+					//this branch will never support to be called
+					//why
+					
+					//printf("!!!!!!!!!!!! this branch should not exist because of the symmetric property in OlsrProcessReceivedTc 3 \n");
+					OlsrInsertLastTopologyTableSYM(node, message);
+				}
+			}
+            	
+
+            OlsrUpdateLastTable(node, t_last, message, addr_ip, TRUE);
+
+			//assume it will not change the routing table ???
         }
+		
     }
     else
     {
+
         // Condition 4.1
         // changes_topology will be set to DOWN  after recalculating the
         // routing table
-        olsr->changes_topology = TRUE;
+        
+
+		//Peter comment
+		//figure out whether at least one entry of the mpr has already been in topology
+		//if none of them already exist,then do full route calculation
+
+		olsr->bDeleteOld = FALSE;
+		olsr->bAddNew = FALSE;
+		
+        if (!SYMMETRIC_TOPOLOGY_TABLE)
+		{
+			olsr->changes_topology = TRUE;
+				
+			g_iTopologyChgByOlsrProcessReceivedTc++;
+		}
+
+
         t_last = (topology_last_entry *)
                 MEM_malloc(sizeof(topology_last_entry));
 
         memset(t_last, 0, sizeof(topology_last_entry));
 
-        OlsrInsertLastTopologyTable(node, t_last, message);
+		
+		BOOL bApplyForSymAsWell = FALSE;
+		
+		if (SYMMETRIC_TOPOLOGY_TABLE)
+		{
+			bApplyForSymAsWell = TRUE;
+			
+			topology_last_entry * t_last_sym = OlsrLookupLastTopologyTableSYM(node, message->originator);
+			if (t_last_sym != NULL)
+			{
+				
+				bApplyForSymAsWell = FALSE;	
+				//printf("!!!!!!!!!!!! this branch may exist because of the symmetric property in OlsrProcessReceivedTc 2 \n");			
+			}
+			else
+			{
+				
+				//printf("!!!!!!!!!!!! this branch may exist because of the symmetric property in OlsrProcessReceivedTc 2 \n");
+			}
+		
+			if (bApplyForSymAsWell)
+			{
+
+				insert_into_tco_node_addr_set(&(olsr->recent_add_list), GetIPv4Address(message->originator));
+			}
+
+		}
+
+        OlsrInsertLastTopologyTable(node, t_last, message, bApplyForSymAsWell);
+
         OlsrUpdateLastTable(node, t_last, message, addr_ip);
     }
+
+	BOOL bRTPrinted = FALSE;
+
+
+	//
+	//if (node->nodeId == 28 && dSimTime > 15.91 && dSimTime < 15.97 && source_addr.interfaceAddr.ipv4 == 34  && message->originator.interfaceAddr.ipv4 == 31)
+	if (DEBUG)
+	{
+		g_iChaseRouteTable = 0;
+		OlsrPrintTopologyTableSYM(node);
+		g_iChaseRouteTable = 1;
+
+
+		printf("================================================================\n\n");
+	}
+
+	char szTextRT[32768]; 
+
+	
+
+	
+	int iRTAddOrDelete = 0;
+	
+
+	if (SYMMETRIC_TOPOLOGY_TABLE)
+	{
+		
+		if (olsr->recent_add_list != NULL || olsr->recent_delete_list != NULL)
+		{
+			
+			/*
+			if (olsr->recent_add_list)
+			{
+				iRTAddOrDelete = iRTAddOrDelete + 1;
+			}
+
+			if (olsr->recent_delete_list)
+			{
+				iRTAddOrDelete = iRTAddOrDelete + 2;
+			}
+
+			*/
+
+			
+			
+			if (node->nodeId == 76 && olsr->naRecentChangedAddressByTC == 39 && olsr->recent_add_list != NULL && olsr->recent_delete_list != NULL && dSimTime > 27.0 && dSimTime < 28.0)
+			{
+
+				//DebugBreak();
+			}
+			
+			
+			
+			
+			//if (iRTAddOrDelete == 2 && node->nodeId == 2 && olsr->naRecentChangedAddressByTC == 8 && olsr->recent_delete_list != NULL)
+			//if (iRTAddOrDelete == 2)
+			
+			//if (olsr->recent_delete_list != NULL && node->nodeId == 8)
+			//if (olsr->recent_delete_list != NULL)
+			//if (g_iChaseRouteTable == 1 && node->nodeId == 30 && iRTAddOrDelete == 3 && olsr->naRecentChangedAddressByTC == 16)
+			
+			
+			//if (FALSE)
+			if (g_iChaseRouteTable == 1)
+			{
+
+				//DebugBreak();
+				//printf("node->nodeId == 8 && iRTAddOrDelete == 2 && olsr->naRecentChangedAddressByTC == 10 %f \n", dSimTime);
+				
+				bRTPrinted = TRUE;
+
+				memset(szTextRT, 0, 32768 * sizeof(char));
+				PeterChaseTableChg(node, szTextRT, TRUE);
+				//DebugBreak();
+			}
+			
+
+
+			olsr->changes_topology = TRUE;
+
+			g_iTopologyChgByOlsrProcessReceivedTc++;
+
+
+			if (g_iAccumulativeRouteCalculation == 0)
+			{
+
+			}
+			else if (g_iAccumulativeRouteCalculation == 1)
+			{
+			
+				/*
+				UInt16 uiMin = 10000;
+
+				BOOL bExistCannotFound = FALSE;
+
+				tco_node_addr * tco_add_list_tmp = olsr->recent_add_list;			
+				while (tco_add_list_tmp != NULL)
+				{
+
+					Int16 iHopCnt = ProcessRoutingTableAccordingToTC(node, tco_add_list_tmp->nid, FALSE);
+
+					if (iHopCnt == -1)
+					{
+						//can not find
+						bExistCannotFound = TRUE;
+					}
+					else
+					{
+
+						uiMin = min(((int)uiMin), ((int)iHopCnt));
+					}
+
+					tco_add_list_tmp = tco_add_list_tmp->next;
+				}
+
+
+				tco_node_addr * tco_delete_list_tmp = olsr->recent_delete_list;
+				while (tco_delete_list_tmp != NULL)
+				{
+
+					Int16 iHopCnt = ProcessRoutingTableAccordingToTC(node, tco_delete_list_tmp->nid, FALSE);
+
+					if (iHopCnt == -1)
+					{
+						//can not find
+						bExistCannotFound = TRUE;
+					}
+					else
+					{
+
+						uiMin = min(((int)uiMin), ((int)iHopCnt));
+					}
+
+					tco_delete_list_tmp = tco_delete_list_tmp->next;
+				}
+
+
+				if (uiMin != 10000)
+				{
+
+					olsr->uiConfidentCost = uiMin;
+					if (olsr->uiConfidentCost > 1)
+					{
+						if (bExistCannotFound)
+						{
+
+							olsr->uiConfidentCost = max(olsr->uiConfidentCost - 3, 0);
+						}
+						else
+						{
+
+							olsr->uiConfidentCost = max(olsr->uiConfidentCost - 1, 0);
+						}						
+					}
+					else
+					{
+
+						olsr->uiConfidentCost = 0;
+					}
+				}
+				else
+				{
+					
+					olsr->uiConfidentCost = 0;
+				}
+
+				//if (node->nodeId == 1)
+				{
+					printf("olsr->uiConfidentCost = %d \n", olsr->uiConfidentCost);
+					printf("****************************************************************************************************** \n");
+					printf("****************************************************************************************************** \n");
+				}
+				*/
+			}
+			else //g_iAccumulativeRouteCalculation == 2
+			{
+				
+			}			
+		}
+	}
+
 
     // Call forwarding function here...
     OlsrForwardMessage(node,
@@ -9245,6 +20562,7 @@ Int32 OlsrProcessReceivedTc(
         message->originator,
         message->packet_seq_number,
         incomingInterface,source_addr);
+
     OlsrDestroyTcMessage(message);
 
     if (DEBUG)
@@ -9252,7 +20570,49 @@ Int32 OlsrProcessReceivedTc(
         OlsrPrintTopologyTable(node);
     }
 
+
+	if (FALSE)
+	//if (bRTPrinted)
+	{
+
+		printf("Before OlsrProcessChanges for node %d, iRTAddOrDelete = %d \n", node->nodeId, iRTAddOrDelete);
+
+		OlsrPrintRoutingTable(olsr->routingtable);
+	}
+
     OlsrProcessChanges(node);
+
+
+
+	if (SYMMETRIC_TOPOLOGY_TABLE)
+	{
+
+		clear_tco_node_addr_set(&(olsr->recent_delete_list));
+		clear_tco_node_addr_set(&(olsr->recent_add_list));
+	}
+
+
+	//if(FALSE)
+	if (bRTPrinted && g_iChaseRouteTable == 1)
+	{
+
+		PeterChaseTableChg(node, szTextRT, FALSE);
+
+		
+		//OlsrPrintRoutingTable(olsr->routingtable);
+
+		//sprintf(szTextRT, "%s%s", szTextRT, g_szTextRT);
+
+
+		
+
+
+		
+	}
+
+
+	//printf("OlsrProcessReceivedTc End B \n");
+
     return 0;
 }
 
@@ -10271,6 +21631,59 @@ void OlsrPrintTraceXML(
 static
 void OlsrInitTrace(Node* node, const NodeInput* nodeInput)
 {
+
+	//Peter Added for test
+
+	
+
+	if (g_iNeighborChangeCnt == -1 && g_iTopologyChangeCnt == -1 && g_iBothChg == -1)
+	{
+
+		g_iNeighborChangeCnt = 0;
+		g_iTopologyChangeCnt = 0;
+		g_iBothChg = 0;
+
+		g_iNeighborChgByOlsrInsertMidAlias = 0;
+		//g_iNeighborChgByOlsrUpdateNeighborStatus = 0;
+		g_iNeighborChgByOlsrTimeoutLinkEntry = 0;
+		g_iNeighborChgByOlsrTimeout2HopNeighbors = 0;
+		g_iNeighborChgByOlsrProcessNeighborsInHelloMsg = 0;
+		g_iNeighborChgByOlsrProcessReceivedHello = 0;
+
+
+
+		g_iTopologyChgByOlsrInsertMidAlias = 0;
+		g_iTopologyChgByOlsrUpdateHnaEntry = 0;
+		//g_iTopologyChgByOlsrUpdateNeighborStatus = 0;
+		g_iTopologyChgByOlsrTimeout2HopNeighbors = 0;
+		g_iTopologyChgByOlsrUpdateLastTable = 0;
+		g_iTopologyChgByOlsrTimeoutTopologyTable = 0;
+		g_iTopologyChgByOlsrProcessNeighborsInHelloMsg = 0;
+		g_iTopologyChgByOlsrProcessReceivedHello = 0;
+		g_iTopologyChgByOlsrProcessReceivedMid = 0;
+		g_iTopologyChgByOlsrProcessReceivedTc = 0;
+
+		g_iTopologyChgByOlsrProcessReceivedTcAddNew = 0;
+		g_iTopologyChgByOlsrProcessReceivedTcDeleteOld = 0;
+
+		g_iTopologyChgApplyARC = 0;
+
+		g_iNeighborhoodChgApplyARC = 0;
+
+		g_iTopologyChgApplyNormal = 0;
+
+
+
+		g_iTopologyChgApplyARC_With_Delete = 0;	
+		g_iTopologyChgApplyARC_With_Delete_Success = 0;
+		g_iTopologyChgApplyARC_With_Delete_Failed_Cause_Rediscovery = 0;
+	
+
+	}
+
+
+
+
     char buf[MAX_STRING_LENGTH];
     BOOL retVal;
     BOOL traceAll = TRACE_IsTraceAll(node);
@@ -10319,6 +21732,136 @@ void OlsrInitTrace(Node* node, const NodeInput* nodeInput)
            TRACE_DisableTraceXML(node, TRACE_OLSR,
                "OLSR", writeMap);
     }
+
+	if (OLSR_FORWARDIND_PATH_DEBUG_TRACE)
+	{
+		// Empty or create a file named aodv.trace to print the packet
+		// contents
+		
+		if (g_szOutputRouteChaseFileName != NULL && 0 != strlen(g_szOutputRouteChaseFileName))
+		{
+
+
+			FILE* fp_trace = fopen(g_szOutputRouteChaseFileName, "w");
+			fclose(fp_trace);
+		}
+		
+		
+		FILE* fp = fopen("olsr_routing_path.trace", "w");
+		fclose(fp);
+
+	}
+
+	if (_TEST_TIME_COMPLEXITY || FORWARD_WITH_PURE_ROUTE_TABLE)
+	{
+
+		if (g_szRoot == NULL)
+		{
+
+			g_szRoot = new char[MAX_PATH];
+			ZeroMemory(g_szRoot, MAX_PATH * sizeof(char));
+
+
+			FILE* fpi = fopen("olsrTC.file", "r");
+			if (!fpi) 
+			{
+
+			}
+			else
+			{
+				
+				char sLine[MAX_PATH] = {0};
+
+				char sEqualSign[MAX_PATH] = {0};
+				char sTmp[MAX_PATH] = {0};
+
+				char szMatchSTART_NODE_ID[MAX_PATH] = "START_NODE_ID";
+				char szMatchEND_NODE_ID[MAX_PATH] = "END_NODE_ID";
+				char szMatchROOT[MAX_PATH] = "ROOT";
+					
+				char szMatchSpeed[MAX_PATH] = "SPEED";
+
+				while(!feof(fpi))
+				{ 
+
+					ZeroMemory(sLine, MAX_PATH * sizeof(char));
+
+					fgets(sLine, MAX_PATH, fpi);
+
+					ZeroMemory(sTmp, MAX_PATH * sizeof(char));
+					ZeroMemory(sEqualSign, MAX_PATH * sizeof(char));
+
+				
+					if (0 == strncmp(sLine, szMatchSTART_NODE_ID, strlen(szMatchSTART_NODE_ID)))
+					{
+						sscanf(sLine + strlen(szMatchSTART_NODE_ID), "%s %s", sEqualSign, sTmp);
+
+						NODE_ID_FOR_TEST_START = atoi(sTmp);
+
+					}
+					else if (0 == strncmp(sLine, szMatchEND_NODE_ID, strlen(szMatchEND_NODE_ID)))
+					{
+						sscanf(sLine + strlen(szMatchEND_NODE_ID), "%s %s", sEqualSign, sTmp);
+
+						NODE_ID_FOR_TEST_END = atoi(sTmp);
+					}
+					else if (0 == strncmp(sLine, szMatchROOT, strlen(szMatchROOT)))
+					{
+						sscanf(sLine + strlen(szMatchROOT), "%s %s", sEqualSign, g_szRoot);
+						
+					}
+		                        else if (0 == strncmp(sLine, szMatchSpeed, strlen(szMatchSpeed)))
+					{
+						sscanf(sLine + strlen(szMatchSpeed), "%s %s", sEqualSign, sTmp);
+
+						g_iMobilitySpeed = (int)atoi(sTmp);
+					}
+
+				}		
+
+				if (fpi) 
+				{
+
+					fclose(fpi);
+				}
+
+
+
+			}
+
+
+			char sTmp[MAX_PATH] = {0};
+			ZeroMemory(sTmp, MAX_PATH * sizeof(char));
+
+                        sprintf(sTmp, "Speed-%d", g_iMobilitySpeed);
+
+			if (_OLSR_MULTIPATH)
+			{
+
+				sprintf(sTmp, "%s-%s-EstimateTimeComplexity_MP", sTmp, g_szRoot);
+
+			}
+			else
+			{
+
+				sprintf(sTmp, "%s-%s-EstimateTimeComplexity_SP", sTmp, g_szRoot);
+
+			}
+
+			
+
+			sprintf(sTmp, "%s_ARC_%d_%d", sTmp, g_iAccumulativeRouteCalculation, g_iToAchieveSameRoute);
+
+			FILE* fp_time_complexity = fopen(sTmp, "w");
+			fclose(fp_time_complexity);
+
+
+		}
+
+	}
+
+	
+
     writeMap = FALSE;
 }
 
@@ -10339,7 +21882,20 @@ void RoutingOlsrInriaInit(
     Int32 interfaceIndex,
     NetworkType networkType)
 {
-    RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+
+	//Peter added for support trace
+   	
+	/*
+	if (_TEST_TIME_COMPLEXITY && g_strTxt == NULL)
+	{
+
+		g_strTxt = new char[File_Buf_Size];
+		memset(g_strTxt, 0, File_Buf_Size * sizeof(char));
+	}
+	*/
+	
+	
+	RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
     unsigned char index;
     char errStr[MAX_STRING_LENGTH];
 
@@ -10352,6 +21908,13 @@ void RoutingOlsrInriaInit(
         memset(olsr, 0, sizeof(RoutingOlsr));
 
         node->appData.olsr = (void *) olsr;
+
+
+		//Peter added for support route cache
+		ZeroMemory(&olsr->rci, sizeof(RouteCacheItem));
+
+
+
 
         // initialize sequence number
         olsr->numOlsrInterfaces = 1;
@@ -10380,6 +21943,42 @@ void RoutingOlsrInriaInit(
         olsr->olsrStat.numHnaGenerated = 0;
         olsr->olsrStat.numHnaRelayed = 0;
         olsr->statsPrinted = FALSE;
+
+
+
+		if (g_iRunTimeCompare == 1)
+		{
+						
+			olsr->pszInfo = new char[INFO_SIZE];
+			
+			olsr->pszOrigRT = new char[RT_SIZE];
+			olsr->pszMiddleRT = new char[RT_SIZE];
+			olsr->pszRTWithARC = new char[RT_SIZE];
+			olsr->pszRTWithoutARC = new char[RT_SIZE];
+
+			olsr->pszOtherTables = new char[RT_SIZE];
+		}
+		else
+		{
+			olsr->pszInfo = NULL;
+
+			olsr->pszOrigRT = NULL;
+			olsr->pszMiddleRT = NULL;
+			olsr->pszRTWithARC = NULL;
+			olsr->pszRTWithoutARC = NULL;
+
+			olsr->pszOtherTables = NULL;
+		}
+
+
+		olsr->dRCRealRuntime = 0.0;
+		//olsr->uiRCCount = 0;
+		olsr->uiRCNormalCount = 0;
+		olsr->uiRCAdvCount = 0;
+
+		olsr->dRecentRCStartTime = 0.0;
+		olsr->dRecentRCEndTime = 0.0;
+
 
         // Initialisation of differents tables to be used.
         OlsrInitTables(olsr);
@@ -11108,9 +22707,134 @@ void RoutingOlsrPrintStat(Node *node)
 // + interfaceId : Int32 : interface index
 // RETURN :: void : NULL
 // **/
-void RoutingOlsrInriaFinalize(Node * node, Int32 )
+void RoutingOlsrInriaFinalize(Node * node, Int32 interfaceId)
 {
-    RoutingOlsr*  olsr = (RoutingOlsr* ) node->appData.olsr;
+    //Peter added for support..
+
+	if (g_iNeighborChangeCnt != -1 || g_iTopologyChangeCnt != -1 || g_iBothChg != -1)
+	{
+		memset(g_szText, 0, 4096 * sizeof(char));
+
+		sprintf(g_szText, "\n\n");
+
+		sprintf(g_szText, "%sg_iNeighborChangeCnt = %d, g_iTopologyChangeCnt = %d, g_iBothChg = %d \n", g_szText,
+			g_iNeighborChangeCnt, g_iTopologyChangeCnt, g_iBothChg);
+
+
+		sprintf(g_szText, "%s\n\n", g_szText);
+
+		sprintf(g_szText, "%sg_iNeighborChgByOlsrInsertMidAlias = %d, \n g_iNeighborChgByOlsrTimeoutLinkEntry = %d, g_iNeighborChgByOlsrTimeout2HopNeighbors = %d, \n g_iNeighborChgByOlsrProcessNeighborsInHelloMsg = %d, g_iNeighborChgByOlsrProcessReceivedHello = %d \n", g_szText,
+			g_iNeighborChgByOlsrInsertMidAlias, //g_iNeighborChgByOlsrUpdateNeighborStatus, 
+			g_iNeighborChgByOlsrTimeoutLinkEntry, g_iNeighborChgByOlsrTimeout2HopNeighbors,
+			g_iNeighborChgByOlsrProcessNeighborsInHelloMsg, g_iNeighborChgByOlsrProcessReceivedHello);
+
+
+		sprintf(g_szText, "%s\n\n", g_szText);
+
+		sprintf(g_szText, "%sg_iTopologyChgByOlsrInsertMidAlias = %d, g_iTopologyChgByOlsrUpdateHnaEntry = %d,\n g_iTopologyChgByOlsrTimeout2HopNeighbors = %d, \n g_iTopologyChgByOlsrUpdateLastTable = %d g_iTopologyChgByOlsrTimeoutTopologyTable = %d, \n g_iTopologyChgByOlsrProcessNeighborsInHelloMsg = %d, g_iTopologyChgByOlsrProcessReceivedHello = %d, \n g_iTopologyChgByOlsrProcessReceivedMid = %d, g_iTopologyChgByOlsrProcessReceivedTc = %d \n g_iTopologyChgByOlsrProcessReceivedTcAddNew = %d, g_iTopologyChgByOlsrProcessReceivedTcDeleteOld = %d \n", g_szText,
+			g_iTopologyChgByOlsrInsertMidAlias, g_iTopologyChgByOlsrUpdateHnaEntry,
+			//g_iTopologyChgByOlsrUpdateNeighborStatus, 
+			g_iTopologyChgByOlsrTimeout2HopNeighbors,
+			g_iTopologyChgByOlsrUpdateLastTable, 
+			g_iTopologyChgByOlsrTimeoutTopologyTable,
+			g_iTopologyChgByOlsrProcessNeighborsInHelloMsg, g_iTopologyChgByOlsrProcessReceivedHello,
+			g_iTopologyChgByOlsrProcessReceivedMid, g_iTopologyChgByOlsrProcessReceivedTc,
+			g_iTopologyChgByOlsrProcessReceivedTcAddNew, g_iTopologyChgByOlsrProcessReceivedTcDeleteOld			
+			);
+
+
+		sprintf(g_szText, "%sg_iTopologyChgApplyNormal = %d      g_iTopologyChgApplyARC = %d      g_iNeighborhoodChgApplyARC = %d \n", 
+			g_szText, g_iTopologyChgApplyNormal, g_iTopologyChgApplyARC, g_iNeighborhoodChgApplyARC);
+
+		
+
+		/*
+		sprintf(g_szText, "%sg_iTopologyChgApplyARC_With_Delete = %d, g_iTopologyChgApplyARC_With_Delete_Success = %d, g_iTopologyChgApplyARC_With_Delete_Failed_Cause_Rediscovery = %d \n", 
+			g_szText, g_iTopologyChgApplyARC_With_Delete, g_iTopologyChgApplyARC_With_Delete_Success, g_iTopologyChgApplyARC_With_Delete_Failed_Cause_Rediscovery);
+		*/
+
+
+		//if (FALSE)
+		if (FORWARD_WITH_PURE_ROUTE_TABLE == 1)
+		{
+			
+			//if (fp_rtrace == NULL)
+			{
+				FILE* fpi = fopen("sub.file", "r");
+				if (!fpi) 
+				{
+
+				}
+				else
+				{
+
+					char sLine[MAX_PATH] = {0};
+
+					char sEqualSign[MAX_PATH] = {0};
+					char sTmp[MAX_PATH] = {0};
+
+					char szMatchEXPERIMENTNAME[MAX_PATH] = "EXPERIMENT-NAME";
+
+					while(!feof(fpi))
+					{ 
+
+						ZeroMemory(sLine, MAX_PATH * sizeof(char));
+
+						fgets(sLine, MAX_PATH, fpi);
+
+						ZeroMemory(sTmp, MAX_PATH * sizeof(char));
+						ZeroMemory(sEqualSign, MAX_PATH * sizeof(char));
+
+
+						if (0 == strncmp(sLine, szMatchEXPERIMENTNAME, strlen(szMatchEXPERIMENTNAME)))
+						{
+							sscanf(sLine + strlen(szMatchEXPERIMENTNAME), "%s", sTmp);
+
+							//NODE_ID_FOR_TEST_START = atoi(sTmp);
+							//printf("g_OverallipOutNoRoutes = %d \n", g_OverallipOutNoRoutes);
+
+							FILE* fpiii = fopen(sTmp, "a");
+
+							if (fpiii)
+							{
+								fprintf(fpiii, "g_OverallipOutNoRoutes = %d \n", g_OverallipOutNoRoutes);
+								//fprintf(fpiii, "g_iToAchieveSameRoute = %d, g_iAccumulativeRouteCalculation = %d  \n", g_iToAchieveSameRoute, g_iAccumulativeRouteCalculation);
+
+								fclose(fpiii);
+							}
+
+
+
+						}
+					}
+
+					fclose(fpi);
+				}
+			}
+			
+			
+			
+		}
+		
+
+		printf("SEED = %d, g_OverallipOutNoRoutes = %d g_iMobilitySpeed = %d g_iAccumulativeRouteCalculation = %d \n", 
+			node->globalSeed, g_OverallipOutNoRoutes, g_iMobilitySpeed, g_iAccumulativeRouteCalculation);
+
+		
+
+
+		g_iNeighborChangeCnt = -1;
+		g_iTopologyChangeCnt = -1;
+
+		g_iBothChg = -1;
+
+	}
+	
+
+	
+	
+	
+	RoutingOlsr*  olsr = (RoutingOlsr* ) node->appData.olsr;
     if (!olsr->statsPrinted)
     {
         RoutingOlsrPrintStat(node);
@@ -11118,10 +22842,220 @@ void RoutingOlsrInriaFinalize(Node * node, Int32 )
 
         if (DEBUG_OUTPUT)
         {
-            OlsrPrintTables(node);
-            // NetworkPrintForwardingTable(node);
-        }
+			//Peter modified 
+			//OlsrPrintTables(node);
+            //NetworkPrintForwardingTable(node);
+        
+			//OlsrPrintRoutingTable(olsr->routingtable);
+		}
     }
+
+
+	if (g_iRunTimeCompare == 1)
+	{
+		
+		if (olsr->pszInfo != NULL)
+		{
+			delete [] olsr->pszInfo;
+			olsr->pszInfo = NULL;
+		}
+
+		if (olsr->pszOrigRT != NULL)
+		{
+			delete [] olsr->pszOrigRT;
+			olsr->pszOrigRT = NULL;
+		}
+
+		if (olsr->pszMiddleRT != NULL)
+		{
+			delete [] olsr->pszMiddleRT;
+			olsr->pszMiddleRT = NULL;
+		}
+
+		if (olsr->pszRTWithARC != NULL)
+		{
+			delete [] olsr->pszRTWithARC;
+			olsr->pszRTWithARC = NULL;
+		}
+
+		if (olsr->pszRTWithoutARC != NULL)
+		{
+			delete [] olsr->pszRTWithoutARC;
+			olsr->pszRTWithoutARC = NULL;
+		}
+		
+
+		if (olsr->pszOtherTables != NULL)
+		{
+			delete [] olsr->pszOtherTables;
+			olsr->pszOtherTables = NULL;
+		}
+
+	}
+
+
+	if (_TEST_TIME_COMPLEXITY)
+	//if (_TEST_TIME_COMPLEXITY && g_strTxt != NULL)
+	{
+		
+		FILE* fp = NULL;
+
+		char sTmp[MAX_PATH] = {0};
+
+		ZeroMemory(sTmp, MAX_PATH * sizeof(char));
+
+		sprintf(sTmp, "Speed-%d", g_iMobilitySpeed);
+
+		if (_OLSR_MULTIPATH)
+		{
+
+			sprintf(sTmp, "%s-%s-EstimateTimeComplexity_MP", sTmp, g_szRoot);
+
+		}
+		else
+		{
+
+			sprintf(sTmp, "%s-%s-EstimateTimeComplexity_SP", sTmp, g_szRoot);
+
+		}
+
+		sprintf(sTmp, "%s_ARC_%d_%d", sTmp, g_iAccumulativeRouteCalculation, g_iToAchieveSameRoute);
+
+
+		fp = fopen(sTmp, "a");
+			
+
+		if (!fp)
+		{
+			ERROR_ReportError("Can't open EstimateTimeComplexity \n");
+		}
+		else
+		{
+
+			char sOutputStemStr[MAX_PATH] = {0};
+
+			ZeroMemory(sOutputStemStr, MAX_PATH * sizeof(char));
+
+			if (_OLSR_MULTIPATH)
+			{
+				
+				sprintf(sOutputStemStr, "OlsrCalculateRoutingTableForMultiPath");
+			}
+			else
+			{
+				sprintf(sOutputStemStr, "OlsrCalculateRoutingTable");
+			}
+
+			
+			if (g_iSimplifiedTimeTest == 1)
+			{
+				char sOutputStr[MAX_PATH] = {0};
+
+				ZeroMemory(sOutputStr, MAX_PATH * sizeof(char));
+
+
+
+				sprintf(sOutputStr, "%s", sOutputStemStr);
+
+				/*
+				if (ptti->bIsAdvOrNot)
+				{
+					sprintf(sOutputStr, "%sAdv", sOutputStr);
+				}
+				else
+				{
+					sprintf(sOutputStr, "%s___", sOutputStr);
+				}
+				*/
+
+				double dAvgRealRunTime = olsr->dRCRealRuntime / (double)(olsr->uiRCNormalCount + olsr->uiRCAdvCount);
+
+				sprintf(sOutputStr, "%s for node %d : ", sOutputStr, node->nodeId);
+				sprintf(sOutputStr, "%s     dRCRealRuntime =         %f           uiRCNormalCount =        %d          uiRCAdvCount = %d          dAvgRealRunTime = %f \n", 
+					sOutputStr, olsr->dRCRealRuntime, olsr->uiRCNormalCount, olsr->uiRCAdvCount, dAvgRealRunTime);
+
+				fprintf(fp, "%s", sOutputStr);
+			}
+			else
+			{
+				for (int i = 0; i < olsr->iTcItemCnt; i++)
+				{
+
+					tc_trace_item * ptti = &(olsr->pvt_TTIs[i]);
+
+					char sOutputStr[MAX_PATH] = {0};
+
+					ZeroMemory(sOutputStr, MAX_PATH * sizeof(char));
+
+
+
+					sprintf(sOutputStr, "%s", sOutputStemStr);
+
+
+
+					if (ptti->bIsAdvOrNot)
+					{
+						sprintf(sOutputStr, "%sAdv", sOutputStr);
+					}
+					else
+					{
+						sprintf(sOutputStr, "%s___", sOutputStr);
+					}
+
+					sprintf(sOutputStr, "%s for node %d : ", sOutputStr, node->nodeId);
+					sprintf(sOutputStr, "%s      CurrentSimTime =        %f            RealTimeSpent =         %f           CombinedCnt =        %d  \n", sOutputStr, ptti->dCurrentSimTime, ptti->dRealTimeDuration, ptti->iCombinedCnt);
+
+					fprintf(fp, "%s", sOutputStr);
+				}
+
+
+
+				if (olsr->iTcItemSize != 0)
+				{
+
+					delete [] olsr->pvt_TTIs;
+				}
+			}
+
+
+			
+			if (node->nodeId == NODE_ID_FOR_TEST_END)
+			{
+				fprintf(fp, "%s", g_szText);
+				
+			}
+			
+			//fprintf(fp, "%s", g_strTxt);
+
+			fclose(fp);
+		}
+
+	
+
+
+		if (node->nodeId == NODE_ID_FOR_TEST_END)
+		{
+			if (g_szRoot != NULL)
+			{
+				delete [] g_szRoot;
+
+				g_szRoot = NULL;
+			}
+			
+
+			/*
+			if (g_strTxt != NULL)
+			{
+				
+				delete [] g_strTxt;
+				g_strTxt = NULL;
+			}
+			*/
+		}
+		
+
+		
+	}
 }
 
 // /**
@@ -11142,8 +23076,6 @@ void RoutingOlsrInriaLayer(Node *node, Message *msg)
         MESSAGE_Free(node, msg);
         return;
     }
-
-
 
      switch (msg->eventType)
     {
@@ -11181,7 +23113,8 @@ void RoutingOlsrInriaLayer(Node *node, Message *msg)
 
             break;
         }
-        case MSG_APP_OlsrPeriodicTc:
+        
+		case MSG_APP_OlsrPeriodicTc:
         {
             // tc periodic message expired. Generate tc message and set
             // same timer for next refresh
@@ -11217,7 +23150,8 @@ void RoutingOlsrInriaLayer(Node *node, Message *msg)
 
             break;
         }
-        case MSG_APP_OlsrPeriodicMid:
+        
+		case MSG_APP_OlsrPeriodicMid:
         {
             RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
             // Generate and send MID message for multiple olsr-interfaces
@@ -11257,6 +23191,7 @@ void RoutingOlsrInriaLayer(Node *node, Message *msg)
 
             break;
         }
+
         case MSG_APP_OlsrPeriodicHna:
         {
             RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
@@ -11306,7 +23241,8 @@ void RoutingOlsrInriaLayer(Node *node, Message *msg)
 
             break;
         }
-        case MSG_APP_FromTransport:
+        
+		case MSG_APP_FromTransport:
         {
             // OLSR message received from Transport layer
             RoutingOlsrHandlePacket(node, msg);
@@ -11409,7 +23345,8 @@ void RoutingOlsrInriaLayer(Node *node, Message *msg)
                          olsr->mid_hold_time);
             break;
         }
-        case MSG_APP_OlsrHnaHoldTimer:
+        
+		case MSG_APP_OlsrHnaHoldTimer:
         {
             // HNA hold timer message expired. Refresh mid table
             // and resend send the hold timer message again
@@ -11440,4 +23377,15127 @@ void RoutingOlsrInriaLayer(Node *node, Message *msg)
         }
     }
  }
+
+double RetrieveSourceToDestDirection(Node* node, NodeAddress na_dest)
+{
+
+	double dWeightedDirection = 0.0;
+
+	rt_entry* destination;
+	rthash* routing_hash;
+
+	UInt32 hash;
+
+	RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+
+	Address aDest;
+
+
+	SetIPv4AddressInfo(&aDest, na_dest);
+
+	OlsrHashing(aDest, &hash);
+	routing_hash = &olsr->routingtable[hash % HASHMASK];
+
+	rt_entry* First_destination = NULL;
+
+
+	for (destination = routing_hash->rt_back;
+		destination != (rt_entry* ) routing_hash;
+		destination = destination->rt_back)
+	{
+		if (destination->rt_hash != hash)
+		{
+
+			continue;
+		}
+
+		if (First_destination == NULL)
+		{
+			First_destination = destination;
+
+                        double dRWON = 0.0;
+
+						if (_TEST_TIME_COMPLEXITY)
+						{
+                             dRWON = First_destination->rt_entry_infos.related_neighbor->neighbor_infos.dDegreeWRTNode;
+						}
+						else
+						{
+							
+							dRWON = First_destination->rt_entry_infos.rtu_DegreeWRTNode;
+
+						}
+						
+
+					dWeightedDirection = RadiusDegreeDifference(First_destination->rt_entry_infos.oa_dWeightedDirectionDiffer + dRWON, 0);
+		
+			break;
+		}
+	}
+
+	return dWeightedDirection;
+}
+
+
+rt_entry* QueryRoutingTableAccordingToNodeId(Node* node, NodeAddress na_tc, NodeAddress * pnaRoute, rthash** prhRetrieve, rt_entry** ppre)
+{
+
+	//printf("QueryRoutingTableAccordingToNodeId begin \n");
+
+	//Int16 uiConfidentHopCount = -1;
+
+	//return uiConfidentHopCount;
+
+	rt_entry* First_destination = NULL;
+
+	rt_entry* Conclude_destination = NULL;
+
+
+	rt_entry* destination;
+	rthash* routing_hash;
+
+	UInt32 hash;
+
+	RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+
+	Address aDest;
+
+
+	SetIPv4AddressInfo(&aDest, na_tc);
+
+	OlsrHashing(aDest, &hash);
+	routing_hash = &olsr->routingtable[hash % HASHMASK];
+
+	if (prhRetrieve != NULL)
+	{
+		*prhRetrieve = routing_hash;
+	}
+
+
+	for (destination = routing_hash->rt_back;
+		destination != (rt_entry* ) routing_hash;
+		destination = destination->rt_back)
+	{
+		if (destination->rt_hash != hash)
+		{
+
+			continue;
+		}
+
+		if (Conclude_destination == NULL)
+		{
+			//record the first one
+			Conclude_destination = destination;
+
+			if (ppre != NULL)
+			{
+				*ppre = destination;
+			}
+		}
+
+
+		if (pnaRoute != NULL)
+		{
+			if (destination->rt_entry_infos.rtu_router.interfaceAddr.ipv4 != *pnaRoute)
+			{
+				continue;
+			}
+			else
+			{
+				
+				
+				
+			}
+			
+		}
+		else
+		{
+			// &&  
+		}
+
+
+		if (First_destination == NULL)
+		{
+			First_destination = destination;
+
+			//uiConfidentHopCount = First_destination->rt_entry_infos.rtu_metric;
+			
+
+
+			break;
+		}
+	}
+
+	
+
+	
+	//printf("QueryRoutingTableAccordingToNodeId end!!!!!!!!!!!!!!!! \n");
+
+	return First_destination;
+}
+
+Int16 ProcessRoutingTableAccordingToTC(Node* node, NodeAddress na_tc, BOOL bRemove)
+{
+
+	//printf("ProcessRoutingTableAccordingToTC begin \n");
+
+
+	
+	Int16 uiConfidentHopCount = -1;
+
+	//return uiConfidentHopCount;
+
+	rt_entry* destination;
+	rthash* routing_hash;
+
+	UInt32 hash;
+
+	RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+
+	Address aDest;
+
+
+	SetIPv4AddressInfo(&aDest, na_tc);
+
+	OlsrHashing(aDest, &hash);
+	routing_hash = &olsr->routingtable[hash % HASHMASK];
+
+	rt_entry* First_destination = NULL;
+
+
+	for (destination = routing_hash->rt_back;
+		destination != (rt_entry* ) routing_hash;
+		destination = destination->rt_back)
+	{
+		if (destination->rt_hash != hash)
+		{
+
+			continue;
+		}
+
+		if (First_destination == NULL)
+		{
+			First_destination = destination;
+
+			uiConfidentHopCount = First_destination->rt_entry_infos.rtu_metric;
+			break;
+		}
+	}
+
+
+	rt_entry* destination_tmp;
+	
+	
+	//The remove indeed may not require, 
+	//since this remove will be done at the begining of the routing table calculation
+	//by function ProcessRoutingTableAccordingToConfidentCost
+	if (bRemove)
+	{
+
+		destination = routing_hash->rt_forw;
+		while (destination != (rt_entry *) routing_hash)
+		{
+
+			if (destination->rt_hash != hash)
+			{
+
+				destination = destination->rt_forw;
+
+				//continue;
+			}
+			else
+			{
+				
+
+
+				destination_tmp = destination;
+				destination = destination->rt_forw;
+
+				// deletes each routing entry from the table
+				OlsrDeleteRoutingTable(destination_tmp);
+			}
+		}
+	}
+
+	//printf("ProcessRoutingTableAccordingToTC end!!!!!!!!!!!!!!!! \n");
+	
+	return uiConfidentHopCount;
+}
+
+
+destination_n* ProcessRoutingTableAccordingToRecentDeleteList(Node* node, BOOL * pbFurtherUpdateIsRequired)
+{
+
+	destination_n * list_destination_n = NULL;
+
+	RoutingOlsr * olsr = (RoutingOlsr *) node->appData.olsr;
+
+	tco_node_addr * tco_delete_list_tmp = olsr->recent_delete_list;			
+
+
+	*pbFurtherUpdateIsRequired = FALSE;
+
+	
+	//if (tco_delete_list_tmp->nid == 10 && olsr->naRecentChangedAddressByTC == 15 && node->nodeId == 16)
+	{
+
+		//DebugBreak();
+	}
+	
+	
+
+	BOOL bCannotFindExchangeForAtLeastOneDest = FALSE;
+	while (tco_delete_list_tmp != NULL)
+	{
+
+		UInt32 uiCurrentCost = MAX_COST;
+		NodeAddress naCurrentRouter = 0; 
+
+		NodeAddress naCurrentLastHop = 0;
+		
+		BOOL bReachTCFromTDNode = FALSE;
+
+		//Only those route entry with olsr->naRecentChangedAddressByTC as lasthop and tco_delete_list_tmp->nid as the dest,
+		//Or tco_delete_list_tmp->nid as the dest and olsr->naRecentChangedAddressByTC as lasthop need to be deleted
+		//And these two cases can not exist at the same time, at least for single path routing ???
+
+	
+		tco_delete_list_tmp->bExchanged = FALSE;
+		
+		rt_entry* prte = QueryRoutingTableAccordingToNodeId(node, tco_delete_list_tmp->nid);
+
+		rt_entry* prteTC = QueryRoutingTableAccordingToNodeId(node, olsr->naRecentChangedAddressByTC);
+		
+
+		rt_entry* prteToExchange = NULL;
+
+		/*
+		if (prte == NULL)
+		{
+			//May already been delete in former tc msgs
+			//So assume all its related neighbors are already reasonably processed
+
+			prte = QueryRoutingTableAccordingToNodeId(node, olsr->naRecentChangedAddressByTC);
+
+			if (prte == NULL)
+			{
+				
+				tco_delete_list_tmp = tco_delete_list_tmp->next;
+				continue;
+			}
+			else
+			{
+				if (prte->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == tco_delete_list_tmp->nid)
+				{
+
+					naCurrentRouter = prte->rt_router.interfaceAddr.ipv4;
+					uiCurrentCost = prte->rt_metric;
+
+					//delete the route entry here
+					OlsrDeleteRoutingTable(prte);
+				}
+				else
+				{
+
+					tco_delete_list_tmp = tco_delete_list_tmp->next;
+					continue;							
+				}
+								
+			}
+		}
+		else
+		*/
+		
+		
+		//delete will not cause new dest to be reached, 
+		
+		//prte and prteTC will exist or non-exist at the same time???
+
+		if (prte != NULL || prteTC != NULL)
+		{
+			if (prte != NULL  && prte->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == olsr->naRecentChangedAddressByTC)
+			{
+
+				naCurrentRouter = prte->rt_router.interfaceAddr.ipv4;
+				uiCurrentCost = prte->rt_metric;
+
+				naCurrentLastHop = prte->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4;
+
+				//delete the route entry here
+				//OlsrRemoveList((olsr_qelem *)prte);
+				//OlsrDeleteRoutingTable(prte);
+
+				prteToExchange = prte;
+			}
+			else
+			{
+
+				if (prteTC != NULL && prteTC->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == tco_delete_list_tmp->nid)
+				{
+
+					//
+					naCurrentRouter = prteTC->rt_router.interfaceAddr.ipv4;
+					uiCurrentCost = prteTC->rt_metric;
+
+					naCurrentLastHop = prteTC->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4;
+					
+					//delete the route entry here
+					//OlsrDeleteRoutingTable(prteTC);
+
+					//OlsrRemoveList((olsr_qelem *)prteTC);
+
+					prteToExchange = prteTC;
+
+					bReachTCFromTDNode = TRUE;
+
+				}
+				else
+				{
+					tco_delete_list_tmp = tco_delete_list_tmp->next;
+					continue;
+
+				}
+
+											
+			}
+
+
+			//
+
+
+
+		}
+		else
+		{
+			//
+			return list_destination_n;
+		}
+
+
+		destination_list* topo_dest = NULL;
+		destination_list* topo_dest2 = NULL;
+
+		//rt_entry * pretmp = NULL;
+		Address addrTmp;
+		addrTmp.networkType = NETWORK_IPV4;
+
+
+		if (bReachTCFromTDNode)
+		{
+			addrTmp.interfaceAddr.ipv4 = olsr->naRecentChangedAddressByTC;
+		}
+		else
+		{
+			addrTmp.interfaceAddr.ipv4 = tco_delete_list_tmp->nid;
+		}
+
+
+		
+
+		topology_last_entry * t_last_sym = OlsrLookupLastTopologyTableSYM(node, addrTmp);
+		if (t_last_sym != NULL)
+		{
+
+			topo_dest = t_last_sym->topology_list_of_destinations;
+
+
+			rt_entry* prtetmpFormer = NULL;
+
+			BOOL bSameCostFormer = FALSE;
+			BOOL bCostPlusOneFormer = FALSE;
+			
+			BOOL bExistSameCostWithSameRouterFormer = FALSE;
+
+			while (topo_dest != NULL)
+			{
+				
+				Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+
+				topo_dest = topo_dest->next;
+
+				rt_entry* prteNearby = QueryRoutingTableAccordingToNodeId(node, addrReached.interfaceAddr.ipv4);
+				if (prteNearby != NULL)
+				{
+
+					if (naCurrentLastHop != addrReached.interfaceAddr.ipv4)
+					{
+
+						//must satisfy prteNearby->rt_entry_infos.rtu_metric == uiCurrentCost or prteNearby->rt_entry_infos.rtu_metric + 1 = uiCurrentCost
+						if (prteNearby->rt_entry_infos.rtu_metric + 1 == uiCurrentCost)
+						{
+
+							//bExist = TRUE;
+							bSameCostFormer = TRUE;
+
+							prtetmpFormer = prteNearby;
+
+							if (prteNearby->rt_router.interfaceAddr.ipv4 == naCurrentRouter)
+							{
+
+								//same router
+								bExistSameCostWithSameRouterFormer = TRUE;
+								break;
+							}
+							else
+							{
+
+								//different router
+								//topo_dest2 = topo_dest2->next;
+								continue;
+							}
+
+						}
+
+
+						/*
+						if (!bSameCostFormer && prteNearby->rt_entry_infos.rtu_metric == uiCurrentCost)
+						{
+
+
+							bCostPlusOneFormer = TRUE;
+
+							prtetmpFormer = prteNearby;
+
+
+							//topo_dest2 = topo_dest2->next;
+							continue;
+						}
+						*/
+
+					}
+				}
+			}
+			
+
+			//tco_delete_list_tmp->bExchanged = bSameCostFormer || bCostPlusOneFormer;
+			tco_delete_list_tmp->bExchanged = bSameCostFormer;
+
+			if (tco_delete_list_tmp->bExchanged)
+			{
+				if (bSameCostFormer)
+				{
+					if (bExistSameCostWithSameRouterFormer)
+					{
+						
+						//?????????????????????????????????
+						
+						prteToExchange->rt_entry_infos.rtu_lasthop = prtetmpFormer->rt_dst;
+						
+						
+					}
+					else
+					{
+						//?????????????????????????????????
+						
+						prteToExchange->rt_entry_infos.rtu_lasthop = prtetmpFormer->rt_dst;
+
+
+						prteToExchange->rt_interface = prtetmpFormer->rt_interface;
+						prteToExchange->rt_router = prtetmpFormer->rt_router;
+						//prteNearby->rt_metric = (UInt16) (prtetmp->rt_metric + 1);
+						
+
+						prteToExchange->rt_entry_infos.rtu_DegreeWRTNode = prtetmpFormer->rt_entry_infos.rtu_DegreeWRTNode;
+						prteToExchange->rt_entry_infos.rtu_DistanceWRTNode = prtetmpFormer->rt_entry_infos.rtu_DistanceWRTNode;
+						prteToExchange->rt_entry_infos.related_neighbor = prtetmpFormer->rt_entry_infos.related_neighbor;
+					}
+				}
+				/*
+				else	//bCostPlusOne
+				{
+
+					
+					prteToExchange->rt_entry_infos.rtu_lasthop = prtetmpFormer->rt_dst;
+
+
+					prteToExchange->rt_interface = prtetmpFormer->rt_interface;
+					prteToExchange->rt_router = prtetmpFormer->rt_router;
+					prteToExchange->rt_metric = (UInt16) (prtetmpFormer->rt_metric + 1);
+					
+
+					prteToExchange->rt_entry_infos.rtu_DegreeWRTNode = prtetmpFormer->rt_entry_infos.rtu_DegreeWRTNode;
+					prteToExchange->rt_entry_infos.rtu_DistanceWRTNode = prtetmpFormer->rt_entry_infos.rtu_DistanceWRTNode;
+					prteToExchange->rt_entry_infos.related_neighbor = prtetmpFormer->rt_entry_infos.related_neighbor;
+				}
+				*/
+
+
+				if (!bExistSameCostWithSameRouterFormer || !bSameCostFormer)
+				{
+					destination_n* list_destination_tmp;
+					list_destination_tmp = (destination_n* )
+						MEM_malloc(sizeof(destination_n));
+
+					memset(
+						list_destination_tmp,
+						0,
+						sizeof(destination_n));
+
+					list_destination_tmp->destination = prteToExchange;
+					list_destination_tmp->next = list_destination_n;
+					list_destination_n = list_destination_tmp;
+				}
+
+				//process next one rather than use the next step exchange
+				tco_delete_list_tmp = tco_delete_list_tmp->next;
+				continue;
+
+
+				//for bCostPlusOneFormer case, since it is possible that further exchange may result in better cost for 
+				//some dest, since still need to further exchange
+				/*
+				if (!bCostPlusOneFormer)
+				{
+
+					tco_delete_list_tmp = tco_delete_list_tmp->next;
+					continue;
+				}
+				*/
+				
+			}
+			else
+			{
+				//
+
+				if (prteToExchange != NULL)
+				{
+
+
+					OlsrDeleteRoutingTable(prteToExchange);
+					//MEM_free(prteToExchange);
+					prteToExchange = NULL;
+				}
+
+				
+				//bCannotFindExchangeForAtLeastOneDest = TRUE;						
+				//break;						
+			}
+
+
+
+			topo_dest = t_last_sym->topology_list_of_destinations;
+
+			while (topo_dest != NULL)
+			{
+				Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+				rt_entry* prteNearby = QueryRoutingTableAccordingToNodeId(node, addrReached.interfaceAddr.ipv4);
+				if (prteNearby != NULL)
+				{
+										
+					if (prteNearby->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == addrTmp.interfaceAddr.ipv4)
+					{
+
+						//must satisfy prteNearby->rt_metric == prte->rt_metric + 1
+						//search for exchange
+
+						topology_last_entry * t_last_sym2 = OlsrLookupLastTopologyTableSYM(node, addrReached);
+						if (t_last_sym2 != NULL)
+						{
+							topo_dest2 = t_last_sym2->topology_list_of_destinations;
+							
+							rt_entry* prtetmp = NULL;
+
+							BOOL bSameCost = FALSE;
+							BOOL bCostPlusOne = FALSE;
+							BOOL bCostPlusTwo = FALSE;
+
+							BOOL bExistSameCostWithSameRouter = FALSE;
+
+							BOOL bExist = FALSE;
+
+							while (topo_dest2 != NULL)
+							{
+							
+								Address addrPotentailExchange = topo_dest2->destination_node->topology_destination_dst;
+
+								//if (prteNearby2 != NULL)
+								if (addrPotentailExchange.interfaceAddr.ipv4 != addrTmp.interfaceAddr.ipv4 
+									//|| bCostPlusOneFormer && addrPotentailExchange.interfaceAddr.ipv4 == addrTmp.interfaceAddr.ipv4
+									)
+								{
+									
+									rt_entry* prteNearby2 = QueryRoutingTableAccordingToNodeId(node, addrPotentailExchange.interfaceAddr.ipv4);
+
+									//if (addrPotentailExchange.interfaceAddr.ipv4 != tco_delete_list_tmp->nid)
+									if (prteNearby2 != NULL)
+									{
+
+										/*
+										if (prteNearby2->rt_metric < uiCurrentCost)
+										{
+											//impossible, or else current state of routing table does not satisfy the shortest cost requirement
+										}
+										*/
+										
+
+										if (prteNearby2->rt_metric == uiCurrentCost)
+										{
+
+											//exchange, for same or different route
+										
+											//bExist = TRUE;
+											bSameCost = TRUE;
+
+											prtetmp = prteNearby2;
+
+											if (prteNearby2->rt_router.interfaceAddr.ipv4 == naCurrentRouter)
+											{
+
+												//same router
+												bExistSameCostWithSameRouter = TRUE;
+												break;
+											}
+											else
+											{
+
+												//different router
+												topo_dest2 = topo_dest2->next;
+												continue;
+											}
+
+										}
+
+
+										/*
+										//for the following two cases, exchange or not?
+										if (!bSameCost && prteNearby2->rt_metric == uiCurrentCost + 1)
+										{
+											if (prteNearby2->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 != addrTmp.interfaceAddr.ipv4)
+											{
+
+												//bExist = TRUE;
+												bCostPlusOne = TRUE;
+											
+												prtetmp = prteNearby2;
+
+
+												topo_dest2 = topo_dest2->next;
+												continue;
+											}
+										}
+
+										if (!bSameCost && !bCostPlusOne && prteNearby2->rt_metric == uiCurrentCost + 2)
+										{
+
+											rt_entry* prteNearby3 = QueryRoutingTableAccordingToNodeId(node, prteNearby2->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4);
+
+											if (prteNearby3 != NULL)
+											{
+												if (prteNearby3->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 != addrTmp.interfaceAddr.ipv4)
+												{
+
+													//bExist = TRUE;
+													bCostPlusTwo = TRUE;
+												
+													prtetmp = prteNearby2;
+
+
+													topo_dest2 = topo_dest2->next;
+													continue;
+												}
+											}
+										}
+										*/
+
+										
+
+										/*
+										if (prteNearby2->rt_metric > uiCurrentCost + 2)
+										{
+											//impossible, or else current state of routing table does not satisfy the shortest cost requirement
+										}
+										*/
+
+									}
+								}
+
+								topo_dest2 = topo_dest2->next;				
+							}
+
+
+							//bExist =  bSameCost || bCostPlusOne || bCostPlusTwo;
+
+							bExist =  bSameCost;
+							if (bExist)
+							{
+								if (bSameCost)
+								{
+									if (bExistSameCostWithSameRouter)
+									{
+										
+										//?????????????????????????????????
+										/*
+										if (_OLSR_MULTIPATH)
+										{
+
+											prteNearby->rt_entry_infos.oa_total_routes_count = prtetmp->rt_entry_infos.oa_total_routes_count;
+											
+											prteNearby->rt_entry_infos.oa_maximum_allowed_cost = prtetmp->rt_entry_infos.oa_maximum_allowed_cost;
+
+											prteNearby->rt_entry_infos.oa_dWeightedDirectionDiffer = prtetmp->rt_entry_infos.oa_dWeightedDirectionDiffer;
+										}
+										*/
+
+										//prteNearby->rt_interface = prtetmp->rt_interface;
+										prteNearby->rt_entry_infos.rtu_lasthop = prtetmp->rt_dst;
+										
+										//prteNearby->rt_router = prtetmp->rt_router;
+										//prteNearby->rt_metric = (UInt16) (prtetmp->rt_metric + 1);
+										
+
+										//prteNearby->rt_entry_infos.rtu_DegreeWRTNode = prtetmp->rt_entry_infos.rtu_DegreeWRTNode;
+										//prteNearby->rt_entry_infos.rtu_DistanceWRTNode = prtetmp->rt_entry_infos.rtu_DistanceWRTNode;
+										//prteNearby->rt_entry_infos.related_neighbor = prtetmp->rt_entry_infos.related_neighbor;
+									}
+									else
+									{
+										//?????????????????????????????????
+										/*
+										if (_OLSR_MULTIPATH)
+										{
+
+											prteNearby->rt_entry_infos.oa_total_routes_count = prtetmp->rt_entry_infos.oa_total_routes_count;
+											
+											prteNearby->rt_entry_infos.oa_maximum_allowed_cost = prtetmp->rt_entry_infos.oa_maximum_allowed_cost;
+
+											prteNearby->rt_entry_infos.oa_dWeightedDirectionDiffer = prtetmp->rt_entry_infos.oa_dWeightedDirectionDiffer;
+										}
+										*/
+
+										prteNearby->rt_entry_infos.rtu_lasthop = prtetmp->rt_dst;
+
+
+										prteNearby->rt_interface = prtetmp->rt_interface;
+										prteNearby->rt_router = prtetmp->rt_router;
+										//prteNearby->rt_metric = (UInt16) (prtetmp->rt_metric + 1);
+										
+
+										prteNearby->rt_entry_infos.rtu_DegreeWRTNode = prtetmp->rt_entry_infos.rtu_DegreeWRTNode;
+										prteNearby->rt_entry_infos.rtu_DistanceWRTNode = prtetmp->rt_entry_infos.rtu_DistanceWRTNode;
+										prteNearby->rt_entry_infos.related_neighbor = prtetmp->rt_entry_infos.related_neighbor;
+									}
+								}
+								else	//bCostPlusOne or bCostPlusTwo
+								{
+
+									//may not happen
+
+									//?????????????????????????????????
+									/*
+									if (_OLSR_MULTIPATH)
+									{
+
+										prteNearby->rt_entry_infos.oa_total_routes_count = prtetmp->rt_entry_infos.oa_total_routes_count;
+										
+										prteNearby->rt_entry_infos.oa_maximum_allowed_cost = prtetmp->rt_entry_infos.oa_maximum_allowed_cost;
+
+										prteNearby->rt_entry_infos.oa_dWeightedDirectionDiffer = prtetmp->rt_entry_infos.oa_dWeightedDirectionDiffer;
+										}
+									*/
+
+									prteNearby->rt_entry_infos.rtu_lasthop = prtetmp->rt_dst;
+
+
+									prteNearby->rt_interface = prtetmp->rt_interface;
+									prteNearby->rt_router = prtetmp->rt_router;
+									prteNearby->rt_metric = (UInt16) (prtetmp->rt_metric + 1);
+									
+
+									prteNearby->rt_entry_infos.rtu_DegreeWRTNode = prtetmp->rt_entry_infos.rtu_DegreeWRTNode;
+									prteNearby->rt_entry_infos.rtu_DistanceWRTNode = prtetmp->rt_entry_infos.rtu_DistanceWRTNode;
+									prteNearby->rt_entry_infos.related_neighbor = prtetmp->rt_entry_infos.related_neighbor;
+								}
+
+
+								if (!bExistSameCostWithSameRouter || !bSameCost)
+								{
+									destination_n* list_destination_tmp;
+									list_destination_tmp = (destination_n* )
+										MEM_malloc(sizeof(destination_n));
+
+									memset(
+										list_destination_tmp,
+										0,
+										sizeof(destination_n));
+
+									list_destination_tmp->destination = prteNearby;
+									list_destination_tmp->next = list_destination_n;
+									list_destination_n = list_destination_tmp;
+								}
+
+							}
+							else
+							{
+
+								bCannotFindExchangeForAtLeastOneDest = TRUE;
+
+								/*
+								if (prteToExchange != NULL)
+								{
+
+
+									MEM_free(prteToExchange);
+									prteToExchange = NULL;
+								}
+								*/
+
+
+								break;						
+							}
+
+						}
+						
+					}
+					
+				}
+				else
+				{
+					//should be impossible, since if t_last_sym != NULL, then its neighbours should be already in routing table as well.
+				}
+
+				topo_dest = topo_dest->next;
+			}
+
+			if (bCannotFindExchangeForAtLeastOneDest)
+			{
+
+				break;
+			}
+		}
+		else
+		{
+			//it is possible that this node should be delete has no neighbors
+			//but this case can be handled by bFurtherUpdateIsRequired		
+
+			if (prteToExchange != NULL)
+			{
+
+
+				OlsrDeleteRoutingTable(prteToExchange);
+				//MEM_free(prteToExchange);
+				prteToExchange = NULL;
+			}
+		}
+
+		tco_delete_list_tmp = tco_delete_list_tmp->next;
+	}
+
+	
+	if (bCannotFindExchangeForAtLeastOneDest)
+	{
+
+		//do Full Re-Calculation
+		while (list_destination_n != NULL) 
+		{
+
+			destination_n* destination_n_1 = list_destination_n;
+			list_destination_n = list_destination_n->next;
+			MEM_free(destination_n_1);
+		}
+
+		list_destination_n = NULL;
+
+		*pbFurtherUpdateIsRequired = TRUE;
+
+		//do not remove the route entry here, since assume the further update will clear all and re-calculate
+
+
+		//Add neighbor and 2HopNeighbor for full re-calculation,
+		//which is done outside this function
+		
+	}
+	else
+	{
+		//do update for exchange
+		
+	}
+
+	return list_destination_n;
+}
+
+
+BOOL FindLastExchange(Node* node, rt_entry* reTBExchanged, tco_node_addr ** ptna_source_set, UInt32 * puiLookupCntForRE)
+{
+
+
+	BOOL bExchangeFound = FALSE;
+
+	UInt32 uiLookupCnt = 0;
+
+	topology_last_entry * t_last_sym = OlsrLookupLastTopologyTableSYM(node, reTBExchanged->rt_dst);
+	if (t_last_sym != NULL)
+	{
+		destination_list* topo_dest = NULL;
+
+		topo_dest = t_last_sym->topology_list_of_destinations;
+
+		//rt_entry* prtetmp = NULL;
+
+		
+
+		while (topo_dest != NULL)
+		{
+
+			Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+
+			topo_dest = topo_dest->next;
+
+					
+			if (exist_in_tco_node_addr_set(ptna_source_set, addrReached.interfaceAddr.ipv4))
+			{
+				
+				//exchange the last hop only
+				reTBExchanged->rt_entry_infos.rtu_lasthop = addrReached;
+
+
+				bExchangeFound = TRUE;
+				break;
+			}	
+
+		}
+
+
+	}
+		
+
+	
+
+
+	if (_TEST_TIME_COMPLEXITY && puiLookupCntForRE)
+	{
+		*puiLookupCntForRE += uiLookupCnt;
+	}
+
+
+	return bExchangeFound;
+
+}
+
+
+
+BOOL FindRouteExchangeV2(Node* node, rt_entry* reTBExchanged, BOOL bIncludeOldLastHop, UInt32 * puiLookupCntForRE, BOOL bRequireSameRouter, tco_node_addr ** ptna_set, BOOL * pbPossibleToFound)
+{
+
+	BOOL bExchangeFound = FALSE;
+
+	UInt32 uiLookupCnt = 0;
+
+	topology_last_entry * t_last_sym = OlsrLookupLastTopologyTableSYM(node, reTBExchanged->rt_dst);
+	if (t_last_sym != NULL)
+	{
+		destination_list* topo_dest = NULL;
+
+		topo_dest = t_last_sym->topology_list_of_destinations;
+
+		rt_entry* prtetmp = NULL;
+
+		BOOL bSameCost = FALSE;
+		BOOL bCostPlusOne = FALSE;
+		BOOL bCostPlusTwo = FALSE;
+
+		BOOL bExistSameCostWithSameRouter = FALSE;
+
+		BOOL bExist = FALSE;
+
+		while (topo_dest != NULL)
+		{
+
+			Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+
+			topo_dest = topo_dest->next;
+
+			rt_entry* prteNearby = QueryRoutingTableAccordingToNodeId(node, addrReached.interfaceAddr.ipv4);
+			if (_TEST_TIME_COMPLEXITY && puiLookupCntForRE)
+			{
+				uiLookupCnt++;
+			}
+
+			if (!bRequireSameRouter && prteNearby != NULL 
+				|| bRequireSameRouter && prteNearby != NULL && (prteNearby->rt_router.interfaceAddr.ipv4 == reTBExchanged->rt_router.interfaceAddr.ipv4))
+			{
+
+				if (!bIncludeOldLastHop && reTBExchanged->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 != addrReached.interfaceAddr.ipv4
+					|| bIncludeOldLastHop)
+				{
+
+					
+					if (ptna_set != NULL)
+					{
+						bool bIsAlsoDisconnectedEntry = exist_in_tco_node_addr_set(ptna_set, addrReached.interfaceAddr.ipv4);
+						if (bIsAlsoDisconnectedEntry)
+						{
+							if (pbPossibleToFound)
+							{
+								*pbPossibleToFound = TRUE;
+							}
+
+							continue;
+						}
+					}
+
+					//must satisfy prteNearby->rt_entry_infos.rtu_metric == uiCurrentCost or prteNearby->rt_entry_infos.rtu_metric + 1 = uiCurrentCost
+					if (prteNearby->rt_metric == reTBExchanged->rt_metric - 1)
+					{
+
+						bSameCost = TRUE;
+
+						prtetmp = prteNearby;
+
+						if (prteNearby->rt_router.interfaceAddr.ipv4 == reTBExchanged->rt_router.interfaceAddr.ipv4)
+						{
+
+							//same router
+							bExistSameCostWithSameRouter = TRUE;
+							break;
+						}
+						else
+						{
+
+							//different router
+
+							continue;
+						}
+
+					}
+
+
+					if (!bSameCost && prteNearby->rt_metric == reTBExchanged->rt_metric 
+						//comment reason: if this indirect link does exist, then it is ok, 
+						//since the disconnect of direct link does not mean the disconnect of the indirect link
+						//&& reTBExchanged->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 != prteNearby->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4
+						)
+					{
+
+
+						bCostPlusOne = TRUE;
+
+						prtetmp = prteNearby;
+
+						continue;
+					}
+
+
+					if (!bSameCost && !bCostPlusOne && prteNearby->rt_metric == reTBExchanged->rt_metric + 1
+						&& prteNearby->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 != reTBExchanged->rt_entry_infos.rtu_dst.interfaceAddr.ipv4)
+					{
+
+						//comment reason: if this indirect link does exist, then it is ok, 
+						//since the disconnect of direct link does not mean the disconnect of the indirect link
+						//rt_entry* prteNearby2 = QueryRoutingTableAccordingToNodeId(node, prteNearby->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4);
+
+						//if (prteNearby2 != NULL)
+						{
+							//if (prteNearby2->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 != reTBExchanged->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4)
+							{
+
+
+								bCostPlusTwo = TRUE;
+
+								prtetmp = prteNearby;
+
+
+								continue;
+							}
+						}
+					}
+
+				}
+				else
+				{
+					//will not happen, since it should already be deleted
+				}
+
+			}
+
+		}
+
+
+
+		bExchangeFound =  bSameCost || bCostPlusOne || bCostPlusTwo;
+
+
+		if (bExchangeFound)
+		{
+			if (bSameCost)
+			{
+
+				reTBExchanged->rt_entry_infos.bCostChanged = FALSE;
+				reTBExchanged->rt_entry_infos.uiCostChg = 0;
+
+				if (bExistSameCostWithSameRouter)
+				{
+
+
+					reTBExchanged->rt_entry_infos.rtu_lasthop = prtetmp->rt_dst;
+
+
+				}
+				else		//route changed
+				{
+
+					reTBExchanged->rt_entry_infos.rtu_lasthop = prtetmp->rt_dst;
+
+
+					reTBExchanged->rt_interface = prtetmp->rt_interface;
+					reTBExchanged->rt_router = prtetmp->rt_router;
+
+
+					reTBExchanged->rt_entry_infos.rtu_DegreeWRTNode = prtetmp->rt_entry_infos.rtu_DegreeWRTNode;
+					reTBExchanged->rt_entry_infos.rtu_DistanceWRTNode = prtetmp->rt_entry_infos.rtu_DistanceWRTNode;
+					reTBExchanged->rt_entry_infos.related_neighbor = prtetmp->rt_entry_infos.related_neighbor;
+				}
+			}
+			else	//bCostPlusOne or bCostPlusTwo
+			{
+
+
+				if (bCostPlusOne)
+				{
+					reTBExchanged->rt_entry_infos.uiCostChg = 1;
+				}
+				else
+				{
+					reTBExchanged->rt_entry_infos.uiCostChg = 2;
+				}
+
+				reTBExchanged->rt_entry_infos.bCostChanged = TRUE;
+
+				reTBExchanged->rt_entry_infos.rtu_lasthop = prtetmp->rt_dst;
+
+
+				reTBExchanged->rt_interface = prtetmp->rt_interface;
+				reTBExchanged->rt_router = prtetmp->rt_router;
+
+				reTBExchanged->rt_metric = (UInt16) (prtetmp->rt_metric + 1);
+
+
+				reTBExchanged->rt_entry_infos.rtu_DegreeWRTNode = prtetmp->rt_entry_infos.rtu_DegreeWRTNode;
+				reTBExchanged->rt_entry_infos.rtu_DistanceWRTNode = prtetmp->rt_entry_infos.rtu_DistanceWRTNode;
+				reTBExchanged->rt_entry_infos.related_neighbor = prtetmp->rt_entry_infos.related_neighbor;
+			}
+
+
+			if (bExistSameCostWithSameRouter)
+			{
+
+				reTBExchanged->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+			}
+			else
+			{
+
+				reTBExchanged->rt_entry_infos.bDescendentRequireFurtherUpdate = TRUE;
+			}
+
+
+		}
+		else
+		{
+
+
+			//need to delete
+
+
+		}
+
+	}
+	else
+	{
+		//need to delete
+
+	}
+
+
+	if (_TEST_TIME_COMPLEXITY && puiLookupCntForRE)
+	{
+		*puiLookupCntForRE += uiLookupCnt;
+	}
+
+
+	return bExchangeFound;
+}
+
+
+BOOL BelongsToItsChildren(destination_n * pChildren, NodeAddress naIPtoCheck)
+{
+
+	BOOL bIsAChild = FALSE;
+
+	destination_n * pd_tmp = NULL;
+	if (pChildren != NULL)
+	{
+
+		pd_tmp = pChildren;
+		while (pd_tmp != NULL)
+		{
+
+			if (pd_tmp->destination->rt_entry_infos.rtu_dst.interfaceAddr.ipv4 == naIPtoCheck)
+			{
+
+				bIsAChild = TRUE;
+				break;
+			}
+
+			pd_tmp = pd_tmp->next;
+		}
+	}
+
+	return bIsAChild;
+}
+
+
+void AddToChildrenList(destination_n ** pChildren, rt_entry * prteChild)
+{
+
+	destination_n* list_destination_tmp;
+	list_destination_tmp = (destination_n* )
+		MEM_malloc(sizeof(destination_n));
+
+	memset(list_destination_tmp, 0, sizeof(destination_n));
+
+	//list_destination_tmp->destination = preExisting;
+
+	
+	list_destination_tmp->destination = prteChild;
+
+	list_destination_tmp->next = *pChildren;
+	*pChildren = list_destination_tmp;
+}
+
+
+void ClearChildrenList(destination_n * pChildren)
+{
+
+	destination_n * pd_tmp = NULL;
+	if (pChildren != NULL)
+	{
+
+		pd_tmp = pChildren;
+		while (pd_tmp != NULL)
+		{
+			destination_n* list_destination_tmp = pd_tmp;
+			
+
+			pd_tmp = pd_tmp->next;
+
+			MEM_free(list_destination_tmp);
+		}
+	}
+
+}
+
+
+
+BOOL FindRouteExchangeV22(Node* node, destination_n * dTBExchanged, rt_entry* reTBExchanged, BOOL bIncludeOldLastHop, rt_entry* reOldLast, UInt32 * puiLookupCntForRE, BOOL bRequireSameRouter, tco_node_addr ** ptna_set, tco_node_addr ** ptna_set2, tco_node_addr ** ptna_set_fore, tco_node_addr ** ptna_set_fore2, BOOL * pbPossibleToFound)
+{
+
+	BOOL bExchangeFound = FALSE;
+
+	UInt32 uiLookupCnt = 0;
+
+	//rt_entry* reTBExchanged = dTBExchanged->destination;
+
+	topology_last_entry * t_last_sym = OlsrLookupLastTopologyTableSYM(node, reTBExchanged->rt_dst);
+	if (t_last_sym != NULL)
+	{
+		destination_list* topo_dest = NULL;
+
+		topo_dest = t_last_sym->topology_list_of_destinations;
+
+
+		BOOL bOldLastMaybePrefered = FALSE;
+		//int iCostForOldLastPreferToApply = reOldLast->rt_metric;
+		if (bIncludeOldLastHop)
+		{
+
+			if (reOldLast != NULL)
+			{
+
+				if (g_iToAchieveSameRoute == 1)
+				{
+
+				}
+				else
+				{
+					bOldLastMaybePrefered = TRUE;
+				}
+			
+			}
+		}
+
+
+		rt_entry* prtetmp = NULL;
+
+		BOOL bSameCost = FALSE;
+		BOOL bCostPlusOne = FALSE;
+		BOOL bCostPlusTwo = FALSE;
+
+		BOOL bExistSameCostWithSameRouter = FALSE;
+
+		BOOL bExist = FALSE;
+
+		while (topo_dest != NULL)
+		{
+
+			Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+
+			topo_dest = topo_dest->next;
+
+			if (dTBExchanged != NULL)
+			{
+				if (dTBExchanged->bChildrenDetermined)
+				{
+					//check if this reached one belong to its children, to reduce the execution of QueryRoutingTableAccordingToNodeId
+					if (BelongsToItsChildren(dTBExchanged->children, addrReached.interfaceAddr.ipv4))
+					{
+						continue;
+					}
+				}
+			}
+
+
+			if (ptna_set != NULL)
+			{
+				bool bIsAlsoDisconnectedEntry = exist_in_tco_node_addr_set(ptna_set, addrReached.interfaceAddr.ipv4);
+				if (bIsAlsoDisconnectedEntry)
+				{
+
+					if (pbPossibleToFound)
+					{
+						*pbPossibleToFound = TRUE;
+					}
+
+					continue;
+				}
+			}
+
+
+			if (ptna_set2 != NULL)
+			{
+				bool bIsAlsoDisconnectedEntry = exist_in_tco_node_addr_set(ptna_set2, addrReached.interfaceAddr.ipv4);
+				if (bIsAlsoDisconnectedEntry)
+				{
+
+					if (pbPossibleToFound)
+					{
+						*pbPossibleToFound = TRUE;
+					}
+
+					continue;
+				}
+			}
+
+			rt_entry* prteNearby = QueryRoutingTableAccordingToNodeId(node, addrReached.interfaceAddr.ipv4);
+
+
+			if (dTBExchanged != NULL && prteNearby != NULL)
+			{
+				if (!dTBExchanged->bChildrenDetermined)
+				{
+					if (prteNearby->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == reTBExchanged->rt_entry_infos.rtu_dst.interfaceAddr.ipv4)
+					{
+
+						//is a child, add to children list
+						AddToChildrenList(&(dTBExchanged->children), prteNearby);
+
+						continue;
+					}
+				}
+			}
+
+
+
+			if (_TEST_TIME_COMPLEXITY && puiLookupCntForRE)
+			{
+				uiLookupCnt++;
+			}
+
+			if (!bRequireSameRouter && prteNearby != NULL 
+				|| bRequireSameRouter && prteNearby != NULL && (prteNearby->rt_router.interfaceAddr.ipv4 == reTBExchanged->rt_router.interfaceAddr.ipv4))
+			{
+
+				if (!bIncludeOldLastHop && reTBExchanged->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 != addrReached.interfaceAddr.ipv4
+					|| bIncludeOldLastHop)
+				{
+
+
+					//must satisfy prteNearby->rt_entry_infos.rtu_metric == uiCurrentCost or prteNearby->rt_entry_infos.rtu_metric + 1 = uiCurrentCost
+					if (prteNearby->rt_metric == reTBExchanged->rt_metric - 1)
+					{
+
+						if (g_iToAchieveSameRoute == 1)
+						{
+
+							if (bSameCost)
+							{
+								if (PreferredRouteForNew(prteNearby->rt_router.interfaceAddr.ipv4, prtetmp->rt_router.interfaceAddr.ipv4))
+								{
+									prtetmp = prteNearby;
+								}
+							}
+							else
+							{
+								prtetmp = prteNearby;
+							}
+
+							bSameCost = TRUE;
+
+							continue;
+
+						}
+						else
+						{
+							bSameCost = TRUE;
+
+							prtetmp = prteNearby;
+
+							if (prteNearby->rt_router.interfaceAddr.ipv4 == reTBExchanged->rt_router.interfaceAddr.ipv4)
+							{
+
+								//same router
+								bExistSameCostWithSameRouter = TRUE;
+								break;
+							}
+							else
+							{
+
+								//different router
+
+								continue;
+							}
+						}
+
+					}
+
+
+					//just do not consider any cost change
+
+
+					
+					if (!bSameCost && prteNearby->rt_metric == reTBExchanged->rt_metric 
+						//comment reason: if this indirect link does exist, then it is ok, 
+						//since the disconnect of direct link does not mean the disconnect of the indirect link
+						//&& reTBExchanged->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 != prteNearby->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4
+						)
+					{
+
+
+						if (bOldLastMaybePrefered && reOldLast->rt_metric == prteNearby->rt_metric)
+						{
+
+							prtetmp = reOldLast;
+						}
+						else
+						{
+
+							if (g_iToAchieveSameRoute == 1)
+							{
+
+
+								if (ptna_set_fore != NULL)
+								{
+									bool bIsAlsoDisconnectedEntry = exist_in_tco_node_addr_set(ptna_set_fore, prteNearby->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4);
+									if (bIsAlsoDisconnectedEntry)
+									{
+
+										if (pbPossibleToFound)
+										{
+											*pbPossibleToFound = TRUE;
+										}
+
+										continue;
+									}
+								}
+
+
+								if (ptna_set_fore2 != NULL)
+								{
+									bool bIsAlsoDisconnectedEntry = exist_in_tco_node_addr_set(ptna_set_fore2, prteNearby->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4);
+									if (bIsAlsoDisconnectedEntry)
+									{
+
+										if (pbPossibleToFound)
+										{
+											*pbPossibleToFound = TRUE;
+										}
+
+										continue;
+									}
+								}
+
+
+
+								if (bCostPlusOne)
+								{
+									if (PreferredRouteForNew(prteNearby->rt_entry_infos.rtu_router.interfaceAddr.ipv4, prtetmp->rt_entry_infos.rtu_router.interfaceAddr.ipv4))
+									{
+										prtetmp = prteNearby;
+									}
+								}
+								else
+								{
+									prtetmp = prteNearby;
+								}
+
+							}
+							else
+							{
+								prtetmp = prteNearby;
+							}
+						}
+
+						bCostPlusOne = TRUE;
+
+
+						continue;
+					}
+
+
+					
+					if (!bSameCost && !bCostPlusOne && prteNearby->rt_metric == reTBExchanged->rt_metric + 1
+						&& prteNearby->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 != reTBExchanged->rt_entry_infos.rtu_dst.interfaceAddr.ipv4)
+					{
+
+
+						if (ptna_set_fore != NULL)
+						{
+							bool bIsAlsoDisconnectedEntry = exist_in_tco_node_addr_set(ptna_set_fore, prteNearby->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4);
+							if (bIsAlsoDisconnectedEntry)
+							{
+
+								if (pbPossibleToFound)
+								{
+									*pbPossibleToFound = TRUE;
+								}
+
+								continue;
+							}
+						}
+
+
+						if (ptna_set_fore2 != NULL)
+						{
+							bool bIsAlsoDisconnectedEntry = exist_in_tco_node_addr_set(ptna_set_fore2, prteNearby->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4);
+							if (bIsAlsoDisconnectedEntry)
+							{
+
+								if (pbPossibleToFound)
+								{
+									*pbPossibleToFound = TRUE;
+								}
+
+								continue;
+							}
+						}
+
+
+
+						//comment reason: if this indirect link does exist, then it is ok, 
+						//since the disconnect of direct link does not mean the disconnect of the indirect link
+						//rt_entry* prteNearby2 = QueryRoutingTableAccordingToNodeId(node, prteNearby->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4);
+
+						//if (prteNearby2 != NULL)
+						{
+							//if (prteNearby2->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 != reTBExchanged->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4)
+							{
+
+								if (bOldLastMaybePrefered && reOldLast->rt_metric == prteNearby->rt_metric)
+								{
+
+									prtetmp = reOldLast;
+
+
+								}
+								else
+								{
+									if (g_iToAchieveSameRoute == 1)
+									{
+
+										if (bCostPlusTwo)
+										{
+											if (PreferredRouteForNew(prteNearby->rt_entry_infos.rtu_router.interfaceAddr.ipv4, prtetmp->rt_entry_infos.rtu_router.interfaceAddr.ipv4))
+											{
+												prtetmp = prteNearby;
+											}
+										}
+										else
+										{
+											prtetmp = prteNearby;
+										}
+
+									}
+									else
+									{
+										prtetmp = prteNearby;
+									}
+								}
+
+								bCostPlusTwo = TRUE;
+
+
+								continue;
+							}
+						}
+					}
+					
+
+				}
+				else
+				{
+					//will not happen, since it should already be deleted
+				}
+
+			}
+
+		}
+
+
+		if (dTBExchanged != NULL)
+		{
+
+			dTBExchanged->bChildrenDetermined = TRUE;
+		}
+
+
+		bExchangeFound =  bSameCost || bCostPlusOne || bCostPlusTwo;
+
+
+		if (bExchangeFound)
+		{
+			if (bSameCost)
+			{
+
+				reTBExchanged->rt_entry_infos.bCostChanged = FALSE;
+
+				reTBExchanged->rt_entry_infos.uiCostChg = 0;
+
+				
+
+				if (g_iToAchieveSameRoute == 1)
+				{
+
+					if (prtetmp->rt_router.interfaceAddr.ipv4 == reTBExchanged->rt_router.interfaceAddr.ipv4)
+					{
+
+						bExistSameCostWithSameRouter = TRUE;
+					}						
+				}
+
+				if (bExistSameCostWithSameRouter)
+				{
+
+
+					reTBExchanged->rt_entry_infos.rtu_lasthop = prtetmp->rt_dst;
+
+					if (dTBExchanged != NULL)
+					{
+
+
+						ClearChildrenList(dTBExchanged->children);
+					}
+
+				}
+				else
+				{
+
+					reTBExchanged->rt_entry_infos.rtu_lasthop = prtetmp->rt_dst;
+
+
+					reTBExchanged->rt_interface = prtetmp->rt_interface;
+					reTBExchanged->rt_router = prtetmp->rt_router;
+
+
+					if (_OLSR_MULTIPATH)
+					{
+
+						reTBExchanged->rt_entry_infos.rtu_DegreeWRTNode = prtetmp->rt_entry_infos.rtu_DegreeWRTNode;
+						reTBExchanged->rt_entry_infos.rtu_DistanceWRTNode = prtetmp->rt_entry_infos.rtu_DistanceWRTNode;
+						reTBExchanged->rt_entry_infos.related_neighbor = prtetmp->rt_entry_infos.related_neighbor;
+					}
+
+				}
+			}			
+			else	//bCostPlusOne or bCostPlusTwo
+			{
+
+
+				if (bCostPlusOne)
+				{
+					reTBExchanged->rt_entry_infos.uiCostChg = 1;
+				}
+				else
+				{
+					reTBExchanged->rt_entry_infos.uiCostChg = 2;
+				}
+
+				reTBExchanged->rt_entry_infos.bCostChanged = TRUE;
+
+				reTBExchanged->rt_entry_infos.rtu_lasthop = prtetmp->rt_dst;
+
+
+				reTBExchanged->rt_interface = prtetmp->rt_interface;
+				reTBExchanged->rt_router = prtetmp->rt_router;
+
+				reTBExchanged->rt_metric = (UInt16) (prtetmp->rt_metric + 1);
+
+				if (_OLSR_MULTIPATH)
+				{
+
+					reTBExchanged->rt_entry_infos.rtu_DegreeWRTNode = prtetmp->rt_entry_infos.rtu_DegreeWRTNode;
+					reTBExchanged->rt_entry_infos.rtu_DistanceWRTNode = prtetmp->rt_entry_infos.rtu_DistanceWRTNode;
+					reTBExchanged->rt_entry_infos.related_neighbor = prtetmp->rt_entry_infos.related_neighbor;
+				}
+
+			}
+			
+
+
+			if (bExistSameCostWithSameRouter)
+			{
+
+				reTBExchanged->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+			}
+			else
+			{
+
+				reTBExchanged->rt_entry_infos.bDescendentRequireFurtherUpdate = TRUE;
+			}
+
+
+		}
+		else
+		{
+
+			//need to delete
+		}
+
+	}
+	else
+	{
+
+		//need to delete
+	}
+
+
+	if (_TEST_TIME_COMPLEXITY && puiLookupCntForRE)
+	{
+		*puiLookupCntForRE += uiLookupCnt;
+	}
+
+
+	return bExchangeFound;
+}
+
+
+
+BOOL FindRouteExchangeV21(Node* node, destination_n * dTBExchanged, rt_entry* reTBExchanged, BOOL bIncludeOldLastHop, rt_entry* reOldLast, UInt32 * puiLookupCntForRE, BOOL bRequireSameRouter, tco_node_addr ** ptna_set, tco_node_addr ** ptna_set2, tco_node_addr ** ptna_set3,  
+						  tco_node_addr ** ptna_set_fore, tco_node_addr ** ptna_set_fore2, BOOL * pbPossibleToFound)
+{
+
+	BOOL bExchangeFound = FALSE;
+
+	UInt32 uiLookupCnt = 0;
+
+	//rt_entry* reTBExchanged = dTBExchanged->destination;
+
+	topology_last_entry * t_last_sym = OlsrLookupLastTopologyTableSYM(node, reTBExchanged->rt_dst);
+	if (t_last_sym != NULL)
+	{
+		destination_list* topo_dest = NULL;
+
+		topo_dest = t_last_sym->topology_list_of_destinations;
+
+
+		BOOL bOldLastCanbePrefered = FALSE;
+		if (bIncludeOldLastHop)
+		{
+
+			if (reOldLast != NULL)
+			{
+				//prefer the old last hop
+				if (reOldLast->rt_metric == reTBExchanged->rt_metric)
+				{
+					if (g_iToAchieveSameRoute == 1)
+					{
+
+					}
+					else
+					{
+						bOldLastCanbePrefered = TRUE;
+					}
+										
+				}
+			}
+		}
+
+
+		rt_entry* prtetmp = NULL;
+
+		BOOL bSameCost = FALSE;
+		BOOL bCostPlusOne = FALSE;
+		//BOOL bCostPlusTwo = FALSE;
+
+		BOOL bExistSameCostWithSameRouter = FALSE;
+
+		BOOL bExist = FALSE;
+
+		while (topo_dest != NULL)
+		{
+
+			Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+
+			topo_dest = topo_dest->next;
+
+			if (dTBExchanged != NULL)
+			{
+				if (dTBExchanged->bChildrenDetermined)
+				{
+					//check if this reached one belong to its children, to reduce the execution of QueryRoutingTableAccordingToNodeId
+					if (BelongsToItsChildren(dTBExchanged->children, addrReached.interfaceAddr.ipv4))
+					{
+						continue;
+					}
+				}
+			}			
+			
+			
+			if (ptna_set != NULL)
+			{
+				bool bIsAlsoDisconnectedEntry = exist_in_tco_node_addr_set(ptna_set, addrReached.interfaceAddr.ipv4);
+				if (bIsAlsoDisconnectedEntry)
+				{
+
+					if (pbPossibleToFound)
+					{
+						*pbPossibleToFound = TRUE;
+					}
+
+					continue;
+				}
+			}
+
+			if (ptna_set2 != NULL)
+			{
+				bool bIsAlsoDisconnectedEntry = exist_in_tco_node_addr_set(ptna_set2, addrReached.interfaceAddr.ipv4);
+				if (bIsAlsoDisconnectedEntry)
+				{
+
+					if (pbPossibleToFound)
+					{
+						*pbPossibleToFound = TRUE;
+					}
+
+					continue;
+				}
+			}
+
+
+			if (ptna_set3 != NULL)
+			{
+				bool bIsAlsoDisconnectedEntry = exist_in_tco_node_addr_set(ptna_set3, addrReached.interfaceAddr.ipv4);
+				if (bIsAlsoDisconnectedEntry)
+				{
+
+					if (pbPossibleToFound)
+					{
+						*pbPossibleToFound = TRUE;
+					}
+
+					continue;
+				}
+			}
+
+
+			rt_entry* prteNearby = QueryRoutingTableAccordingToNodeId(node, addrReached.interfaceAddr.ipv4);
+
+
+			if (dTBExchanged != NULL && prteNearby != NULL)
+			{
+				if (!dTBExchanged->bChildrenDetermined)
+				{
+					if (prteNearby->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == reTBExchanged->rt_entry_infos.rtu_dst.interfaceAddr.ipv4)
+					{
+
+						//is a child, add to children list
+						AddToChildrenList(&(dTBExchanged->children), prteNearby);
+
+						continue;
+					}
+				}
+			}
+
+
+			if (_TEST_TIME_COMPLEXITY && puiLookupCntForRE)
+			{
+				uiLookupCnt++;
+			}
+
+			if (!bRequireSameRouter && prteNearby != NULL 
+				|| bRequireSameRouter && prteNearby != NULL && (prteNearby->rt_router.interfaceAddr.ipv4 == reTBExchanged->rt_router.interfaceAddr.ipv4))
+			{
+
+				if (!bIncludeOldLastHop && reTBExchanged->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 != addrReached.interfaceAddr.ipv4
+					|| bIncludeOldLastHop)
+				{
+
+
+					
+
+					//must satisfy prteNearby->rt_entry_infos.rtu_metric == uiCurrentCost or prteNearby->rt_entry_infos.rtu_metric + 1 = uiCurrentCost
+					if (prteNearby->rt_metric == reTBExchanged->rt_metric - 1)
+					{
+
+						if (g_iToAchieveSameRoute == 1)
+						{
+
+							if (bSameCost)
+							{
+								if (PreferredRouteForNew(prteNearby->rt_router.interfaceAddr.ipv4, prtetmp->rt_router.interfaceAddr.ipv4))
+								{
+									prtetmp = prteNearby;
+								}
+							}
+							else
+							{
+								prtetmp = prteNearby;
+							}
+
+							bSameCost = TRUE;
+
+							continue;
+
+						}
+						else
+						{
+
+							bSameCost = TRUE;
+
+							prtetmp = prteNearby;
+
+							if (prteNearby->rt_router.interfaceAddr.ipv4 == reTBExchanged->rt_router.interfaceAddr.ipv4)
+							{
+
+								//same router
+								bExistSameCostWithSameRouter = TRUE;
+
+
+								break;
+
+							}
+							else
+							{
+
+								//different router
+
+								continue;
+							}
+
+						}
+
+					}
+
+					//just do not consider any cost change
+
+
+					
+					if (!bSameCost && prteNearby->rt_metric == reTBExchanged->rt_metric 
+						//comment reason: if this indirect link does exist, then it is ok, 
+						//since the disconnect of direct link does not mean the disconnect of the indirect link
+						//&& reTBExchanged->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 != prteNearby->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4
+						)
+					{
+
+						
+						if (bIncludeOldLastHop && bOldLastCanbePrefered)
+						{
+
+							prtetmp = reOldLast;
+							
+						}
+						else
+						{
+
+							if (g_iToAchieveSameRoute == 1)
+							{
+								
+
+								if (ptna_set_fore != NULL)
+								{
+									bool bIsAlsoDisconnectedEntry = exist_in_tco_node_addr_set(ptna_set_fore, prteNearby->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4);
+									if (bIsAlsoDisconnectedEntry)
+									{
+
+										if (pbPossibleToFound)
+										{
+											*pbPossibleToFound = TRUE;
+										}
+
+										continue;
+									}
+								}
+
+								if (ptna_set_fore2 != NULL)
+								{
+									bool bIsAlsoDisconnectedEntry = exist_in_tco_node_addr_set(ptna_set_fore2, prteNearby->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4);
+									if (bIsAlsoDisconnectedEntry)
+									{
+
+										if (pbPossibleToFound)
+										{
+											*pbPossibleToFound = TRUE;
+										}
+
+										continue;
+									}
+								}
+
+
+								
+
+								if (bCostPlusOne)
+								{
+									if (PreferredRouteForNew(prteNearby->rt_entry_infos.rtu_router.interfaceAddr.ipv4, prtetmp->rt_entry_infos.rtu_router.interfaceAddr.ipv4))
+									{
+										prtetmp = prteNearby;
+									}
+								}
+								else
+								{
+									prtetmp = prteNearby;
+								}
+
+							}
+							else
+							{
+								prtetmp = prteNearby;
+							}
+
+
+							
+						}
+
+						bCostPlusOne = TRUE;
+						
+
+						continue;
+					}
+
+
+					/*
+					if (!bSameCost && !bCostPlusOne && prteNearby->rt_metric == reTBExchanged->rt_metric + 1
+						&& prteNearby->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 != reTBExchanged->rt_entry_infos.rtu_dst.interfaceAddr.ipv4)
+					{
+
+						//comment reason: if this indirect link does exist, then it is ok, 
+						//since the disconnect of direct link does not mean the disconnect of the indirect link
+						//rt_entry* prteNearby2 = QueryRoutingTableAccordingToNodeId(node, prteNearby->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4);
+
+						//if (prteNearby2 != NULL)
+						{
+							//if (prteNearby2->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 != reTBExchanged->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4)
+							{
+
+
+								bCostPlusTwo = TRUE;
+
+								prtetmp = prteNearby;
+
+
+								continue;
+							}
+						}
+					}
+					*/
+
+				}
+				else
+				{
+					//will not happen, since it should already be deleted
+				}
+
+			}
+
+		}
+
+
+		if (dTBExchanged != NULL)
+		{
+			
+			dTBExchanged->bChildrenDetermined = TRUE;
+		}
+
+
+		bExchangeFound =  bSameCost || bCostPlusOne;//|| bCostPlusTwo;
+
+
+		if (bExchangeFound)
+		{
+			if (bSameCost)
+			{
+
+				reTBExchanged->rt_entry_infos.bCostChanged = FALSE;
+
+				reTBExchanged->rt_entry_infos.uiCostChg = 0;
+
+
+				if (g_iToAchieveSameRoute == 1)
+				{
+
+					if (prtetmp->rt_router.interfaceAddr.ipv4 == reTBExchanged->rt_router.interfaceAddr.ipv4)
+					{
+
+						bExistSameCostWithSameRouter = TRUE;
+					}						
+				}
+				
+
+				if (bExistSameCostWithSameRouter)
+				{
+
+					reTBExchanged->rt_entry_infos.rtu_lasthop = prtetmp->rt_dst;
+
+					if (dTBExchanged != NULL)
+					{
+
+						//dTBExchanged->bChildrenDetermined = TRUE;
+						ClearChildrenList(dTBExchanged->children);
+
+					}
+				}
+				else
+				{
+
+					reTBExchanged->rt_entry_infos.rtu_lasthop = prtetmp->rt_dst;
+
+
+					reTBExchanged->rt_interface = prtetmp->rt_interface;
+					reTBExchanged->rt_router = prtetmp->rt_router;
+
+
+					if (_OLSR_MULTIPATH)
+					{
+
+						reTBExchanged->rt_entry_infos.rtu_DegreeWRTNode = prtetmp->rt_entry_infos.rtu_DegreeWRTNode;
+						reTBExchanged->rt_entry_infos.rtu_DistanceWRTNode = prtetmp->rt_entry_infos.rtu_DistanceWRTNode;
+						reTBExchanged->rt_entry_infos.related_neighbor = prtetmp->rt_entry_infos.related_neighbor;
+					}
+				}
+			}			
+			else	//bCostPlusOne 
+			{
+
+				reTBExchanged->rt_entry_infos.uiCostChg = 1;
+				
+
+
+				reTBExchanged->rt_entry_infos.bCostChanged = TRUE;
+
+				reTBExchanged->rt_entry_infos.rtu_lasthop = prtetmp->rt_dst;
+
+
+				reTBExchanged->rt_interface = prtetmp->rt_interface;
+				reTBExchanged->rt_router = prtetmp->rt_router;
+
+				reTBExchanged->rt_metric = (UInt16) (prtetmp->rt_metric + 1);
+
+
+				if (_OLSR_MULTIPATH)
+				{
+
+					reTBExchanged->rt_entry_infos.rtu_DegreeWRTNode = prtetmp->rt_entry_infos.rtu_DegreeWRTNode;
+					reTBExchanged->rt_entry_infos.rtu_DistanceWRTNode = prtetmp->rt_entry_infos.rtu_DistanceWRTNode;
+					reTBExchanged->rt_entry_infos.related_neighbor = prtetmp->rt_entry_infos.related_neighbor;
+				}
+			}
+			
+
+
+			if (bExistSameCostWithSameRouter)
+			{
+
+				reTBExchanged->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+			}
+			else
+			{
+
+				reTBExchanged->rt_entry_infos.bDescendentRequireFurtherUpdate = TRUE;
+			}
+
+
+		}
+		else
+		{
+
+
+			//need to delete
+
+
+		}
+
+	}
+	else
+	{
+		//need to delete
+
+	}
+
+
+	if (_TEST_TIME_COMPLEXITY && puiLookupCntForRE)
+	{
+		*puiLookupCntForRE += uiLookupCnt;
+	}
+
+
+	return bExchangeFound;
+}
+
+
+BOOL FindRouteExchangeV20(Node* node, destination_n * dTBExchanged, rt_entry* reTBExchanged, BOOL bIncludeOldLastHop, UInt32 * puiLookupCntForRE, BOOL bRequireSameRouter, tco_node_addr ** ptna_set, tco_node_addr ** ptna_set2, BOOL * pbPossibleToFound)
+{
+
+	BOOL bExchangeFound = FALSE;
+
+	UInt32 uiLookupCnt = 0;
+
+	//rt_entry* reTBExchanged = dTBExchanged->destination;
+
+	topology_last_entry * t_last_sym = OlsrLookupLastTopologyTableSYM(node, reTBExchanged->rt_dst);
+	if (t_last_sym != NULL)
+	{
+		destination_list* topo_dest = NULL;
+
+		topo_dest = t_last_sym->topology_list_of_destinations;
+
+		rt_entry* prtetmp = NULL;
+
+		BOOL bSameCost = FALSE;
+		//BOOL bCostPlusOne = FALSE;
+		//BOOL bCostPlusTwo = FALSE;
+
+		BOOL bExistSameCostWithSameRouter = FALSE;
+
+		BOOL bExist = FALSE;
+
+		while (topo_dest != NULL)
+		{
+
+			Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+
+			topo_dest = topo_dest->next;
+
+			if (dTBExchanged != NULL)
+			{
+				if (dTBExchanged->bChildrenDetermined)
+				{
+					//check if this reached one belong to its children, to reduce the execution of QueryRoutingTableAccordingToNodeId
+					if (BelongsToItsChildren(dTBExchanged->children, addrReached.interfaceAddr.ipv4))
+					{
+						continue;
+					}
+				}
+			}	
+
+
+			if (ptna_set != NULL)
+			{
+				bool bIsAlsoDisconnectedEntry = exist_in_tco_node_addr_set(ptna_set, addrReached.interfaceAddr.ipv4);
+				if (bIsAlsoDisconnectedEntry)
+				{
+
+					if (pbPossibleToFound)
+					{
+						*pbPossibleToFound = TRUE;
+					}
+
+					continue;
+				}
+			}
+
+			if (ptna_set2 != NULL)
+			{
+				bool bIsAlsoDisconnectedEntry = exist_in_tco_node_addr_set(ptna_set2, addrReached.interfaceAddr.ipv4);
+				if (bIsAlsoDisconnectedEntry)
+				{
+
+					if (pbPossibleToFound)
+					{
+						*pbPossibleToFound = TRUE;
+					}
+
+					continue;
+				}
+			}
+
+
+			rt_entry* prteNearby = QueryRoutingTableAccordingToNodeId(node, addrReached.interfaceAddr.ipv4);
+
+
+			if (dTBExchanged != NULL && prteNearby != NULL)
+			{
+				if (!dTBExchanged->bChildrenDetermined)
+				{
+					if (prteNearby->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == reTBExchanged->rt_entry_infos.rtu_dst.interfaceAddr.ipv4)
+					{
+
+						//is a child, add to children list
+						AddToChildrenList(&(dTBExchanged->children), prteNearby);
+
+						continue;
+					}
+				}
+			}
+
+
+
+			if (_TEST_TIME_COMPLEXITY && puiLookupCntForRE)
+			{
+				uiLookupCnt++;
+			}
+
+			if (!bRequireSameRouter && prteNearby != NULL 
+				|| bRequireSameRouter && prteNearby != NULL && (prteNearby->rt_router.interfaceAddr.ipv4 == reTBExchanged->rt_router.interfaceAddr.ipv4))
+			{
+
+				if (!bIncludeOldLastHop && reTBExchanged->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 != addrReached.interfaceAddr.ipv4
+					|| bIncludeOldLastHop)
+				{
+
+
+					//must satisfy prteNearby->rt_entry_infos.rtu_metric == uiCurrentCost or prteNearby->rt_entry_infos.rtu_metric + 1 = uiCurrentCost
+					if (prteNearby->rt_metric == reTBExchanged->rt_metric - 1)
+					{
+					
+
+						if (g_iToAchieveSameRoute == 1)
+						{
+
+							if (bSameCost)
+							{
+								if (PreferredRouteForNew(prteNearby->rt_router.interfaceAddr.ipv4, prtetmp->rt_router.interfaceAddr.ipv4))
+								{
+									prtetmp = prteNearby;
+								}
+							}
+							else
+							{
+								prtetmp = prteNearby;
+							}
+
+							bSameCost = TRUE;
+
+							continue;
+
+						}
+						else
+						{
+
+							bSameCost = TRUE;
+
+							prtetmp = prteNearby;
+
+							if (prteNearby->rt_router.interfaceAddr.ipv4 == reTBExchanged->rt_router.interfaceAddr.ipv4)
+							{
+
+								//same router
+								bExistSameCostWithSameRouter = TRUE;
+
+
+								break;
+								//break;
+							}
+							else
+							{
+
+								//different router
+
+								continue;
+							}
+
+						}
+
+						
+
+					}
+
+					//just do not consider any cost change
+
+
+					/*
+					if (!bSameCost && prteNearby->rt_metric == reTBExchanged->rt_metric 
+						//comment reason: if this indirect link does exist, then it is ok, 
+						//since the disconnect of direct link does not mean the disconnect of the indirect link
+						//&& reTBExchanged->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 != prteNearby->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4
+						)
+					{
+
+
+						bCostPlusOne = TRUE;
+
+						prtetmp = prteNearby;
+
+						continue;
+					}
+
+
+					if (!bSameCost && !bCostPlusOne && prteNearby->rt_metric == reTBExchanged->rt_metric + 1
+						&& prteNearby->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 != reTBExchanged->rt_entry_infos.rtu_dst.interfaceAddr.ipv4)
+					{
+
+						//comment reason: if this indirect link does exist, then it is ok, 
+						//since the disconnect of direct link does not mean the disconnect of the indirect link
+						//rt_entry* prteNearby2 = QueryRoutingTableAccordingToNodeId(node, prteNearby->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4);
+
+						//if (prteNearby2 != NULL)
+						{
+							//if (prteNearby2->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 != reTBExchanged->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4)
+							{
+
+
+								bCostPlusTwo = TRUE;
+
+								prtetmp = prteNearby;
+
+
+								continue;
+							}
+						}
+					}
+					*/
+
+				}
+				else
+				{
+					//will not happen, since it should already be deleted
+				}
+
+			}
+
+		}
+
+
+		if (dTBExchanged != NULL)
+		{
+
+			dTBExchanged->bChildrenDetermined = TRUE;
+		}
+
+
+		bExchangeFound =  bSameCost;// || bCostPlusOne || bCostPlusTwo;
+
+		
+		if (bExchangeFound)
+		{
+			if (bSameCost)
+			{
+
+				reTBExchanged->rt_entry_infos.bCostChanged = FALSE;
+
+				reTBExchanged->rt_entry_infos.uiCostChg = 0;
+
+				if (g_iToAchieveSameRoute == 1)
+				{
+
+					if (prtetmp->rt_router.interfaceAddr.ipv4 == reTBExchanged->rt_router.interfaceAddr.ipv4)
+					{
+
+						bExistSameCostWithSameRouter = TRUE;
+					}						
+				}
+				
+
+				if (bExistSameCostWithSameRouter)
+				{
+
+
+					reTBExchanged->rt_entry_infos.rtu_lasthop = prtetmp->rt_dst;
+
+					if (dTBExchanged != NULL)
+					{
+
+						//dTBExchanged->bChildrenDetermined = TRUE;
+						ClearChildrenList(dTBExchanged->children);
+
+					}
+
+
+				}
+				else
+				{
+
+					reTBExchanged->rt_entry_infos.rtu_lasthop = prtetmp->rt_dst;
+
+
+					reTBExchanged->rt_interface = prtetmp->rt_interface;
+					reTBExchanged->rt_router = prtetmp->rt_router;
+
+
+					if (_OLSR_MULTIPATH)
+					{
+
+
+						reTBExchanged->rt_entry_infos.rtu_DegreeWRTNode = prtetmp->rt_entry_infos.rtu_DegreeWRTNode;
+						reTBExchanged->rt_entry_infos.rtu_DistanceWRTNode = prtetmp->rt_entry_infos.rtu_DistanceWRTNode;
+						reTBExchanged->rt_entry_infos.related_neighbor = prtetmp->rt_entry_infos.related_neighbor;
+					}
+				}
+			}
+			/*
+			else	//bCostPlusOne or bCostPlusTwo
+			{
+
+
+				reTBExchanged->rt_entry_infos.bCostChanged = TRUE;
+
+				reTBExchanged->rt_entry_infos.rtu_lasthop = prtetmp->rt_dst;
+
+
+				reTBExchanged->rt_interface = prtetmp->rt_interface;
+				reTBExchanged->rt_router = prtetmp->rt_router;
+
+				reTBExchanged->rt_metric = (UInt16) (prtetmp->rt_metric + 1);
+
+
+				reTBExchanged->rt_entry_infos.rtu_DegreeWRTNode = prtetmp->rt_entry_infos.rtu_DegreeWRTNode;
+				reTBExchanged->rt_entry_infos.rtu_DistanceWRTNode = prtetmp->rt_entry_infos.rtu_DistanceWRTNode;
+				reTBExchanged->rt_entry_infos.related_neighbor = prtetmp->rt_entry_infos.related_neighbor;
+			}
+			*/
+
+
+			if (bExistSameCostWithSameRouter)
+			{
+
+				reTBExchanged->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+			}
+			else
+			{
+
+				reTBExchanged->rt_entry_infos.bDescendentRequireFurtherUpdate = TRUE;
+			}
+
+
+		}
+		else
+		{
+
+
+			//need to delete
+
+
+		}
+
+	}
+	else
+	{
+		//need to delete
+
+	}
+
+
+	if (_TEST_TIME_COMPLEXITY && puiLookupCntForRE)
+	{
+		*puiLookupCntForRE += uiLookupCnt;
+	}
+
+
+	return bExchangeFound;
+}
+
+
+BOOL FindRouteExchange(Node* node, rt_entry* reTBExchanged, BOOL bIncludeOldLastHop, UInt32 * puiLookupCntForRE, BOOL bRequireSameRouter)
+{
+
+	BOOL bExchangeFound = FALSE;
+
+	UInt32 uiLookupCnt = 0;
+
+	topology_last_entry * t_last_sym = OlsrLookupLastTopologyTableSYM(node, reTBExchanged->rt_dst);
+	if (t_last_sym != NULL)
+	{
+		destination_list* topo_dest = NULL;
+		
+		topo_dest = t_last_sym->topology_list_of_destinations;
+
+		rt_entry* prtetmp = NULL;
+
+		BOOL bSameCost = FALSE;
+		BOOL bCostPlusOne = FALSE;
+		BOOL bCostPlusTwo = FALSE;
+		
+		BOOL bExistSameCostWithSameRouter = FALSE;
+
+		BOOL bExist = FALSE;
+
+		while (topo_dest != NULL)
+		{
+			
+			Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+
+			topo_dest = topo_dest->next;
+
+			rt_entry* prteNearby = QueryRoutingTableAccordingToNodeId(node, addrReached.interfaceAddr.ipv4);
+
+
+			if (_TEST_TIME_COMPLEXITY && puiLookupCntForRE)
+			{
+				uiLookupCnt++;
+			}
+
+			if (!bRequireSameRouter && prteNearby != NULL 
+				|| bRequireSameRouter && prteNearby != NULL && (prteNearby->rt_router.interfaceAddr.ipv4 == reTBExchanged->rt_router.interfaceAddr.ipv4))
+			{
+
+				if (!bIncludeOldLastHop && reTBExchanged->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 != addrReached.interfaceAddr.ipv4
+					|| bIncludeOldLastHop)
+				{
+
+					//must satisfy prteNearby->rt_entry_infos.rtu_metric == uiCurrentCost or prteNearby->rt_entry_infos.rtu_metric + 1 = uiCurrentCost
+					if (prteNearby->rt_metric == reTBExchanged->rt_metric - 1)
+					{
+
+						bSameCost = TRUE;
+
+						prtetmp = prteNearby;
+
+						if (prteNearby->rt_router.interfaceAddr.ipv4 == reTBExchanged->rt_router.interfaceAddr.ipv4)
+						{
+
+							//same router
+							bExistSameCostWithSameRouter = TRUE;
+							break;
+						}
+						else
+						{
+
+							//different router
+							
+							continue;
+						}
+
+					}
+
+					
+					if (!bSameCost && prteNearby->rt_metric == reTBExchanged->rt_metric 
+						//comment reason: if this indirect link does exist, then it is ok, 
+						//since the disconnect of direct link does not mean the disconnect of the indirect link
+						//&& reTBExchanged->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 != prteNearby->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4
+						)
+					{
+
+
+						bCostPlusOne = TRUE;
+
+						prtetmp = prteNearby;
+
+						continue;
+					}
+
+
+					if (!bSameCost && !bCostPlusOne && prteNearby->rt_metric == reTBExchanged->rt_metric + 1
+						&& prteNearby->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 != reTBExchanged->rt_entry_infos.rtu_dst.interfaceAddr.ipv4)
+					{
+
+						//comment reason: if this indirect link does exist, then it is ok, 
+						//since the disconnect of direct link does not mean the disconnect of the indirect link
+						//rt_entry* prteNearby2 = QueryRoutingTableAccordingToNodeId(node, prteNearby->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4);
+
+						//if (prteNearby2 != NULL)
+						{
+							//if (prteNearby2->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 != reTBExchanged->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4)
+							{
+
+								
+								bCostPlusTwo = TRUE;
+
+								prtetmp = prteNearby;
+
+
+								continue;
+							}
+						}
+					}
+					
+				}
+				else
+				{
+					//will not happen, since it should already be deleted
+				}
+
+			}
+
+		}
+
+
+
+		bExchangeFound =  bSameCost || bCostPlusOne || bCostPlusTwo;
+
+		
+		if (bExchangeFound)
+		{
+			if (bSameCost)
+			{
+
+				reTBExchanged->rt_entry_infos.bCostChanged = FALSE;
+
+				reTBExchanged->rt_entry_infos.uiCostChg = 0;
+
+			
+
+				if (bExistSameCostWithSameRouter)
+				{
+					
+				
+					reTBExchanged->rt_entry_infos.rtu_lasthop = prtetmp->rt_dst;
+					
+					
+				}
+				else
+				{
+					
+					reTBExchanged->rt_entry_infos.rtu_lasthop = prtetmp->rt_dst;
+
+
+					reTBExchanged->rt_interface = prtetmp->rt_interface;
+					reTBExchanged->rt_router = prtetmp->rt_router;
+					
+
+					if (_OLSR_MULTIPATH)
+					{
+
+						reTBExchanged->rt_entry_infos.rtu_DegreeWRTNode = prtetmp->rt_entry_infos.rtu_DegreeWRTNode;
+						reTBExchanged->rt_entry_infos.rtu_DistanceWRTNode = prtetmp->rt_entry_infos.rtu_DistanceWRTNode;
+						reTBExchanged->rt_entry_infos.related_neighbor = prtetmp->rt_entry_infos.related_neighbor;
+					}
+				}
+			}
+			else	//bCostPlusOne or bCostPlusTwo
+			{
+			
+
+				reTBExchanged->rt_entry_infos.bCostChanged = TRUE;
+
+				if (bCostPlusOne)
+				{
+					reTBExchanged->rt_entry_infos.uiCostChg = 1;
+				}
+				else
+				{
+					reTBExchanged->rt_entry_infos.uiCostChg = 2;
+				}
+
+				reTBExchanged->rt_entry_infos.rtu_lasthop = prtetmp->rt_dst;
+
+
+				reTBExchanged->rt_interface = prtetmp->rt_interface;
+				reTBExchanged->rt_router = prtetmp->rt_router;
+				
+				reTBExchanged->rt_metric = (UInt16) (prtetmp->rt_metric + 1);
+				
+
+				reTBExchanged->rt_entry_infos.rtu_DegreeWRTNode = prtetmp->rt_entry_infos.rtu_DegreeWRTNode;
+				reTBExchanged->rt_entry_infos.rtu_DistanceWRTNode = prtetmp->rt_entry_infos.rtu_DistanceWRTNode;
+				reTBExchanged->rt_entry_infos.related_neighbor = prtetmp->rt_entry_infos.related_neighbor;
+			}
+
+
+			if (bExistSameCostWithSameRouter)
+			{
+		
+				reTBExchanged->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+			}
+			else
+			{
+				
+				reTBExchanged->rt_entry_infos.bDescendentRequireFurtherUpdate = TRUE;
+			}
+
+
+		}
+		else
+		{
+
+			
+			//need to delete
+			
+			
+		}
+		
+	}
+	else
+	{
+		//need to delete
+
+	}
+
+
+	if (_TEST_TIME_COMPLEXITY && puiLookupCntForRE)
+	{
+		*puiLookupCntForRE += uiLookupCnt;
+	}
+
+
+	return bExchangeFound;
+}
+
+BOOL DisconnectivetyCausedBy2HopNeighbor(Node* node, Address addrExpected2Hop, NodeAddress naExpectedNeighbor)
+{
+	BOOL bDisConnectivety = TRUE;
+
+	neighbor_2_entry *two_hop_neighbor = NULL;
+
+	two_hop_neighbor = OlsrLookup2HopNeighborTable(node, addrExpected2Hop);
+	
+	if (two_hop_neighbor)
+	{
+
+		neighbor_list_entry* list_1 = NULL;
+		list_1 = two_hop_neighbor->neighbor_2_nblist;
+
+		while (list_1 != NULL)
+		{
+			
+			if (list_1->neighbor->neighbor_main_addr.interfaceAddr.ipv4 == naExpectedNeighbor)
+			{
+				bDisConnectivety = FALSE;
+				break;
+			}																
+
+			list_1 = list_1->neighbor_next;
+		}
+
+	}
+	
+	return bDisConnectivety;
+}
+
+
+BOOL ConnectivetyCausedBy2HopNeighbor(Node* node, Address addrExpected2Hop, NodeAddress naExpectedNeighbor)
+{
+	
+	BOOL bConnectivety = FALSE;
+
+	neighbor_2_entry *two_hop_neighbor = NULL;
+
+	two_hop_neighbor = OlsrLookup2HopNeighborTable(node, addrExpected2Hop);
+	if (two_hop_neighbor)
+	{
+		neighbor_list_entry* list_1 = NULL;
+
+		list_1 = two_hop_neighbor->neighbor_2_nblist;
+
+		
+		while (list_1 != NULL)
+		{
+			if (list_1->neighbor->neighbor_main_addr.interfaceAddr.ipv4 == naExpectedNeighbor)
+			{
+				bConnectivety = TRUE;
+				break;
+			}
+
+			list_1 = list_1->neighbor_next;
+		}		
+	}
+
+	
+	return bConnectivety;
+}
+
+
+void SubFuncForLoopHelpFuncV23(Node * node, e2_s e2_current, destination_n ** list_p0, destination_n ** p_avoid_consider_list_for_p2 = NULL, UInt32 * puiLookupCnt = NULL, tco_node_addr ** ptco_avoid_consider_list = NULL)
+{
+		
+	if (e2_current.list_p2 != NULL)
+	{
+		destination_n * tmp_destination = NULL;
+
+		tmp_destination = e2_current.list_p2;
+
+		while (tmp_destination != NULL)
+		{
+	
+			destination_n* destination_n_1 = NULL;
+			destination_list* topo_dest = NULL;
+			
+			if (tmp_destination->bChildrenDetermined)
+			{
+				destination_n * dst_child = tmp_destination->children;
+				while (dst_child != NULL)
+				{
+
+					Address addrReached = dst_child->destination->rt_entry_infos.rtu_dst;							
+
+					UInt32 uiInnerExchangeLUCnt = 0;
+
+					OlsrCalculateRoutingTableForSinglePathTopologySearchHelpFuncV23(node, dst_child, e2_current, addrReached, tmp_destination, list_p0, p_avoid_consider_list_for_p2, &uiInnerExchangeLUCnt, ptco_avoid_consider_list);
+
+					
+					dst_child = dst_child->next;
+				}
+			}
+			else
+			{
+
+				topology_last_entry* topo_last = OlsrLookupLastTopologyTableSYM(node, tmp_destination->destination->rt_dst);
+			
+
+				if (NULL != topo_last)
+				{
+					topo_dest = topo_last->topology_list_of_destinations;
+
+					while (topo_dest != NULL)
+					{
+
+						Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+						/*
+						if (RoutingOlsrCheckMyIfaceAddress(
+							node,
+							topo_dest->destination_node->topology_destination_dst) != -1)
+						{
+							topo_dest = topo_dest->next;
+							continue;
+						}
+						*/
+
+
+						UInt32 uiInnerExchangeLUCnt = 0;
+
+
+					
+						OlsrCalculateRoutingTableForSinglePathTopologySearchHelpFuncV23(node, NULL, e2_current, addrReached, tmp_destination, list_p0, p_avoid_consider_list_for_p2, &uiInnerExchangeLUCnt, ptco_avoid_consider_list);
+
+
+						//Peter Added for test time complexity
+						/*
+						if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+						{
+							uiLookupCnt += uiInnerExchangeLUCnt;
+
+							//if (node->nodeId == NODE_ID_FOR_TEST_OUTER_ANGLE || node->nodeId == NODE_ID_FOR_TEST_OUTER_EDGE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_ANGLE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_EDGE || node->nodeId == NODE_ID_FOR_TEST_CENTER)
+							if (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END)
+							{
+								uiLookupCnt++;
+
+							}
+						}
+						*/
+
+						topo_dest = topo_dest->next;
+					}
+				}
+			}
+						
+
+			tmp_destination = tmp_destination->next;
+			//destination_n_1 = (*list_pp);
+			//(*list_pp) = (*list_pp)->next;
+			//MEM_free(destination_n_1);
+		}
+
+		while (e2_current.list_p2 != NULL)
+		{
+			destination_n* destination_n_1 = NULL;
+			destination_n_1 = e2_current.list_p2;
+			e2_current.list_p2 = e2_current.list_p2->next;
+			MEM_free(destination_n_1);
+		}
+
+	}
+}
+
+
+void SubFuncForLoopHelpFuncV22(Node * node, destination_n ** list_pp, e2_s* p_e2s_n_minus_1, e2_s* p_e2s_n_0, e2_s* p_e2s_n_1, 
+							   UInt32 * puiLookupCnt = NULL, tco_node_addr ** ptna_set = NULL, tco_node_addr ** ptna_set2 = NULL)
+{
+
+	if (*list_pp != NULL)
+	{
+					
+		while (*list_pp != NULL)
+		{
+			
+			destination_n* destination_n_1 = NULL;
+			destination_list* topo_dest = NULL;
+			
+			
+			if ((*list_pp)->bChildrenDetermined)
+			{
+				destination_n * dst_child = (*list_pp)->children;
+				while (dst_child != NULL)
+				{
+
+					Address addrReached = dst_child->destination->rt_entry_infos.rtu_dst;							
+
+					UInt32 uiInnerExchangeLUCnt = 0;
+
+					OlsrCalculateRoutingTableForSinglePathTopologySearchHelpFuncV22(node, dst_child, addrReached, (*list_pp), p_e2s_n_minus_1, p_e2s_n_0, p_e2s_n_1, &uiInnerExchangeLUCnt, ptna_set, ptna_set2);
+
+					//OlsrCalculateRoutingTableForSinglePathTopologySearchHelpFuncV24(node, dst_child, addrReached, e2_s_n.list_p1, &e2_s_n.list_p0, &list_avoid_consider_for_p1, &uiInnerExchangeLUCnt, &tco_avoid_consider_list_p1, ptco_avoid_consider_list);
+
+					dst_child = dst_child->next;
+				}
+			}
+			else
+			{
+
+				topology_last_entry* topo_last = OlsrLookupLastTopologyTableSYM(node, (*list_pp)->destination->rt_dst);
+			
+				if (NULL != topo_last)
+				{
+					topo_dest = topo_last->topology_list_of_destinations;
+
+					while (topo_dest != NULL)
+					{
+
+						Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+						/*
+						if (RoutingOlsrCheckMyIfaceAddress(
+							node,
+							topo_dest->destination_node->topology_destination_dst) != -1)
+						{
+							topo_dest = topo_dest->next;
+							continue;
+						}
+						*/
+
+
+						UInt32 uiInnerExchangeLUCnt = 0;
+
+
+						OlsrCalculateRoutingTableForSinglePathTopologySearchHelpFuncV22(node, NULL, addrReached, (*list_pp), p_e2s_n_minus_1, p_e2s_n_0, p_e2s_n_1, &uiInnerExchangeLUCnt, ptna_set, ptna_set2);
+
+
+						//Peter Added for test time complexity
+						topo_dest = topo_dest->next;
+					}
+				}
+			}
+			
+			
+
+			destination_n_1 = (*list_pp);
+			(*list_pp) = (*list_pp)->next;
+			MEM_free(destination_n_1);
+		}
+
+	}
+}
+
+
+destination_n* ProcessRoutingTableAccordingToRecentDeleteListV23(Node* node, UInt32 * pbRequireRediscovery, UInt32 * puiLookupCntForDeleteList)
+{
+
+	//destination_n * list_destination_n = NULL;
+
+	destination_n * list_destination_delete = NULL;
+
+	RoutingOlsr * olsr = (RoutingOlsr *) node->appData.olsr;
+
+	tco_node_addr * tco_delete_list_tmp = olsr->recent_delete_list;	
+
+	UInt32 uiLookupCnt = 0;
+
+	*pbRequireRediscovery = FALSE;
+
+
+	clear_tco_node_addr_set(&olsr->recent_add_list);
+
+
+	UInt16 uiTCOldCost = MAX_COST;
+	//if (tco_delete_list_tmp->nid == 10 && olsr->naRecentChangedAddressByTC == 15 && node->nodeId == 16)
+	//{
+
+	//DebugBreak();
+	//}
+
+
+	//prte and prteTC will exist or non-exist at the same time
+	rt_entry* prteTC = QueryRoutingTableAccordingToNodeId(node, olsr->naRecentChangedAddressByTC);
+
+
+
+	if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+	{
+		uiLookupCnt++;
+	}
+
+	if (prteTC != NULL)
+	{
+
+		uiTCOldCost = prteTC->rt_entry_infos.rtu_metric;
+
+
+		BOOL bExistReachTCFromTDNodeTBD = FALSE;
+
+		int i_prteTCOldCost = prteTC->rt_metric;
+
+		prteTC->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+		prteTC->rt_entry_infos.bCostChanged = FALSE;
+		prteTC->rt_entry_infos.bRequireDelete = FALSE;
+		prteTC->rt_entry_infos.uiCostChg = 0;
+
+
+		while (tco_delete_list_tmp != NULL)
+		{
+
+			if (prteTC->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == tco_delete_list_tmp->nid)
+			{
+
+				if (prteTC->rt_metric == 2)
+				{
+
+					BOOL b2HopNeighborCausedConnection = FALSE;
+					b2HopNeighborCausedConnection = ConnectivetyCausedBy2HopNeighbor(node, prteTC->rt_entry_infos.rtu_dst, tco_delete_list_tmp->nid);
+
+					if (b2HopNeighborCausedConnection)
+					{
+
+						remove_from_tco_node_addr_set(&(olsr->recent_delete_list), tco_delete_list_tmp->nid);
+
+						break;
+					}										
+				}
+
+
+
+				bExistReachTCFromTDNodeTBD = TRUE;
+
+				remove_from_tco_node_addr_set(&(olsr->recent_delete_list), tco_delete_list_tmp->nid);
+
+
+				break;
+			}
+
+			tco_delete_list_tmp = tco_delete_list_tmp->next;
+		}
+
+
+		e2_s e2_plus_zero;
+		e2_s e2_plus_one;
+		e2_s e2_plus_two;
+		e2_s e2_plus_three;
+
+
+		e2_plus_zero.list_delete = NULL;
+		e2_plus_zero.list_p0 = NULL;
+		e2_plus_zero.list_p1 = NULL;
+		e2_plus_zero.list_p2 = NULL;
+
+
+		e2_plus_one.list_delete = NULL;
+		e2_plus_one.list_p0 = NULL;
+		e2_plus_one.list_p1 = NULL;
+		e2_plus_one.list_p2 = NULL;
+
+
+		e2_plus_two.list_delete = NULL;
+		e2_plus_two.list_p0 = NULL;
+		e2_plus_two.list_p1 = NULL;
+		e2_plus_two.list_p2 = NULL;
+
+
+
+		e2_plus_three.list_delete = NULL;
+		e2_plus_three.list_p0 = NULL;
+		e2_plus_three.list_p1 = NULL;
+		e2_plus_three.list_p2 = NULL;
+
+
+
+
+		BOOL bExistReachTCFromTDNodeTBDWithoutFindPlus2Exchange = FALSE;
+
+		BOOL bPlusTwoExchangeForTSFound = FALSE;
+		rt_entry* tmp_2ExchgForTS = NULL;
+
+		tco_node_addr * ATS_list = NULL;
+
+
+		tco_node_addr * disconnected_list = NULL;
+
+
+		destination_n list_destination_tc_tmp;
+
+
+		memset(
+			&list_destination_tc_tmp,
+			0,
+			sizeof(destination_n));
+
+
+		/*
+		list_destination_tc_tmp = (destination_n* )
+			MEM_malloc(sizeof(destination_n));
+
+		memset(
+			list_destination_tc_tmp,
+			0,
+			*/
+		
+		destination_n * p_list_destination_ats = NULL;
+
+		if (bExistReachTCFromTDNodeTBD)
+		{
+			//DebugBreak();
+			//the same as bExistReachTCFromTDNodeTBD for this specific case
+
+			//find exchange for this,
+			//if can not find, then do not do following further exchange
+			BOOL bExchangeFound = FindRouteExchangeV22(node, &list_destination_tc_tmp, prteTC, FALSE, NULL, &uiLookupCnt);
+
+			if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+			{
+
+				*puiLookupCntForDeleteList = uiLookupCnt;
+			}
+
+			if (!bExchangeFound)
+			{
+
+				//OlsrDeleteRoutingTable(prteTC);
+				//prteTC = NULL;
+
+				if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+				{
+					//uiLookupCnt++;
+					*puiLookupCntForDeleteList = uiLookupCnt;
+				}
+
+
+				//to try to consider the ATS and DATS 0 exchange condition, which may also cause +2 exchange for TS
+
+
+
+				bExistReachTCFromTDNodeTBDWithoutFindPlus2Exchange = TRUE;
+				//*pbRequireRediscovery = TRUE;
+				//return NULL;
+			}
+			else
+			{
+				
+				destination_n* list_destination_tmp;
+				list_destination_tmp = (destination_n* )
+					MEM_malloc(sizeof(destination_n));
+
+				memset(
+					list_destination_tmp,
+					0,
+					sizeof(destination_n));
+
+				list_destination_tmp->destination = prteTC;
+
+
+				if (prteTC->rt_entry_infos.bDescendentRequireFurtherUpdate)
+				{
+					if (prteTC->rt_entry_infos.uiCostChg == 0)
+					{
+						//only route change
+						list_destination_tmp->next = e2_plus_zero.list_p0; 
+						e2_plus_zero.list_p0 = list_destination_tmp;
+
+					}
+					else
+					{
+
+						if (prteTC->rt_entry_infos.uiCostChg == 1)
+						{
+							
+							list_destination_tmp->next = e2_plus_one.list_p1;
+							e2_plus_one.list_p1 = list_destination_tmp;
+
+						}
+						else	//uiCostChg == 2
+						{
+							list_destination_tmp->next = e2_plus_two.list_p2;
+							e2_plus_two.list_p2 = list_destination_tmp;
+
+						}
+					}
+
+				}				
+
+			}
+
+
+			if (prteTC->rt_entry_infos.bDescendentRequireFurtherUpdate || bExistReachTCFromTDNodeTBDWithoutFindPlus2Exchange)
+			{
+
+				// need to find whether ATS can be exchanged by +0
+				if (list_destination_tc_tmp.bChildrenDetermined)
+				{
+					destination_n * dst_child = list_destination_tc_tmp.children;
+					while (dst_child != NULL)
+					{
+
+						Address addrReached = dst_child->destination->rt_entry_infos.rtu_dst;							
+
+						UInt32 uiInnerExchangeLUCnt = 0;
+
+						rt_entry* prteNearby = dst_child->destination;
+						if (prteNearby != NULL)
+						{
+
+							if (prteNearby->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == olsr->naRecentChangedAddressByTC)
+							{
+
+								prteNearby->rt_entry_infos.uiCostChg = 0;
+
+								prteNearby->rt_entry_infos.bCostChanged = FALSE;
+								prteNearby->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+								prteNearby->rt_entry_infos.bRequireDelete = FALSE;
+
+								BOOL bExchangeFound = FindRouteExchangeV20(node, dst_child, prteNearby, !bExistReachTCFromTDNodeTBDWithoutFindPlus2Exchange, &uiLookupCnt);
+								if (bExchangeFound)
+								{
+
+
+									if (bExistReachTCFromTDNodeTBDWithoutFindPlus2Exchange)
+									{
+
+										bPlusTwoExchangeForTSFound = TRUE;
+
+										if (tmp_2ExchgForTS == NULL)
+										{
+
+											tmp_2ExchgForTS = prteNearby;
+										}
+										else
+										{
+
+											if (g_iToAchieveSameRoute == 1)
+											{	
+
+												if (PreferredRouteForNew(prteNearby->rt_entry_infos.rtu_router.interfaceAddr.ipv4, tmp_2ExchgForTS->rt_entry_infos.rtu_router.interfaceAddr.ipv4))
+												{
+													tmp_2ExchgForTS = prteNearby;
+												}
+											}
+											
+										}
+									}
+									else
+									{
+
+										if (g_iToAchieveSameRoute == 1)
+										{
+											if (bExistReachTCFromTDNodeTBD && prteTC->rt_entry_infos.bDescendentRequireFurtherUpdate && prteTC->rt_entry_infos.uiCostChg == 2)
+											{
+
+												if (PreferredRouteForNew(prteNearby->rt_entry_infos.rtu_router.interfaceAddr.ipv4, prteTC->rt_entry_infos.rtu_router.interfaceAddr.ipv4))
+												{
+													//change route for its old parent to become the new parent
+
+													prteTC->rt_interface = prteNearby->rt_interface;
+
+									
+										
+													/*
+													if (_OLSR_MULTIPATH)
+													{
+
+													
+														prteTC->rt_entry_infos.rtu_DegreeWRTNode = prteNearby->rt_entry_infos.rtu_DegreeWRTNode;
+														prteTC->rt_entry_infos.rtu_DistanceWRTNode = prteNearby->rt_entry_infos.rtu_DistanceWRTNode;
+														prteTC->rt_entry_infos.related_neighbor = prteNearby->rt_entry_infos.related_neighbor;
+													}
+													*/
+																		
+										
+													prteTC->rt_entry_infos.rtu_lasthop = prteNearby->rt_entry_infos.rtu_dst;									
+													
+													prteTC->rt_router = prteNearby->rt_router;									
+													
+												}	
+											}
+										}
+									}
+
+
+									if (prteNearby->rt_entry_infos.bDescendentRequireFurtherUpdate)
+									{
+
+										//add to list
+
+										destination_n* list_destination_tmp;
+										list_destination_tmp = (destination_n* )
+											MEM_malloc(sizeof(destination_n));
+
+										memset(
+											list_destination_tmp,
+											0,
+											sizeof(destination_n));
+
+										list_destination_tmp->destination = prteNearby;
+
+										{
+											list_destination_tmp->children = dst_child->children;
+											list_destination_tmp->bChildrenDetermined = dst_child->bChildrenDetermined;
+
+											dst_child->children = NULL;
+										}
+
+
+										//only route change
+										list_destination_tmp->next = e2_plus_one.list_p0;
+										e2_plus_one.list_p0 = list_destination_tmp;
+
+
+									}
+									else
+									{
+										//do not need to add to list, since all their descendants are not require change
+									}
+								}
+								else
+								{
+									insert_into_tco_node_addr_set(&(ATS_list), addrReached.interfaceAddr.ipv4);
+
+
+									destination_n* list_destination_tmp;
+									list_destination_tmp = (destination_n* )
+										MEM_malloc(sizeof(destination_n));
+
+									memset(
+										list_destination_tmp,
+										0,
+										sizeof(destination_n));
+
+									list_destination_tmp->destination = prteNearby;
+
+									{
+										list_destination_tmp->children = dst_child->children;
+										list_destination_tmp->bChildrenDetermined = dst_child->bChildrenDetermined;
+
+										dst_child->children = NULL;
+									}
+
+
+
+									//only route change
+									list_destination_tmp->next = p_list_destination_ats;
+									p_list_destination_ats = list_destination_tmp;
+								
+									
+								}
+							}
+						}
+
+						//OlsrCalculateRoutingTableForSinglePathTopologySearchHelpFuncV24(node, dst_child, addrReached, e2_plus_two.list_p1, &e2_plus_two.list_p0, 
+						//	&list_avoid_consider_for_p1, &uiInnerExchangeLUCnt, &tco_avoid_consider_list_p1, &olsr->recent_delete_list);
+
+						//dst_child = dst_child->next;
+
+						destination_n * destination_n_1 = dst_child;						
+						dst_child = dst_child->next;
+
+						MEM_free(destination_n_1);
+					}
+				}
+							
+			}
+			
+		}
+		else
+		{
+
+
+		}
+
+
+
+		BOOL bEncounterCannotFindExchange = FALSE;
+
+		destination_n * p_list_destination_dts = NULL;
+
+		tco_delete_list_tmp = olsr->recent_delete_list;
+		//now it should not including the entry get to TCNode, since it is removed from the list,
+		//so only those nodes reached (it is possible that nodes can be reached but consider TCNode as last hop)
+		//by TCNode is remained 
+
+
+
+		//int iDisconnectCount = 0;
+
+		while (tco_delete_list_tmp != NULL)
+		{
+
+			rt_entry* prte = QueryRoutingTableAccordingToNodeId(node, tco_delete_list_tmp->nid);
+
+			if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+			{
+				uiLookupCnt++;
+			}
+
+			if (prte != NULL)
+			{
+
+				if (prte->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == olsr->naRecentChangedAddressByTC)
+				{
+
+					if (prte->rt_metric == 2)
+					{
+						BOOL b2HopNeighborCausedConnection = FALSE;
+
+						b2HopNeighborCausedConnection = ConnectivetyCausedBy2HopNeighbor(node, prte->rt_entry_infos.rtu_dst, olsr->naRecentChangedAddressByTC);
+						if (b2HopNeighborCausedConnection)
+						{
+
+							//remove_from_tco_node_addr_set(&(olsr->recent_delete_list), tco_delete_list_tmp->nid);
+
+							tco_delete_list_tmp = tco_delete_list_tmp->next;
+
+							continue;
+						}
+					}
+
+					insert_into_tco_node_addr_set(&(disconnected_list), tco_delete_list_tmp->nid);
+					//iDisconnectCount++;
+					
+
+					destination_n* list_destination_tmp;
+					list_destination_tmp = (destination_n* )
+						MEM_malloc(sizeof(destination_n));
+
+					memset(
+						list_destination_tmp,
+						0,
+						sizeof(destination_n));
+
+					list_destination_tmp->destination = prte;
+
+
+					//only route change
+					list_destination_tmp->next = p_list_destination_dts;
+					p_list_destination_dts = list_destination_tmp;
+
+
+
+				}
+				else
+				{
+					//it is possible that nodes can be reached but not consider TCNode as last hop
+					//skip these nodes
+
+				}
+
+			}
+			else
+			{
+
+				//should not happen
+			}
+
+
+			tco_delete_list_tmp = tco_delete_list_tmp->next;
+		}
+
+
+		destination_n * p_list_destination_dts2 = NULL;
+		
+		{
+
+			// need to find whether DATS can be exchanged by +0
+			
+			tco_node_addr * tmp_disconnected_list = NULL;
+
+			if (disconnected_list != NULL)
+			{
+				
+				//while (disconnected_list != NULL)
+				{
+					
+					//copy the set
+
+					/*
+					tco_node_addr * tmp_addr = disconnected_list;
+					while (tmp_addr != NULL)
+					{
+
+						insert_into_tco_node_addr_set(&(tmp_disconnected_list), tmp_addr->nid);
+						tmp_addr = tmp_addr->next;
+					}
+
+					tco_node_addr * tmp_addr_tmp = tmp_disconnected_list;
+
+					*/
+					//BOOL bAtleastFindOne = FALSE;
+					destination_n * p_destination_tmp = p_list_destination_dts;
+					while (p_destination_tmp != NULL)
+					{
+
+						rt_entry* prte = p_destination_tmp->destination;
+
+						if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+						{
+							uiLookupCnt++;
+						}
+
+						if (prte != NULL)
+						{
+
+							//the exchange here need to support unconsider set,
+							//to avoid circular dependency 
+
+							prte->rt_entry_infos.uiCostChg = 0;
+
+							prte->rt_entry_infos.bCostChanged = FALSE;
+							prte->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+							prte->rt_entry_infos.bRequireDelete = FALSE;
+
+
+							BOOL bExchangeFound = FindRouteExchangeV20(node, p_destination_tmp, prte, FALSE, &uiLookupCnt);
+							if (!bExchangeFound)
+							{
+
+								destination_n* list_destination_tmp;
+								list_destination_tmp = (destination_n* )
+									MEM_malloc(sizeof(destination_n));
+
+								memset(
+									list_destination_tmp,
+									0,
+									sizeof(destination_n));
+
+								list_destination_tmp->destination = prte;
+
+
+								{
+									list_destination_tmp->children = p_destination_tmp->children;
+									list_destination_tmp->bChildrenDetermined = p_destination_tmp->bChildrenDetermined;
+
+									p_destination_tmp->children = NULL;
+								}
+
+								
+								list_destination_tmp->next = p_list_destination_dts2;
+								p_list_destination_dts2 = list_destination_tmp;
+
+							}
+							else
+							{
+
+								//For deleted entry, the link is disappear, so can not act as exchange
+								/*
+								if (bExistReachTCFromTDNodeTBDWithoutFindPlus2Exchange)
+								{
+
+									bPlusTwoExchangeForTSFound = TRUE;
+
+									if (tmp_2ExchgForTS == NULL)
+									{
+
+										tmp_2ExchgForTS = prte;
+									}
+								
+								}
+								*/
+								
+
+								remove_from_tco_node_addr_set(&(disconnected_list), prte->rt_entry_infos.rtu_dst.interfaceAddr.ipv4);
+								//insert_into_tco_node_addr_set(&(found_list), tmp_addr_tmp->nid);
+
+								//bAtleastFindOne = TRUE;
+
+								if (prte->rt_entry_infos.bDescendentRequireFurtherUpdate)
+								{
+
+									destination_n* list_destination_tmp;
+									list_destination_tmp = (destination_n* )
+										MEM_malloc(sizeof(destination_n));
+
+									memset(
+										list_destination_tmp,
+										0,
+										sizeof(destination_n));
+
+									list_destination_tmp->destination = prte;
+
+
+									{
+										list_destination_tmp->children = p_destination_tmp->children;
+										list_destination_tmp->bChildrenDetermined = p_destination_tmp->bChildrenDetermined;
+
+										p_destination_tmp->children = NULL;
+									}
+
+									//only route change
+
+									list_destination_tmp->next = e2_plus_one.list_p0;
+									e2_plus_one.list_p0 = list_destination_tmp;
+									
+
+									
+								}
+								else
+								{
+									//perfect exchange
+								}
+
+							}
+						}
+
+						//p_destination_tmp = p_destination_tmp->next;
+
+						destination_n * destination_n_1 = p_destination_tmp;						
+						p_destination_tmp = p_destination_tmp->next;
+
+						MEM_free(destination_n_1);
+					}
+
+					/*
+					if (tmp_disconnected_list != NULL)
+					{
+						clear_tco_node_addr_set(&tmp_disconnected_list);
+					}
+					*/
+
+				}				
+			}
+			else
+			{
+				//
+			}
+
+		}
+
+
+		
+
+		//BOOL bPlusTwoExchangeForTSFound = FALSE;
+	
+		if (bExistReachTCFromTDNodeTBDWithoutFindPlus2Exchange)
+		{
+
+			if (bPlusTwoExchangeForTSFound)
+			{
+
+				prteTC->rt_entry_infos.bDescendentRequireFurtherUpdate = TRUE;
+				prteTC->rt_entry_infos.bCostChanged = TRUE;
+				//prteTC->rt_entry_infos.bRequireDelete = FALSE;
+				prteTC->rt_entry_infos.uiCostChg = 2;
+
+
+				//prteTC->rt_entry_infos.bCostChanged = TRUE;
+
+				prteTC->rt_entry_infos.rtu_lasthop = tmp_2ExchgForTS->rt_dst;
+
+
+				prteTC->rt_interface = tmp_2ExchgForTS->rt_interface;
+				prteTC->rt_router = tmp_2ExchgForTS->rt_router;
+
+				prteTC->rt_metric = (UInt16) (tmp_2ExchgForTS->rt_metric + 1);
+
+
+				if (_OLSR_MULTIPATH)
+				{
+
+					prteTC->rt_entry_infos.rtu_DegreeWRTNode = tmp_2ExchgForTS->rt_entry_infos.rtu_DegreeWRTNode;
+					prteTC->rt_entry_infos.rtu_DistanceWRTNode = tmp_2ExchgForTS->rt_entry_infos.rtu_DistanceWRTNode;
+					prteTC->rt_entry_infos.related_neighbor = tmp_2ExchgForTS->rt_entry_infos.related_neighbor;
+
+				}
+
+
+				
+				destination_n* list_destination_tmp;
+				list_destination_tmp = (destination_n* )
+					MEM_malloc(sizeof(destination_n));
+
+				memset(
+					list_destination_tmp,
+					0,
+					sizeof(destination_n));
+
+				list_destination_tmp->destination = prteTC;
+
+					
+				list_destination_tmp->next = e2_plus_two.list_p2;
+				e2_plus_two.list_p2 = list_destination_tmp;
+				
+			}
+			else
+			{
+
+				//deal with delete
+				
+				prteTC->rt_metric = MAX_COST;
+
+				
+				destination_n* list_destination_tmp;
+				list_destination_tmp = (destination_n* )
+					MEM_malloc(sizeof(destination_n));
+
+				memset(
+					list_destination_tmp,
+					0,
+					sizeof(destination_n));
+
+				list_destination_tmp->destination = prteTC;
+
+		
+				list_destination_tmp->next = e2_plus_zero.list_delete;
+				e2_plus_zero.list_delete = list_destination_tmp;				
+
+			}			
+					
+		}
+
+
+		if (g_iSpecailDebug == 1)
+		{
+
+			printf("\n-------------------------------- Special Debug After +0 exchange finished ----------------------------");
+
+
+			SpecialDebug(node, DEBUG_NODE_ID, DEBUG_ENTRY_ID);
+
+
+		}
+
+
+		//backup for 22 exchange  for +2
+		tco_node_addr * disconnected_list_backup = NULL;
+		tco_node_addr * tmp_addr2 = disconnected_list;
+		while (tmp_addr2 != NULL)
+		{
+
+			insert_into_tco_node_addr_set(&(disconnected_list_backup), tmp_addr2->nid);
+			tmp_addr2 = tmp_addr2->next;
+		}
+
+
+
+		tco_node_addr * ATS_list_backup = NULL;
+		tmp_addr2 = ATS_list;
+		while (tmp_addr2 != NULL)
+		{
+
+			insert_into_tco_node_addr_set(&(ATS_list_backup), tmp_addr2->nid);
+			tmp_addr2 = tmp_addr2->next;
+		}
+
+
+
+		destination_n * p_list_destination_dts3 = NULL;
+
+		{
+
+			// need to find whether DATS can be exchanged by +1, since all +0 (list_destination_TS_plus_one) are determined
+
+			//tco_node_addr * tmp_disconnected_list = NULL;
+
+			if (disconnected_list != NULL)
+			{
+
+				//while (disconnected_list != NULL)
+				{
+
+					//copy the set
+
+					/*
+					tco_node_addr * tmp_addr = disconnected_list;
+					while (tmp_addr != NULL)
+					{
+
+						insert_into_tco_node_addr_set(&(tmp_disconnected_list), tmp_addr->nid);
+						tmp_addr = tmp_addr->next;
+					}
+
+					tco_node_addr * tmp_addr_tmp = tmp_disconnected_list;
+					*/
+
+					//BOOL bAtleastFindOne = FALSE;
+
+					destination_n * p_destination_tmp = p_list_destination_dts2;
+
+					while (p_destination_tmp != NULL)
+					{
+
+						rt_entry* prte = p_destination_tmp->destination;
+
+						if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+						{
+							uiLookupCnt++;
+						}
+
+						if (prte != NULL)
+						{
+
+							//the exchange here need to support unconsider set,
+							//to avoid circular dependency 
+
+							prte->rt_entry_infos.uiCostChg = 0;
+
+							prte->rt_entry_infos.bCostChanged = FALSE;
+							prte->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+							prte->rt_entry_infos.bRequireDelete = FALSE;
+
+
+							BOOL bExchangeFound = FindRouteExchangeV21(node,  p_destination_tmp, prte, FALSE, NULL, &uiLookupCnt, FALSE, &ATS_list, &disconnected_list, NULL, 
+																		&disconnected_list_backup, &ATS_list_backup);
+							if (!bExchangeFound)
+							{
+
+								destination_n* list_destination_tmp;
+								list_destination_tmp = (destination_n* )
+									MEM_malloc(sizeof(destination_n));
+
+								memset(
+									list_destination_tmp,
+									0,
+									sizeof(destination_n));
+
+								list_destination_tmp->destination = prte;
+
+
+								{
+									list_destination_tmp->children = p_destination_tmp->children;
+									list_destination_tmp->bChildrenDetermined = p_destination_tmp->bChildrenDetermined;
+
+									p_destination_tmp->children = NULL;
+								}
+
+
+								list_destination_tmp->next = p_list_destination_dts3;
+								p_list_destination_dts3 = list_destination_tmp;
+
+							}
+							else
+							{
+
+								remove_from_tco_node_addr_set(&(disconnected_list), prte->rt_entry_infos.rtu_dst.interfaceAddr.ipv4);
+								//insert_into_tco_node_addr_set(&(found_list), tmp_addr_tmp->nid);
+
+								//bAtleastFindOne = TRUE;
+
+								if (prte->rt_entry_infos.bDescendentRequireFurtherUpdate)
+								{
+
+									if (prte->rt_entry_infos.uiCostChg == 1)
+									{
+										destination_n* list_destination_tmp;
+										list_destination_tmp = (destination_n* )
+											MEM_malloc(sizeof(destination_n));
+
+										memset(
+											list_destination_tmp,
+											0,
+											sizeof(destination_n));
+
+										list_destination_tmp->destination = prte;
+
+										{
+											list_destination_tmp->children = p_destination_tmp->children;
+											list_destination_tmp->bChildrenDetermined = p_destination_tmp->bChildrenDetermined;
+
+											p_destination_tmp->children = NULL;
+										}
+
+
+										list_destination_tmp->next = e2_plus_two.list_p1;
+										e2_plus_two.list_p1 = list_destination_tmp;
+
+									}
+									else
+									{
+										//should not happen
+									}
+
+								}
+								else
+								{
+									//perfect exchange
+									//should not happen
+								}
+
+							}
+						}
+
+						destination_n * destination_n_1 = p_destination_tmp;						
+						p_destination_tmp = p_destination_tmp->next;
+
+						MEM_free(destination_n_1);
+					}
+
+
+					/*
+					if (tmp_disconnected_list != NULL)
+					{
+						clear_tco_node_addr_set(&tmp_disconnected_list);
+					}
+					*/
+
+				}
+
+
+			}
+			else
+			{
+				//
+			}
+
+
+		}
+
+
+		
+		
+		destination_n * p_list_destination_ats2 = NULL;
+		if (!bExistReachTCFromTDNodeTBD)
+		{
+
+			//no ATS, DATS have tried the +0 and +1 case
+
+			
+		}
+		else //(bExistReachTCFromTDNodeTBD && prteTC->rt_entry_infos.bDescendentRequireFurtherUpdate)
+		{
+
+			//topology_last_entry * t_last_sym = OlsrLookupLastTopologyTableSYM(node, prteTC->rt_dst);
+
+			if (prteTC->rt_entry_infos.bDescendentRequireFurtherUpdate)
+			{
+
+				if (prteTC->rt_entry_infos.uiCostChg != 0)
+				{
+
+					if (prteTC->rt_entry_infos.uiCostChg == 2)
+					{
+						//plus two
+						//destination_list* topo_dest = NULL;
+						//topo_dest = t_last_sym->topology_list_of_destinations;
+
+
+						/*
+						tco_node_addr * tmp_ATS_list = NULL;
+						tco_node_addr * tmp_ATS = ATS_list;
+
+						//copy the set
+
+						//tco_node_addr * tmp_addr = disconnected_list;
+						while (tmp_ATS != NULL)
+						{
+
+							insert_into_tco_node_addr_set(&(tmp_ATS_list), tmp_ATS->nid);
+							tmp_ATS = tmp_ATS->next;
+						}
+
+						tmp_ATS = tmp_ATS_list;
+						*/
+
+						destination_n * p_destination_tmp = p_list_destination_ats;
+						while (p_destination_tmp != NULL)
+						{
+							//Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+							//NodeAddress naReachedId = tmp_ATS->nid;
+
+							//tmp_ATS = tmp_ATS->next;
+
+							rt_entry* prteNearby = p_destination_tmp->destination;
+
+							if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+							{
+								uiLookupCnt++;
+							}
+
+							if (prteNearby != NULL)
+							{
+
+								if (prteNearby->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == olsr->naRecentChangedAddressByTC)
+								{
+									prteNearby->rt_entry_infos.uiCostChg = 0;
+
+									prteNearby->rt_entry_infos.bCostChanged = FALSE;
+									prteNearby->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+									prteNearby->rt_entry_infos.bRequireDelete = FALSE;
+
+									BOOL bExchangeFound = FindRouteExchangeV21(node, p_destination_tmp, prteNearby, FALSE, NULL, &uiLookupCnt, FALSE, &ATS_list, &disconnected_list);
+									if (bExchangeFound)
+									{
+
+										if (prteNearby->rt_entry_infos.bDescendentRequireFurtherUpdate)
+										{
+
+											//add to list
+
+											destination_n* list_destination_tmp;
+											list_destination_tmp = (destination_n* )
+												MEM_malloc(sizeof(destination_n));
+
+											memset(
+												list_destination_tmp,
+												0,
+												sizeof(destination_n));
+
+											list_destination_tmp->destination = prteNearby;
+
+											{
+												list_destination_tmp->children = p_destination_tmp->children;
+												list_destination_tmp->bChildrenDetermined = p_destination_tmp->bChildrenDetermined;
+
+												p_destination_tmp->children = NULL;
+											}
+
+															
+											list_destination_tmp->next = e2_plus_two.list_p1;
+											e2_plus_two.list_p1 = list_destination_tmp;
+											
+
+										}
+										else
+										{
+											//do not need to add to list, since all their descendants are not require change
+											//should never happen
+
+										}
+
+										remove_from_tco_node_addr_set(&ATS_list, prteNearby->rt_entry_infos.rtu_dst.interfaceAddr.ipv4);
+									}
+									else
+									{
+
+
+										//***g_iToAchieveSameRoute
+										//insert_into_tco_node_addr_set(&(ATS_list), addrReached.interfaceAddr.ipv4);
+
+
+										if (g_iToAchieveSameRoute == 1)
+										{
+											//should find, since at least prteTC works.
+											//for same route, since maybe some of the FindRouteExchangeV21 for AST list are not yet finished, 
+											//so postpond this step later
+											//bExchangeFound = FindRouteExchangeV22(node, prteNearby, TRUE, prteTC, &uiLookupCnt, FALSE, &ATS_list, &disconnected_list, &ATS_list_backup, &disconnected_list_backup);
+											
+
+											destination_n* list_destination_tmp;
+											list_destination_tmp = (destination_n* )
+												MEM_malloc(sizeof(destination_n));
+
+											memset(
+												list_destination_tmp,
+												0,
+												sizeof(destination_n));
+
+											list_destination_tmp->destination = prteNearby;
+
+											{
+												list_destination_tmp->children = p_destination_tmp->children;
+												list_destination_tmp->bChildrenDetermined = p_destination_tmp->bChildrenDetermined;
+
+												p_destination_tmp->children = NULL;
+											}
+
+
+											list_destination_tmp->next = p_list_destination_ats2;
+											p_list_destination_ats2 = list_destination_tmp;
+										
+										}
+										else
+										{
+											prteNearby->rt_entry_infos.uiCostChg = 2;
+
+											prteNearby->rt_entry_infos.bCostChanged = TRUE;
+											prteNearby->rt_entry_infos.bDescendentRequireFurtherUpdate = TRUE;
+											prteNearby->rt_entry_infos.bRequireDelete = FALSE;
+
+
+											prteNearby->rt_entry_infos.rtu_lasthop = prteTC->rt_dst;
+
+
+											prteNearby->rt_interface = prteTC->rt_interface;
+											prteNearby->rt_router = prteTC->rt_router;
+
+											prteNearby->rt_metric = (UInt16) (prteTC->rt_metric + 1);
+
+
+											if (_OLSR_MULTIPATH)
+											{
+
+												prteNearby->rt_entry_infos.rtu_DegreeWRTNode = prteTC->rt_entry_infos.rtu_DegreeWRTNode;
+												prteNearby->rt_entry_infos.rtu_DistanceWRTNode = prteTC->rt_entry_infos.rtu_DistanceWRTNode;
+												prteNearby->rt_entry_infos.related_neighbor = prteTC->rt_entry_infos.related_neighbor;
+											}
+
+
+											if (prteNearby->rt_entry_infos.uiCostChg == 2)
+											{
+
+
+												//add to list
+
+												destination_n* list_destination_tmp;
+												list_destination_tmp = (destination_n* )
+													MEM_malloc(sizeof(destination_n));
+
+												memset(
+													list_destination_tmp,
+													0,
+													sizeof(destination_n));
+
+												list_destination_tmp->destination = prteNearby;
+
+												{
+													list_destination_tmp->children = p_destination_tmp->children;
+													list_destination_tmp->bChildrenDetermined = p_destination_tmp->bChildrenDetermined;
+
+													p_destination_tmp->children = NULL;
+												}
+
+
+												list_destination_tmp->next = e2_plus_three.list_p2;
+												e2_plus_three.list_p2 = list_destination_tmp;
+
+											}
+
+											remove_from_tco_node_addr_set(&ATS_list, prteNearby->rt_entry_infos.rtu_dst.interfaceAddr.ipv4);
+										}
+									}							
+									
+								}
+							}
+
+							destination_n * destination_n_1 = p_destination_tmp;						
+							p_destination_tmp = p_destination_tmp->next;
+
+							MEM_free(destination_n_1);
+
+						}
+
+
+						/*
+						if (tmp_ATS_list != NULL)
+						{
+							clear_tco_node_addr_set(&tmp_ATS_list);
+						}
+						*/
+
+
+					}
+					else
+					{
+						//plus one
+						//destination_list* topo_dest = NULL;
+						//topo_dest = t_last_sym->topology_list_of_destinations;
+
+						/*
+						tco_node_addr * tmp_ATS_list = NULL;
+						tco_node_addr * tmp_ATS = ATS_list;
+
+						//copy the set
+
+						//tco_node_addr * tmp_addr = disconnected_list;
+						while (tmp_ATS != NULL)
+						{
+
+							insert_into_tco_node_addr_set(&(tmp_ATS_list), tmp_ATS->nid);
+							tmp_ATS = tmp_ATS->next;
+						}
+
+						tmp_ATS = tmp_ATS_list;
+						*/
+
+						destination_n * p_destination_tmp = p_list_destination_ats;
+						while (p_destination_tmp != NULL)
+						{
+
+							//Address addrReached = topo_dest->destination_node->topology_destination_dst;
+							//NodeAddress naReachedId = tmp_ATS->nid;
+
+							//tmp_ATS = tmp_ATS->next;
+
+							rt_entry* prteNearby = p_destination_tmp->destination;
+
+							if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+							{
+								uiLookupCnt++;
+							}
+
+							if (prteNearby != NULL)
+							{
+
+								if (prteNearby->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == olsr->naRecentChangedAddressByTC)
+								{
+
+
+									//***g_iToAchieveSameRoute
+
+									if (g_iToAchieveSameRoute == 1)
+									{
+										prteNearby->rt_entry_infos.uiCostChg = 0;
+
+										prteNearby->rt_entry_infos.bCostChanged = FALSE;
+										prteNearby->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+										prteNearby->rt_entry_infos.bRequireDelete = FALSE;
+
+										FindRouteExchangeV21(node, p_destination_tmp, prteNearby, TRUE, prteTC, &uiLookupCnt, FALSE, &ATS_list, &disconnected_list);
+
+									}
+									else
+									{
+
+										//can be simplified without call FindRouteExchangeV21 since +0 case has already been processed.
+										prteNearby->rt_entry_infos.uiCostChg = 1;
+
+										prteNearby->rt_entry_infos.bCostChanged = TRUE;
+										prteNearby->rt_entry_infos.bDescendentRequireFurtherUpdate = TRUE;
+										prteNearby->rt_entry_infos.bRequireDelete = FALSE;
+
+										prteNearby->rt_entry_infos.rtu_lasthop = prteTC->rt_dst;
+
+
+										prteNearby->rt_interface = prteTC->rt_interface;
+										prteNearby->rt_router = prteTC->rt_router;
+
+										prteNearby->rt_metric = (UInt16) (prteTC->rt_metric + 1);
+
+
+										if (_OLSR_MULTIPATH)
+										{
+
+
+											prteNearby->rt_entry_infos.rtu_DegreeWRTNode = prteTC->rt_entry_infos.rtu_DegreeWRTNode;
+											prteNearby->rt_entry_infos.rtu_DistanceWRTNode = prteTC->rt_entry_infos.rtu_DistanceWRTNode;
+											prteNearby->rt_entry_infos.related_neighbor = prteTC->rt_entry_infos.related_neighbor;
+										}
+
+									}
+
+									
+
+
+									//BOOL bExchangeFound = FindRouteExchangeV21(node, prteNearby, TRUE, prteTC, &uiLookupCnt);
+									//if (bExchangeFound)
+									{
+
+										if (prteNearby->rt_entry_infos.bDescendentRequireFurtherUpdate)
+										{
+																					
+											if (prteNearby->rt_entry_infos.uiCostChg == 1)
+											{
+
+												//add to list
+
+												destination_n* list_destination_tmp;
+												list_destination_tmp = (destination_n* )
+													MEM_malloc(sizeof(destination_n));
+
+												memset(
+													list_destination_tmp,
+													0,
+													sizeof(destination_n));
+
+												list_destination_tmp->destination = prteNearby;
+
+												{
+													list_destination_tmp->children = p_destination_tmp->children;
+													list_destination_tmp->bChildrenDetermined = p_destination_tmp->bChildrenDetermined;
+
+													p_destination_tmp->children = NULL;
+												}
+
+
+												//cost change, more specificly, plus one
+												list_destination_tmp->next = e2_plus_two.list_p1;
+												e2_plus_two.list_p1 = list_destination_tmp;
+
+											}
+											/*
+											else
+											{
+												//only route change: should never happen
+												list_destination_tmp->next = list_destination_TS_plus_one;
+												list_destination_TS_plus_one = list_destination_tmp;
+											}
+											*/
+									
+
+
+											remove_from_tco_node_addr_set(&ATS_list, prteNearby->rt_entry_infos.rtu_dst.interfaceAddr.ipv4);
+										}
+										/*
+										else
+										{
+											//do not need to add to list, since all their descendants are not require change
+										}
+										*/
+
+									}
+									/*
+									else
+									{
+
+										//will never happen, since at least the TC is ok,
+									}
+									*/
+
+								}
+							}
+
+							destination_n * destination_n_1 = p_destination_tmp;						
+							p_destination_tmp = p_destination_tmp->next;
+
+							MEM_free(destination_n_1);
+						}
+
+
+						/*
+						if (tmp_ATS_list != NULL)
+						{
+							clear_tco_node_addr_set(&tmp_ATS_list);
+						}
+						*/
+
+					}
+
+
+				}
+				else
+				{
+					//only route change
+					//should have been done
+				
+
+				}
+
+			}
+			else
+			{
+				if (bExistReachTCFromTDNodeTBDWithoutFindPlus2Exchange && !bPlusTwoExchangeForTSFound)
+				{
+
+					/*
+					tco_node_addr * tmp_ATS_list = NULL;
+					tco_node_addr * tmp_ATS = ATS_list;
+
+					//copy the set
+
+					//tco_node_addr * tmp_addr = disconnected_list;
+					while (tmp_ATS != NULL)
+					{
+
+						insert_into_tco_node_addr_set(&(tmp_ATS_list), tmp_ATS->nid);
+						tmp_ATS = tmp_ATS->next;
+					}
+
+					tmp_ATS = tmp_ATS_list;
+					*/
+
+					destination_n * p_destination_tmp = p_list_destination_ats;
+					while (p_destination_tmp != NULL)
+					{
+						//Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+						//NodeAddress naReachedId = tmp_ATS->nid;
+
+						//tmp_ATS = tmp_ATS->next;
+
+						rt_entry* prteNearby = p_destination_tmp->destination;
+
+						if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+						{
+							uiLookupCnt++;
+						}
+
+						if (prteNearby != NULL)
+						{
+
+							if (prteNearby->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == olsr->naRecentChangedAddressByTC)
+							{
+								prteNearby->rt_entry_infos.uiCostChg = 0;
+
+								prteNearby->rt_entry_infos.bCostChanged = FALSE;
+								prteNearby->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+								prteNearby->rt_entry_infos.bRequireDelete = FALSE;
+
+								BOOL bExchangeFound = FindRouteExchangeV21(node, p_destination_tmp, prteNearby, FALSE, NULL, &uiLookupCnt, FALSE, &ATS_list, &disconnected_list);
+								if (bExchangeFound)
+								{
+
+									remove_from_tco_node_addr_set(&ATS_list, prteNearby->rt_entry_infos.rtu_dst.interfaceAddr.ipv4);
+
+									if (prteNearby->rt_entry_infos.bDescendentRequireFurtherUpdate)
+									{
+
+										//add to list
+
+										destination_n* list_destination_tmp;
+										list_destination_tmp = (destination_n* )
+											MEM_malloc(sizeof(destination_n));
+
+										memset(
+											list_destination_tmp,
+											0,
+											sizeof(destination_n));
+
+										list_destination_tmp->destination = prteNearby;
+
+										{
+											list_destination_tmp->children = p_destination_tmp->children;
+											list_destination_tmp->bChildrenDetermined = p_destination_tmp->bChildrenDetermined;
+
+											p_destination_tmp->children = NULL;
+										}
+
+
+										list_destination_tmp->next = e2_plus_two.list_p1;
+										e2_plus_two.list_p1 = list_destination_tmp;
+
+
+									}
+									else
+									{
+										//do not need to add to list, since all their descendants are not require change
+										//should never happen
+
+									}
+								}
+								else
+								{
+									//insert_into_tco_node_addr_set(&(ATS_list), addrReached.interfaceAddr.ipv4);
+
+									destination_n* list_destination_tmp;
+									list_destination_tmp = (destination_n* )
+										MEM_malloc(sizeof(destination_n));
+
+									memset(
+										list_destination_tmp,
+										0,
+										sizeof(destination_n));
+
+									list_destination_tmp->destination = prteNearby;
+
+									{
+										list_destination_tmp->children = p_destination_tmp->children;
+										list_destination_tmp->bChildrenDetermined = p_destination_tmp->bChildrenDetermined;
+
+										p_destination_tmp->children = NULL;
+									}
+
+
+									list_destination_tmp->next = p_list_destination_ats2;
+									p_list_destination_ats2 = list_destination_tmp;
+
+								}
+
+							}
+						}
+
+
+						destination_n * destination_n_1 = p_destination_tmp;						
+						p_destination_tmp = p_destination_tmp->next;
+
+						MEM_free(destination_n_1);
+
+					}
+
+					/*
+					if (tmp_ATS_list != NULL)
+					{
+						clear_tco_node_addr_set(&tmp_ATS_list);
+					}
+					*/
+					
+
+				}
+				else
+				{
+					//mean perfect +0 chg for TS
+				}
+			}
+		}
+
+
+		if (p_list_destination_ats != NULL && p_list_destination_ats2 == NULL)
+		{
+			p_list_destination_ats2 = p_list_destination_ats;
+		}
+
+		UInt32 uiInnerExchangeLUCnt = 0;
+
+		//SubFuncForLoopHelpFuncV22(node, (&e2_plus_one.list_p0), NULL, NULL, &e2_plus_two, &uiInnerExchangeLUCnt, &ATS_list, &disconnected_list);
+		SubFuncForLoopHelpFuncV22(node, (&e2_plus_one.list_p0), NULL, NULL, &e2_plus_two, &uiInnerExchangeLUCnt, &ATS_list, &disconnected_list);
+
+		if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+		{
+			uiLookupCnt += uiInnerExchangeLUCnt;
+		}
+
+
+		//deal with children of list_destination_TS_plus_one_p0
+
+		uiInnerExchangeLUCnt = 0;
+
+		if (g_iToAchieveSameRoute == 1)
+		{
+			
+			destination_n* list_avoid_consider_for_p1 = NULL;
+			tco_node_addr* tco_avoid_consider_list_p1 = NULL;
+
+
+			//p1 list, +0 exchange
+			if (e2_plus_two.list_p1 != NULL)
+			{
+
+				while (e2_plus_two.list_p1 != NULL)
+				{
+
+					destination_n* destination_n_1 = NULL;
+					destination_list* topo_dest = NULL;
+					
+					
+					if (e2_plus_two.list_p1->bChildrenDetermined)
+					{
+						destination_n * dst_child = e2_plus_two.list_p1->children;
+						while (dst_child != NULL)
+						{
+
+
+							Address addrReached = dst_child->destination->rt_entry_infos.rtu_dst;							
+
+							UInt32 uiInnerExchangeLUCnt = 0;
+
+							OlsrCalculateRoutingTableForSinglePathTopologySearchHelpFuncV24(node, dst_child, addrReached, e2_plus_two.list_p1, &e2_plus_two.list_p0, 
+								&list_avoid_consider_for_p1, &uiInnerExchangeLUCnt, &tco_avoid_consider_list_p1, &ATS_list, &disconnected_list);
+
+							dst_child = dst_child->next;
+						}
+					}
+					else
+					{
+						topology_last_entry* topo_last = OlsrLookupLastTopologyTableSYM(node, e2_plus_two.list_p1->destination->rt_dst);
+
+
+						if (NULL != topo_last)
+						{
+							topo_dest = topo_last->topology_list_of_destinations;
+
+							while (topo_dest != NULL)
+							{
+
+								Address addrReached = topo_dest->destination_node->topology_destination_dst;							
+
+								UInt32 uiInnerExchangeLUCnt = 0;
+
+								OlsrCalculateRoutingTableForSinglePathTopologySearchHelpFuncV24(node, NULL, addrReached, e2_plus_two.list_p1, &e2_plus_two.list_p0, 
+									&list_avoid_consider_for_p1, &uiInnerExchangeLUCnt, &tco_avoid_consider_list_p1, &ATS_list, &disconnected_list);
+
+								topo_dest = topo_dest->next;
+							}
+						}
+					}
+										
+
+					destination_n_1 = e2_plus_two.list_p1;
+					e2_plus_two.list_p1 = e2_plus_two.list_p1->next;
+					MEM_free(destination_n_1);
+				}
+
+
+			}
+
+
+
+
+			if (list_avoid_consider_for_p1 != NULL)
+			{
+
+				while (list_avoid_consider_for_p1 != NULL)
+				{
+
+					destination_n* destination_n_1 = NULL;
+
+					if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+					{
+						uiLookupCnt++;
+					}
+
+
+					//while (topo_dest != NULL)
+					{
+
+						Address addrReached = list_avoid_consider_for_p1->destination->rt_dst;
+
+						UInt32 uiInnerExchangeLUCnt = 0;
+
+						rt_entry* preExisting = list_avoid_consider_for_p1->destination;
+
+
+						preExisting->rt_entry_infos.bCostChanged = FALSE;
+						preExisting->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+						preExisting->rt_entry_infos.bRequireDelete = FALSE;
+
+						preExisting->rt_entry_infos.uiCostChg = 0;
+
+
+						BOOL bExchangeFound = FindRouteExchangeV21(node, list_avoid_consider_for_p1, preExisting, TRUE, NULL, &uiInnerExchangeLUCnt, FALSE, &tco_avoid_consider_list_p1, &ATS_list, 
+							&disconnected_list, &ATS_list_backup, &disconnected_list_backup);
+						
+						if (!bExchangeFound)
+						{
+
+							//should certainly find
+
+						}
+						else
+						{
+							if (preExisting->rt_entry_infos.bDescendentRequireFurtherUpdate)
+							{
+
+								destination_n* list_destination_tmp;
+								list_destination_tmp = (destination_n* )
+									MEM_malloc(sizeof(destination_n));
+
+								memset(
+									list_destination_tmp,
+									0,
+									sizeof(destination_n));
+
+								//list_destination_tmp->destination = preExisting;
+
+								list_destination_tmp->destination = preExisting;
+
+								{
+									list_destination_tmp->children = list_avoid_consider_for_p1->children;
+									list_destination_tmp->bChildrenDetermined = list_avoid_consider_for_p1->bChildrenDetermined;
+
+									list_avoid_consider_for_p1->children = NULL;
+								}
+
+								list_destination_tmp->next = e2_plus_three.list_p1;
+								e2_plus_three.list_p1 = list_destination_tmp;
+
+
+								//+1 case								
+
+							}
+
+						}
+
+
+
+						//Peter Added for test time complexity
+						if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+						{
+							uiLookupCnt += uiInnerExchangeLUCnt;
+
+							//if (node->nodeId == NODE_ID_FOR_TEST_OUTER_ANGLE || node->nodeId == NODE_ID_FOR_TEST_OUTER_EDGE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_ANGLE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_EDGE || node->nodeId == NODE_ID_FOR_TEST_CENTER)
+							if (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END)
+							{
+								uiLookupCnt++;
+
+							}
+						}
+
+					}
+
+
+
+					destination_n_1 = list_avoid_consider_for_p1;
+					list_avoid_consider_for_p1 = list_avoid_consider_for_p1->next;
+
+
+					remove_from_tco_node_addr_set(&tco_avoid_consider_list_p1, destination_n_1->destination->rt_entry_infos.rtu_dst.interfaceAddr.ipv4);
+
+					MEM_free(destination_n_1);
+
+
+				}
+
+			}
+
+
+			clear_tco_node_addr_set(&tco_avoid_consider_list_p1);
+			
+		}
+		else
+		{
+
+			SubFuncForLoopHelpFuncV22(node, (&e2_plus_two.list_p1), &e2_plus_one, &e2_plus_two, &e2_plus_three, &uiInnerExchangeLUCnt, &ATS_list, &disconnected_list);
+
+			//SubFuncForLoopHelpFuncV22(node, (&e2_s_n.list_p1), NULL, &e2_s_n, &e2_s_n_1, &uiInnerExchangeLUCnt);
+		}
+
+
+
+		
+		if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+		{
+			uiLookupCnt += uiInnerExchangeLUCnt;
+		}
+
+
+		if (g_iSpecailDebug == 1)
+		{
+
+			printf("\n-------------------------------- Special Debug Before +2 exchange  ----------------------------");
+
+
+			SpecialDebug(node, DEBUG_NODE_ID, DEBUG_ENTRY_ID);
+
+
+		}
+
+		
+
+		destination_n * p_list_destination_dts4 = NULL;
+		{
+
+			// need to find whether DATS can be exchanged by +2, since all +1 (till list_destination_TS_plus_two) are determined
+
+			//tco_node_addr * tmp_disconnected_list = NULL;
+
+			if (disconnected_list != NULL)
+			{
+
+				//while (disconnected_list != NULL)
+				{
+
+					//copy the set
+
+					/*
+					tco_node_addr * tmp_addr = disconnected_list;
+					while (tmp_addr != NULL)
+					{
+
+						insert_into_tco_node_addr_set(&(tmp_disconnected_list), tmp_addr->nid);
+						tmp_addr = tmp_addr->next;
+					}
+
+					tco_node_addr * tmp_addr_tmp = tmp_disconnected_list;
+					*/
+
+					//BOOL bAtleastFindOne = FALSE;
+
+					destination_n * p_destination_tmp = p_list_destination_dts3;
+					while (p_destination_tmp != NULL)
+					{
+
+						rt_entry* prte = p_destination_tmp->destination;
+
+						if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+						{
+							uiLookupCnt++;
+						}
+
+						if (prte != NULL)
+						{
+
+							//the exchange here need to support unconsider set,
+							//to avoid circular dependency 
+
+							prte->rt_entry_infos.uiCostChg = 0;
+
+							prte->rt_entry_infos.bCostChanged = FALSE;
+							prte->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+							prte->rt_entry_infos.bRequireDelete = FALSE;
+
+
+							BOOL bExchangeFound = FindRouteExchangeV22(node, p_destination_tmp, prte, FALSE, NULL, &uiLookupCnt, FALSE, &ATS_list, &disconnected_list, &ATS_list_backup, &disconnected_list_backup);
+							if (!bExchangeFound)
+							{
+
+								destination_n* list_destination_tmp;
+								list_destination_tmp = (destination_n* )
+									MEM_malloc(sizeof(destination_n));
+
+								memset(
+									list_destination_tmp,
+									0,
+									sizeof(destination_n));
+
+								list_destination_tmp->destination = prte;
+
+								{
+									list_destination_tmp->children = p_destination_tmp->children;
+									list_destination_tmp->bChildrenDetermined = p_destination_tmp->bChildrenDetermined;
+
+									p_destination_tmp->children = NULL;
+								}
+
+
+								list_destination_tmp->next = p_list_destination_dts4;
+								p_list_destination_dts4 = list_destination_tmp;
+							}
+							else
+							{
+
+								remove_from_tco_node_addr_set(&(disconnected_list), prte->rt_entry_infos.rtu_dst.interfaceAddr.ipv4);
+								//insert_into_tco_node_addr_set(&(found_list), tmp_addr_tmp->nid);
+
+								//bAtleastFindOne = TRUE;
+
+								if (prte->rt_entry_infos.bDescendentRequireFurtherUpdate)
+								{
+
+									if (prte->rt_entry_infos.uiCostChg == 2)
+									{
+										destination_n* list_destination_tmp;
+										list_destination_tmp = (destination_n* )
+											MEM_malloc(sizeof(destination_n));
+
+										memset(
+											list_destination_tmp,
+											0,
+											sizeof(destination_n));
+
+										list_destination_tmp->destination = prte;
+
+										{
+											list_destination_tmp->children = p_destination_tmp->children;
+											list_destination_tmp->bChildrenDetermined = p_destination_tmp->bChildrenDetermined;
+
+											p_destination_tmp->children = NULL;
+										}
+
+
+										list_destination_tmp->next = e2_plus_three.list_p2;
+										e2_plus_three.list_p2 = list_destination_tmp;
+
+									}
+									else
+									{
+										//should not happen
+									}
+
+								}
+								else
+								{
+									//perfect exchange
+									//should not happen
+								}
+
+							}
+						}
+
+						//tmp_addr_tmp = tmp_addr_tmp->next;
+
+						destination_n * destination_n_1 = p_destination_tmp;						
+						p_destination_tmp = p_destination_tmp->next;
+
+						MEM_free(destination_n_1);
+					}
+
+
+					/*
+					if (tmp_disconnected_list != NULL)
+					{
+						clear_tco_node_addr_set(&tmp_disconnected_list);
+					}
+					*/
+
+				}
+
+
+			}
+			else
+			{
+				//
+			}
+
+
+		}
+
+
+		destination_n * p_list_destination_ats3 = NULL;
+		{
+
+			// need to find whether ATS can be exchanged by +2, since all +1 (till list_destination_TS_plus_two) are determined
+
+			//tco_node_addr * tmp_ATS_list = NULL;
+
+			if (ATS_list != NULL)
+			{
+
+				//while (disconnected_list != NULL)
+				{
+
+					//copy the set
+
+					/*
+					tco_node_addr * tmp_addr = ATS_list;
+					while (tmp_addr != NULL)
+					{
+
+						insert_into_tco_node_addr_set(&(tmp_ATS_list), tmp_addr->nid);
+						tmp_addr = tmp_addr->next;
+					}
+
+					tco_node_addr * tmp_addr_tmp = tmp_ATS_list;
+					*/
+
+					//BOOL bAtleastFindOne = FALSE;
+					destination_n * p_destination_tmp = p_list_destination_ats2;
+					while (p_destination_tmp != NULL)
+					{
+
+						rt_entry* prte = p_destination_tmp->destination;
+
+						if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+						{
+							uiLookupCnt++;
+						}
+
+						if (prte != NULL)
+						{
+
+							//the exchange here need to support unconsider set,
+							//to avoid circular dependency 
+
+							prte->rt_entry_infos.uiCostChg = 0;
+
+							prte->rt_entry_infos.bCostChanged = FALSE;
+							prte->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+							prte->rt_entry_infos.bRequireDelete = FALSE;
+
+
+							BOOL bExchangeFound = FALSE;
+
+							if (g_iToAchieveSameRoute == 1)
+							{
+
+								if (bExistReachTCFromTDNodeTBD && prteTC->rt_entry_infos.bDescendentRequireFurtherUpdate && prteTC->rt_entry_infos.uiCostChg == 2)
+								{
+									bExchangeFound = FindRouteExchangeV22(node, p_destination_tmp, prte, TRUE, NULL, &uiLookupCnt, FALSE, &ATS_list, &disconnected_list, &ATS_list_backup, &disconnected_list_backup);
+								}
+								else
+								{
+									bExchangeFound = FindRouteExchangeV22(node, p_destination_tmp, prte, FALSE, NULL, &uiLookupCnt, FALSE, &ATS_list, &disconnected_list, &ATS_list_backup, &disconnected_list_backup);
+								}							
+
+							}
+							else
+							{
+								bExchangeFound = FindRouteExchangeV22(node, p_destination_tmp, prte, FALSE, NULL, &uiLookupCnt, FALSE, &ATS_list, &disconnected_list, &ATS_list_backup, &disconnected_list_backup);
+
+							}
+
+							
+							if (!bExchangeFound)
+							{
+						
+								destination_n* list_destination_tmp;
+								list_destination_tmp = (destination_n* )
+									MEM_malloc(sizeof(destination_n));
+
+								memset(
+									list_destination_tmp,
+									0,
+									sizeof(destination_n));
+
+								list_destination_tmp->destination = prte;
+
+								{
+									list_destination_tmp->children = p_destination_tmp->children;
+									list_destination_tmp->bChildrenDetermined = p_destination_tmp->bChildrenDetermined;
+
+									p_destination_tmp->children = NULL;
+								}
+
+
+								list_destination_tmp->next = p_list_destination_ats3;
+								p_list_destination_ats3 = list_destination_tmp;
+								
+							}
+							else
+							{
+
+								remove_from_tco_node_addr_set(&(ATS_list), prte->rt_entry_infos.rtu_dst.interfaceAddr.ipv4);
+								//insert_into_tco_node_addr_set(&(found_list), tmp_addr_tmp->nid);
+
+								//bAtleastFindOne = TRUE;
+								if (prte->rt_entry_infos.bDescendentRequireFurtherUpdate)
+								{
+
+									if (prte->rt_entry_infos.uiCostChg == 2)
+									{
+										destination_n* list_destination_tmp;
+										list_destination_tmp = (destination_n* )
+											MEM_malloc(sizeof(destination_n));
+
+										memset(
+											list_destination_tmp,
+											0,
+											sizeof(destination_n));
+
+										list_destination_tmp->destination = prte;
+
+										{
+											list_destination_tmp->children = p_destination_tmp->children;
+											list_destination_tmp->bChildrenDetermined = p_destination_tmp->bChildrenDetermined;
+
+											p_destination_tmp->children = NULL;
+										}
+
+
+										list_destination_tmp->next = e2_plus_three.list_p2;
+										e2_plus_three.list_p2 = list_destination_tmp;
+
+									}
+									else
+									{
+										//should not happen
+									}
+
+								}
+								else
+								{
+									//perfect exchange
+									//should not happen
+								}
+
+							}
+						}
+
+						//tmp_addr_tmp = tmp_addr_tmp->next;
+
+						destination_n * destination_n_1 = p_destination_tmp;						
+						p_destination_tmp = p_destination_tmp->next;
+
+						MEM_free(destination_n_1);
+					}
+
+
+					/*
+					if (tmp_ATS_list != NULL)
+					{
+						clear_tco_node_addr_set(&tmp_ATS_list);
+					}
+					*/
+
+				}
+
+
+			}
+			else
+			{
+				//
+			}
+
+
+		}
+
+
+		clear_tco_node_addr_set(&ATS_list_backup);
+		clear_tco_node_addr_set(&disconnected_list_backup);
+
+		
+
+		if (g_iSpecailDebug == 1)
+		{
+
+			printf("\n-------------------------------- Special Debug After +2 exchange  ----------------------------");
+
+
+			SpecialDebug(node, DEBUG_NODE_ID, DEBUG_ENTRY_ID);
+
+
+		}
+
+		
+		//if ATS_list or disconnected_list is still NOT NULL, then consider it can not find exchange and has to be deleted
+		//tco_node_addr * tna_tmp = NULL;
+
+		//tna_tmp = ATS_list;
+		destination_n * p_destination_tmp = p_list_destination_ats3;
+		while (p_destination_tmp != NULL)
+		{
+
+			//rt_entry* prte = QueryRoutingTableAccordingToNodeId(node, tna_tmp->nid);
+			rt_entry* prte = p_destination_tmp->destination;
+
+			prte->rt_metric = MAX_COST;
+
+
+			destination_n* list_destination_tmp;
+			list_destination_tmp = (destination_n* )
+				MEM_malloc(sizeof(destination_n));
+
+			memset(
+				list_destination_tmp,
+				0,
+				sizeof(destination_n));
+
+			list_destination_tmp->destination = prte;
+
+
+			{
+				list_destination_tmp->children = p_destination_tmp->children;
+				list_destination_tmp->bChildrenDetermined = p_destination_tmp->bChildrenDetermined;
+
+				p_destination_tmp->children = NULL;
+			}
+
+
+
+			list_destination_tmp->next = e2_plus_one.list_delete;
+			e2_plus_one.list_delete = list_destination_tmp;
+
+			destination_n * destination_n_1 = p_destination_tmp;						
+			p_destination_tmp = p_destination_tmp->next;
+
+			MEM_free(destination_n_1);
+		}
+
+		clear_tco_node_addr_set(&ATS_list);
+
+
+
+		//tna_tmp = disconnected_list;
+		p_destination_tmp = p_list_destination_dts4;
+		while (p_destination_tmp != NULL)
+		{
+
+			//rt_entry* prte = QueryRoutingTableAccordingToNodeId(node, tna_tmp->nid);
+
+			rt_entry* prte = p_destination_tmp->destination;
+
+			prte->rt_metric = MAX_COST;
+
+
+			destination_n* list_destination_tmp;
+			list_destination_tmp = (destination_n* )
+				MEM_malloc(sizeof(destination_n));
+
+			memset(
+				list_destination_tmp,
+				0,
+				sizeof(destination_n));
+
+			list_destination_tmp->destination = prte;
+
+
+			{
+				list_destination_tmp->children = p_destination_tmp->children;
+				list_destination_tmp->bChildrenDetermined = p_destination_tmp->bChildrenDetermined;
+
+				p_destination_tmp->children = NULL;
+			}
+
+
+
+			list_destination_tmp->next = e2_plus_one.list_delete;
+			e2_plus_one.list_delete = list_destination_tmp;
+
+			destination_n * destination_n_1 = p_destination_tmp;						
+			p_destination_tmp = p_destination_tmp->next;
+
+			MEM_free(destination_n_1);
+		}
+
+		clear_tco_node_addr_set(&disconnected_list);
+
+
+
+		if (e2_plus_zero.list_delete != NULL)
+		{
+
+			destination_n* destination_n_1 = NULL;
+
+			destination_n_1 = e2_plus_zero.list_delete;
+			e2_plus_zero.list_delete = e2_plus_zero.list_delete->next;
+
+
+			destination_n_1->destination->rt_metric = MAX_COST;
+
+			insert_into_tco_node_addr_set(&olsr->recent_add_list, destination_n_1->destination->rt_entry_infos.rtu_dst.interfaceAddr.ipv4);
+
+			//MEM_free(destination_n_1);
+			//add to delete entry list without real delete
+			destination_n_1->next = list_destination_delete;
+			list_destination_delete = destination_n_1;
+		
+
+		}
+
+
+		//construct the delete list till e2_plus_two.list_delete;
+
+		DeleteListProgress(node, &e2_plus_one, &e2_plus_two, &olsr->recent_add_list, &list_destination_delete);
+
+
+		DeleteListProgress(node, &e2_plus_two, &e2_plus_three, &olsr->recent_add_list, &list_destination_delete);
+
+	
+
+
+		//destination_n * list_n_minus_1_p0 = NULL;
+
+		tco_node_addr * tco_avoid_consider_list = NULL;
+		destination_n * list_avoid_consider_for_p2 = NULL;
+
+
+
+		
+		if (g_iSpecailDebug == 1)
+		{
+
+			printf("\n-------------------------------- Special Debug Before SubFuncForLoopHelpFuncV23 ----------------------------");
+
+
+			SpecialDebug(node, DEBUG_NODE_ID, DEBUG_ENTRY_ID);
+
+
+		}
+
+
+		uiInnerExchangeLUCnt = 0;
+		SubFuncForLoopHelpFuncV23(node, e2_plus_three, &e2_plus_two.list_p0, &list_avoid_consider_for_p2, &uiInnerExchangeLUCnt, &tco_avoid_consider_list);
+
+		if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+		{
+			uiLookupCnt += uiInnerExchangeLUCnt;
+		}
+		
+		
+		if (g_iSpecailDebug == 1)
+		{
+
+			printf("\n-------------------------------- Special Debug Before SubFuncForLoopHelpFuncV22 ----------------------------");
+
+
+			SpecialDebug(node, DEBUG_NODE_ID, DEBUG_ENTRY_ID);
+
+
+		}
+
+
+
+		uiInnerExchangeLUCnt = 0;
+
+		SubFuncForLoopHelpFuncV22(node, (&e2_plus_two.list_p0), NULL, NULL, &e2_plus_three, &uiInnerExchangeLUCnt, &tco_avoid_consider_list);
+
+		if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+		{
+			uiLookupCnt += uiInnerExchangeLUCnt;
+		}
+
+	
+		if (g_iSpecailDebug == 1)
+		{
+
+			printf("\n-------------------------------- Special Debug Before ProcessRecurrentPlus2 ----------------------------");
+
+
+			SpecialDebug(node, DEBUG_NODE_ID, DEBUG_ENTRY_ID);
+
+			
+		}
+
+
+		ProcessRecurrentPlus2(node, uiTCOldCost + 3, &tco_avoid_consider_list, &olsr->recent_add_list, e2_plus_three, &list_avoid_consider_for_p2, &list_destination_delete, &uiLookupCnt);
+
+		
+		if (g_iSpecailDebug == 1)
+		{
+
+			printf("\n-------------------------------- Special Debug After ProcessRecurrentPlus2 ----------------------------");
+
+
+			SpecialDebug(node, DEBUG_NODE_ID, DEBUG_ENTRY_ID);
+
+
+		}
+
+
+		//start the recurrent exchange & delete
+
+		/*
+		//e2_s e2_plus_zero;
+		//e2_s e2_s_n_minus_1;
+		e2_s e2_s_n;
+		e2_s e2_s_n_1;
+
+
+		//e2_s_n_minus_1.list_delete = e2_plus_two.list_delete;
+		//e2_s_n_minus_1.list_p0 = e2_plus_two.list_p0;
+		//e2_s_n_minus_1.list_p1 = e2_plus_two.list_p1;
+		//e2_s_n_minus_1.list_p2 = e2_plus_two.list_p2;
+
+
+		e2_s_n.list_delete = e2_plus_three.list_delete;
+		e2_s_n.list_p0 = e2_plus_three.list_p0;
+		e2_s_n.list_p1 = e2_plus_three.list_p1;
+		e2_s_n.list_p2 = e2_plus_three.list_p2;
+
+		e2_s_n_1.list_delete = e2_s_n.list_delete;
+		e2_s_n_1.list_p0 = e2_s_n.list_p0;
+		e2_s_n_1.list_p1 = e2_s_n.list_p1;
+		e2_s_n_1.list_p2 = e2_s_n.list_p2;
+		*/
+
+
+
+	
+
+
+
+		clear_tco_node_addr_set(&tco_avoid_consider_list);
+
+
+		//clear_tco_node_addr_set(&ATS_list);
+		//clear_tco_node_addr_set(&disconnected_list);
+
+
+	}
+	else
+	{
+		//process for delete is not required 
+	}
+
+
+	//return NULL;
+	return list_destination_delete;	
+}
+
+
+
+//try a simple way, such that just delete all and use the add-list method to regional re-discovery
+destination_n* ProcessRoutingTableAccordingToRecentDeleteListV33(Node* node, BOOL * pbRequireRediscovery, UInt32 * puiLookupCntForDeleteList)
+{
+
+	//now we just try a strict standard that only allow 
+
+	//great
+	destination_n * list_destination_n = NULL;
+
+
+
+	RoutingOlsr * olsr = (RoutingOlsr *) node->appData.olsr;
+
+	tco_node_addr * tco_delete_list_tmp = olsr->recent_delete_list;			
+
+	UInt32 uiLookupCnt = 0;
+
+	if (pbRequireRediscovery != NULL)
+	{
+		*pbRequireRediscovery = FALSE;
+	}
+	
+
+	tco_node_addr * disconnected_list = NULL;
+	
+	//tco_node_addr * deleted_list = NULL;
+
+	if (olsr->recent_add_list != NULL)
+	{
+		clear_tco_node_addr_set(&olsr->recent_add_list);
+	}
+
+
+	rt_entry* prteTC = QueryRoutingTableAccordingToNodeId(node, olsr->naRecentChangedAddressByTC);
+	if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+	{
+		uiLookupCnt++;
+	}
+
+	if (prteTC != NULL)
+	{
+		BOOL bExistReachTCFromTDNodeTBD = FALSE;
+
+		/*
+		prteTC->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+		prteTC->rt_entry_infos.bCostChanged = FALSE;
+		prteTC->rt_entry_infos.bRequireDelete = FALSE;
+		*/
+
+
+		while (tco_delete_list_tmp != NULL)
+		{
+
+			if (prteTC->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == tco_delete_list_tmp->nid)
+			{
+
+				if (prteTC->rt_metric == 2)
+				{
+
+					BOOL b2HopNeighborCausedConnection = FALSE;
+					b2HopNeighborCausedConnection = ConnectivetyCausedBy2HopNeighbor(node, prteTC->rt_entry_infos.rtu_dst, tco_delete_list_tmp->nid);
+
+					if (b2HopNeighborCausedConnection)
+					{
+
+						remove_from_tco_node_addr_set(&(olsr->recent_delete_list), tco_delete_list_tmp->nid);
+
+						break;
+					}										
+				}
+
+
+
+				bExistReachTCFromTDNodeTBD = TRUE;
+
+				remove_from_tco_node_addr_set(&(olsr->recent_delete_list), tco_delete_list_tmp->nid);
+
+
+				break;
+			}
+
+			tco_delete_list_tmp = tco_delete_list_tmp->next;
+		}
+
+
+		
+
+		if (bExistReachTCFromTDNodeTBD)
+		{
+
+			//delete all the descendants of TC node
+			insert_into_tco_node_addr_set(&(disconnected_list), olsr->naRecentChangedAddressByTC);
+			
+
+			OlsrDeleteRoutingTable(prteTC);
+
+			insert_into_tco_node_addr_set(&(olsr->recent_add_list), olsr->naRecentChangedAddressByTC);
+		}
+		
+		//this should be anyway, regardless of whether bExistReachTCFromTDNodeTBD is true or false
+		{
+			//further check the DATS nodes
+			
+
+			//int iDisconnectCount = 0;
+
+			tco_delete_list_tmp = olsr->recent_delete_list;
+
+			while (tco_delete_list_tmp != NULL)
+			{
+
+				rt_entry* prte = QueryRoutingTableAccordingToNodeId(node, tco_delete_list_tmp->nid);
+
+				if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+				{
+					uiLookupCnt++;
+				}
+
+				if (prte != NULL)
+				{
+
+					if (prte->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == olsr->naRecentChangedAddressByTC)
+					{
+
+						if (prte->rt_metric == 2)
+						{
+							BOOL b2HopNeighborCausedConnection = FALSE;
+
+							b2HopNeighborCausedConnection = ConnectivetyCausedBy2HopNeighbor(node, prte->rt_entry_infos.rtu_dst, olsr->naRecentChangedAddressByTC);
+							if (b2HopNeighborCausedConnection)
+							{
+
+								//remove_from_tco_node_addr_set(&(olsr->recent_delete_list), tco_delete_list_tmp->nid);
+
+								tco_delete_list_tmp = tco_delete_list_tmp->next;
+
+								continue;
+							}
+						}
+
+						insert_into_tco_node_addr_set(&(disconnected_list), tco_delete_list_tmp->nid);
+
+						OlsrDeleteRoutingTable(prte);
+
+						
+						insert_into_tco_node_addr_set(&(olsr->recent_add_list), tco_delete_list_tmp->nid);
+						
+
+					}
+					else
+					{
+						//it is possible that nodes can be reached but not consider TCNode as last hop
+						//skip these nodes
+
+					}
+
+				}
+				else
+				{
+
+					//should not happen
+				}
+
+
+				tco_delete_list_tmp = tco_delete_list_tmp->next;
+			}
+
+		}
+
+		
+
+
+		tco_node_addr * destination_list_n_1 = disconnected_list;
+		tco_node_addr * destination_list_n = disconnected_list;
+
+		while (destination_list_n_1 != NULL)
+		{
+
+			destination_list_n_1 = NULL;
+
+			topology_last_entry* topo_last = NULL;
+			destination_list* topo_dest = NULL;
+
+
+			//Peter comment: every loop add group of destination nodes that one hop more from the source node,
+			//compare to the group in the previous loop  
+			while (destination_list_n != NULL)
+			{
+				tco_node_addr* tna_tmp = NULL;
+
+				Address addrCurrent;
+				addrCurrent.networkType = NETWORK_IPV4;
+				addrCurrent.interfaceAddr.ipv4 = destination_list_n->nid;
+
+				//Peter comment: find from the topology table if there is some entry 
+				//whose last hop equal the specific dest hop of 2 or more (* since every loop will
+				// increase the one more hop count) hop neighbors
+				if (SYMMETRIC_TOPOLOGY_TABLE)
+				{
+					topo_last = OlsrLookupLastTopologyTableSYM(node, addrCurrent);
+				}
+				else
+				{
+					topo_last = OlsrLookupLastTopologyTable(node, addrCurrent);
+				}
+
+
+				if (NULL != topo_last)
+				{
+					topo_dest = topo_last->topology_list_of_destinations;
+
+					while (topo_dest != NULL)
+					{
+
+						Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+					
+						rt_entry* prte_tmp = QueryRoutingTableAccordingToNodeId(node, addrReached.interfaceAddr.ipv4);
+						
+						if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+						{
+							uiLookupCnt++;
+						}
+
+						if (prte_tmp != NULL)
+						{
+							 if (prte_tmp->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == destination_list_n->nid)
+							 {
+								 insert_into_tco_node_addr_set(&(destination_list_n_1), addrReached.interfaceAddr.ipv4);
+								 
+								 OlsrDeleteRoutingTable(prte_tmp);
+
+								 insert_into_tco_node_addr_set(&(olsr->recent_add_list), addrReached.interfaceAddr.ipv4);
+
+							 }
+						}				
+						
+
+						topo_dest = topo_dest->next;
+					}
+				}
+
+				tna_tmp = destination_list_n;
+				destination_list_n = destination_list_n->next;
+				MEM_free(tna_tmp);
+			}
+
+			destination_list_n = destination_list_n_1;
+		
+		}
+
+
+	}
+	else
+	{
+		//process for delete is not required 
+	}
+
+
+	if (olsr->recent_add_list != NULL)
+	{
+		UInt32 uiLC = 0;
+
+		destination_n* list_destination_n_1 = NULL;
+		list_destination_n_1 = ProcessRoutingTableAccordingToRecentAddListV2(node, &uiLC);
+
+		
+		if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+		{
+			//uiLookupCnt++;
+			uiLookupCnt += uiLC;
+		}
+
+		//list_destination_n = list_destination_n_1
+
+		if (list_destination_n_1 != NULL)
+		{
+
+			list_destination_n = list_destination_n_1;
+
+			while (list_destination_n_1 != NULL)
+			{
+				list_destination_n_1 = NULL;
+
+				destination_n*  tmp_destination_tail = NULL;
+
+				topology_last_entry* topo_last = NULL;
+				destination_list* topo_dest = NULL;
+
+				//Peter comment: every loop add group of destination nodes that one hop more from the source node,
+				//compare to the group in the previous loop  
+				while (list_destination_n != NULL)
+				{
+					destination_n* destination_n_1 = NULL;
+
+					if (DEBUG)
+					{
+						char addrString[MAX_STRING_LENGTH];
+
+						IO_ConvertIpAddressToString(
+							&list_destination_n->destination->rt_dst,
+							addrString);
+
+						printf("Node %d, Last hop %s\n",
+							node->nodeId,
+							addrString);
+					}
+
+					//Peter comment: find from the topology table if there is some entry 
+					//whose last hop equal the specific dest hop of 2 or more (* since every loop will
+					// increase the one more hop count) hop neighbors
+					if (SYMMETRIC_TOPOLOGY_TABLE)
+					{
+						topo_last = OlsrLookupLastTopologyTableSYM(node, list_destination_n->destination->rt_dst);
+					}
+					else
+					{
+						topo_last = OlsrLookupLastTopologyTable(node, list_destination_n->destination->rt_dst);
+					}
+
+
+					if (NULL != topo_last)
+					{
+						topo_dest = topo_last->topology_list_of_destinations;
+
+
+						while (topo_dest != NULL)
+						{
+
+							Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+							if (RoutingOlsrCheckMyIfaceAddress(
+								node,
+								topo_dest->destination_node->topology_destination_dst) != -1)
+							{
+								topo_dest = topo_dest->next;
+								continue;
+							}
+
+
+							OlsrCalculateRoutingTableForSinglePathTopologySearchHelpFunc(node, addrReached, list_destination_n, &list_destination_n_1, &tmp_destination_tail, TRUE);
+
+
+							//Peter Added for test time complexity
+							if (_TEST_TIME_COMPLEXITY)
+							{
+
+								//if (node->nodeId == NODE_ID_FOR_TEST_OUTER_ANGLE || node->nodeId == NODE_ID_FOR_TEST_OUTER_EDGE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_ANGLE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_EDGE || node->nodeId == NODE_ID_FOR_TEST_CENTER)
+								if (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END)
+								{
+									uiLookupCnt++;
+
+								}
+							}
+
+							topo_dest = topo_dest->next;
+						}
+					}
+
+					destination_n_1 = list_destination_n;
+					list_destination_n = list_destination_n->next;
+					MEM_free(destination_n_1);
+				}
+
+				list_destination_n = list_destination_n_1;
+				//ui_metric_cost_limitation++;
+			}
+		}
+
+	}
+	else
+	{
+
+	}
+
+	if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+	{
+		//uiLookupCnt++;
+		*puiLookupCntForDeleteList = uiLookupCnt;
+	}
+
+
+	//return NULL;
+	return list_destination_n;	
+
+
+}
+
+
+//try a simple way, such that use the delete-list (formed by earlier stage of ProcessRoutingTableAccordingToRecentAddListV42) and use the add-list method to regional re-discovery
+destination_n* ProcessRoutingTableAccordingToRecentDeleteListV44(Node* node, BOOL * pbRequireRediscovery, destination_n ** plist_destination_delete, UInt32 * puiLookupCntForDeleteList)
+{
+
+	//now we just try a strict standard that only allow 
+
+	//great
+	destination_n * list_destination_n = NULL;
+
+
+
+	RoutingOlsr * olsr = (RoutingOlsr *) node->appData.olsr;
+
+	tco_node_addr * tco_delete_list_tmp = olsr->recent_delete_list;			
+
+	UInt32 uiLookupCnt = 0;
+
+	*pbRequireRediscovery = FALSE;
+
+	tco_node_addr * disconnected_list = NULL;
+
+	//tco_node_addr * deleted_list = NULL;
+
+
+	
+
+
+	/*
+	if (!exist_in_tco_node_addr_set(&olsr->recent_delete_list, olsr->naRecentChangedAddressByTC))
+	{
+		//this should never happen
+
+		return list_destination_n;
+	}
+
+
+	if (olsr->recent_add_list != NULL)
+	{
+		clear_tco_node_addr_set(&olsr->recent_add_list);
+	}
+
+
+	rt_entry* prteTC = QueryRoutingTableAccordingToNodeId(node, olsr->naRecentChangedAddressByTC);
+	if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+	{
+		uiLookupCnt++;
+	}
+
+
+	if (prteTC != NULL)
+	{
+
+		OlsrDeleteRoutingTable(prteTC);
+
+		insert_into_tco_node_addr_set(&(olsr->recent_add_list), olsr->naRecentChangedAddressByTC);
+
+
+		ProcessRoutingTableAccordingToSpecificRoute(node, olsr->naRecentChangedAddressByTC);
+
+
+	}
+	else
+	{
+		//process for delete is not required 
+
+		//return list_destination_n;
+	}
+	*/
+
+
+	if (olsr->recent_delete_list != NULL)
+	{
+		UInt32 uiLC = 0;
+
+		destination_n* list_destination_n_1 = NULL;
+		list_destination_n_1 = ProcessRoutingTableAccordingToRecentAddListV2(node, &uiLC, &olsr->recent_delete_list, plist_destination_delete);
+
+
+		if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+		{
+			//uiLookupCnt++;
+			uiLookupCnt += uiLC;
+		}
+
+		//list_destination_n = list_destination_n_1
+
+		if (list_destination_n_1 != NULL)
+		{
+
+			list_destination_n = list_destination_n_1;
+
+			while (list_destination_n_1 != NULL)
+			{
+				list_destination_n_1 = NULL;
+				destination_n*  tmp_destination_tail = NULL;
+
+				topology_last_entry* topo_last = NULL;
+				destination_list* topo_dest = NULL;
+
+				//Peter comment: every loop add group of destination nodes that one hop more from the source node,
+				//compare to the group in the previous loop  
+				while (list_destination_n != NULL)
+				{
+					destination_n* destination_n_1 = NULL;
+
+					if (DEBUG)
+					{
+						char addrString[MAX_STRING_LENGTH];
+
+						IO_ConvertIpAddressToString(
+							&list_destination_n->destination->rt_dst,
+							addrString);
+
+						printf("Node %d, Last hop %s\n",
+							node->nodeId,
+							addrString);
+					}
+
+					//Peter comment: find from the topology table if there is some entry 
+					//whose last hop equal the specific dest hop of 2 or more (* since every loop will
+					// increase the one more hop count) hop neighbors
+					if (SYMMETRIC_TOPOLOGY_TABLE)
+					{
+						topo_last = OlsrLookupLastTopologyTableSYM(node, list_destination_n->destination->rt_dst);
+					}
+					else
+					{
+						topo_last = OlsrLookupLastTopologyTable(node, list_destination_n->destination->rt_dst);
+					}
+
+
+					if (NULL != topo_last)
+					{
+						topo_dest = topo_last->topology_list_of_destinations;
+
+
+						while (topo_dest != NULL)
+						{
+
+							Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+							if (RoutingOlsrCheckMyIfaceAddress(
+								node,
+								topo_dest->destination_node->topology_destination_dst) != -1)
+							{
+								topo_dest = topo_dest->next;
+								continue;
+							}
+
+
+							OlsrCalculateRoutingTableForSinglePathTopologySearchHelpFunc(node, addrReached, list_destination_n, &list_destination_n_1, &tmp_destination_tail, TRUE);
+
+
+							//Peter Added for test time complexity
+							if (_TEST_TIME_COMPLEXITY)
+							{
+
+								//if (node->nodeId == NODE_ID_FOR_TEST_OUTER_ANGLE || node->nodeId == NODE_ID_FOR_TEST_OUTER_EDGE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_ANGLE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_EDGE || node->nodeId == NODE_ID_FOR_TEST_CENTER)
+								if (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END)
+								{
+									uiLookupCnt++;
+
+								}
+							}
+
+							topo_dest = topo_dest->next;
+						}
+					}
+
+					destination_n_1 = list_destination_n;
+					list_destination_n = list_destination_n->next;
+					MEM_free(destination_n_1);
+				}
+
+				list_destination_n = list_destination_n_1;
+				//ui_metric_cost_limitation++;
+			}
+		}
+
+	}
+	else
+	{
+
+	}
+
+	if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+	{
+		//uiLookupCnt++;
+		*puiLookupCntForDeleteList = uiLookupCnt;
+	}
+
+
+	//return NULL;
+	return list_destination_n;	
+
+
+}
+
+
+
+
+destination_n* ProcessRoutingTableAccordingToRecentDeleteListV53(Node* node, tco_node_addr ** tna_to_delete, UInt32 * puiLookupCntForDeleteList, destination_n * p_list_delete)
+{
+
+	//now we just try a strict standard that only allow 
+
+	//great
+	destination_n * list_destination_n = NULL;
+
+
+
+	//RoutingOlsr * olsr = (RoutingOlsr *) node->appData.olsr;
+
+	tco_node_addr * tco_delete_list_tmp = *tna_to_delete;			
+
+	UInt32 uiLookupCnt = 0;
+
+	//*pbRequireRediscovery = FALSE;
+
+	tco_node_addr * disconnected_list = NULL;
+
+	//tco_node_addr * deleted_list = NULL;
+
+
+	/*
+	if (!exist_in_tco_node_addr_set(&olsr->recent_delete_list, olsr->naRecentChangedAddressByTC))
+	{
+		//this should never happen
+
+		return list_destination_n;
+	}
+
+
+	if (olsr->recent_add_list != NULL)
+	{
+		clear_tco_node_addr_set(&olsr->recent_add_list);
+	}
+
+
+
+	rt_entry* prteTC = QueryRoutingTableAccordingToNodeId(node, olsr->naRecentChangedAddressByTC);
+	if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+	{
+		uiLookupCnt++;
+	}
+
+
+	if (prteTC != NULL)
+	{
+
+		OlsrDeleteRoutingTable(prteTC);
+
+		insert_into_tco_node_addr_set(&(olsr->recent_add_list), olsr->naRecentChangedAddressByTC);
+
+
+		ProcessRoutingTableAccordingToSpecificRoute(node, olsr->naRecentChangedAddressByTC);
+
+
+	}
+	else
+	{
+		//process for delete is not required 
+
+		//return list_destination_n;
+	}
+	*/
+
+
+	//try to delete the delete list 
+	//do not know why raise exception when move this segment after the ???
+	
+	//maybe the OlsrRemoveList((olsr_qelem *)destination) inside OlsrDeleteRoutingTable will 
+	//be undetermined since the following update discovery will add new entries that modify the memory distribution
+	
+	/*
+	while (p_list_delete != NULL)
+	{
+		destination_n* destination_n_1 = NULL;
+
+
+
+		destination_n_1 = p_list_delete;
+		p_list_delete = p_list_delete->next;
+
+
+		if (destination_n_1 != NULL)
+		{
+
+
+			rt_entry* pdsttmp = NULL;
+
+			pdsttmp = destination_n_1->destination;
+		
+			destination_n_1->destination = NULL;
+			
+			if (pdsttmp != NULL && pdsttmp->rt_metric == MAX_COST)
+			{
+				OlsrDeleteRoutingTable(pdsttmp);
+
+				pdsttmp = NULL;
+			}
+		
+
+			MEM_free(destination_n_1);
+			destination_n_1 = NULL;
+		
+		}
+	}
+	*/
+	
+	
+	
+
+	if (tco_delete_list_tmp != NULL)
+	{
+		UInt32 uiLC = 0;
+
+		destination_n* list_destination_n_1 = NULL;
+		list_destination_n_1 = ProcessRoutingTableAccordingToRecentAddListV2(node, &uiLC, &tco_delete_list_tmp, &p_list_delete);
+
+
+		if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+		{
+			//uiLookupCnt++;
+			uiLookupCnt += uiLC;
+		}
+
+		//list_destination_n = list_destination_n_1
+
+		if (list_destination_n_1 != NULL)
+		{
+
+			list_destination_n = list_destination_n_1;
+
+			while (list_destination_n_1 != NULL)
+			{
+				list_destination_n_1 = NULL;
+				destination_n*  tmp_destination_tail = NULL;
+
+				topology_last_entry* topo_last = NULL;
+				destination_list* topo_dest = NULL;
+
+				//Peter comment: every loop add group of destination nodes that one hop more from the source node,
+				//compare to the group in the previous loop  
+				while (list_destination_n != NULL)
+				{
+					destination_n* destination_n_1 = NULL;
+
+					if (DEBUG)
+					{
+						char addrString[MAX_STRING_LENGTH];
+
+						IO_ConvertIpAddressToString(
+							&list_destination_n->destination->rt_dst,
+							addrString);
+
+						printf("Node %d, Last hop %s\n",
+							node->nodeId,
+							addrString);
+					}
+
+					//Peter comment: find from the topology table if there is some entry 
+					//whose last hop equal the specific dest hop of 2 or more (* since every loop will
+					// increase the one more hop count) hop neighbors
+					if (SYMMETRIC_TOPOLOGY_TABLE)
+					{
+						topo_last = OlsrLookupLastTopologyTableSYM(node, list_destination_n->destination->rt_dst);
+					}
+					else
+					{
+						topo_last = OlsrLookupLastTopologyTable(node, list_destination_n->destination->rt_dst);
+					}
+
+
+					if (NULL != topo_last)
+					{
+						topo_dest = topo_last->topology_list_of_destinations;
+
+
+						while (topo_dest != NULL)
+						{
+
+							Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+							if (RoutingOlsrCheckMyIfaceAddress(
+								node,
+								topo_dest->destination_node->topology_destination_dst) != -1)
+							{
+								topo_dest = topo_dest->next;
+								continue;
+							}
+
+
+							OlsrCalculateRoutingTableForSinglePathTopologySearchHelpFunc(node, addrReached, list_destination_n, &list_destination_n_1, &tmp_destination_tail, TRUE);
+
+
+							//Peter Added for test time complexity
+							if (_TEST_TIME_COMPLEXITY)
+							{
+
+								//if (node->nodeId == NODE_ID_FOR_TEST_OUTER_ANGLE || node->nodeId == NODE_ID_FOR_TEST_OUTER_EDGE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_ANGLE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_EDGE || node->nodeId == NODE_ID_FOR_TEST_CENTER)
+								if (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END)
+								{
+									uiLookupCnt++;
+
+								}
+							}
+
+							topo_dest = topo_dest->next;
+						}
+					}
+
+					destination_n_1 = list_destination_n;
+					list_destination_n = list_destination_n->next;
+					MEM_free(destination_n_1);
+				}
+
+				list_destination_n = list_destination_n_1;
+				//ui_metric_cost_limitation++;
+			}
+		}
+
+	}
+	else
+	{
+
+	}
+
+
+	while (p_list_delete != NULL)
+	{
+		destination_n* destination_n_1 = NULL;
+
+
+
+		destination_n_1 = p_list_delete;
+		p_list_delete = p_list_delete->next;
+
+
+		if (destination_n_1 != NULL)
+		{
+
+
+			rt_entry* pdsttmp = NULL;
+
+			pdsttmp = destination_n_1->destination;
+
+			destination_n_1->destination = NULL;
+
+			if (pdsttmp != NULL && pdsttmp->rt_metric == MAX_COST)
+			{
+				OlsrDeleteRoutingTable(pdsttmp);
+
+				pdsttmp = NULL;
+			}
+
+
+			MEM_free(destination_n_1);
+			destination_n_1 = NULL;
+
+		}
+	}
+
+
+	/*
+	while (p_list_delete != NULL)
+	{
+		destination_n* destination_n_1 = NULL;
+
+
+
+		destination_n_1 = p_list_delete;
+		p_list_delete = p_list_delete->next;
+
+
+		if (destination_n_1 != NULL)
+		{
+
+
+			rt_entry* pdsttmp = NULL;
+
+			pdsttmp = destination_n_1->destination;
+
+			destination_n_1->destination = NULL;
+
+			if (pdsttmp != NULL && pdsttmp->rt_metric == MAX_COST)
+			{
+				//OlsrDeleteRoutingTable(pdsttmp);
+
+				pdsttmp = NULL;
+			}
+
+
+			MEM_free(destination_n_1);
+			destination_n_1 = NULL;
+
+		}
+	}
+	*/
+	
+
+	
+
+
+	if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+	{
+		//uiLookupCnt++;
+		*puiLookupCntForDeleteList = uiLookupCnt;
+	}
+
+
+	//return NULL;
+	return list_destination_n;	
+
+
+}
+
+
+
+//try a simple way, such that just delete all and use the add-list method to regional re-discovery
+destination_n* ProcessRoutingTableAccordingToRecentDeleteListV43(Node* node, BOOL * pbRequireRediscovery, destination_n ** plist_destination_delete, UInt32 * puiLookupCntForDeleteList)
+{
+
+	//now we just try a strict standard that only allow 
+
+	//great
+	destination_n * list_destination_n = NULL;
+
+
+
+	RoutingOlsr * olsr = (RoutingOlsr *) node->appData.olsr;
+
+	tco_node_addr * tco_delete_list_tmp = olsr->recent_delete_list;			
+
+	UInt32 uiLookupCnt = 0;
+
+	*pbRequireRediscovery = FALSE;
+
+	tco_node_addr * disconnected_list = NULL;
+	
+	//tco_node_addr * deleted_list = NULL;
+
+
+	if (!exist_in_tco_node_addr_set(&olsr->recent_delete_list, olsr->naRecentChangedAddressByTC))
+	{
+		//this should never happen
+		
+		return list_destination_n;
+	}
+
+
+	if (olsr->recent_add_list != NULL)
+	{
+		clear_tco_node_addr_set(&olsr->recent_add_list);
+	}
+
+
+	rt_entry* prteTC = QueryRoutingTableAccordingToNodeId(node, olsr->naRecentChangedAddressByTC);
+	if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+	{
+		uiLookupCnt++;
+	}
+
+	//destination_n* list_destination_delete = NULL;
+	
+	if (prteTC != NULL)
+	{
+	
+		//OlsrDeleteRoutingTable(prteTC);
+
+		//insert_into_tco_node_addr_set(&(olsr->recent_add_list), olsr->naRecentChangedAddressByTC);
+
+
+		
+		ProcessRoutingTableAccordingToSpecificRoute(node, olsr->naRecentChangedAddressByTC, plist_destination_delete);
+	
+		
+	}
+	else
+	{
+		//process for delete is not required 
+
+		//return list_destination_n;
+	}
+
+
+	if (olsr->recent_add_list != NULL)
+	{
+		UInt32 uiLC = 0;
+
+		destination_n* list_destination_n_1 = NULL;
+		list_destination_n_1 = ProcessRoutingTableAccordingToRecentAddListV2(node, &uiLC, NULL, plist_destination_delete);
+
+		
+		if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+		{
+			//uiLookupCnt++;
+			uiLookupCnt += uiLC;
+		}
+
+		//list_destination_n = list_destination_n_1
+
+		if (list_destination_n_1 != NULL)
+		{
+
+			list_destination_n = list_destination_n_1;
+
+			while (list_destination_n_1 != NULL)
+			{
+				list_destination_n_1 = NULL;
+				destination_n*  tmp_destination_tail = NULL;
+
+				topology_last_entry* topo_last = NULL;
+				destination_list* topo_dest = NULL;
+
+				//Peter comment: every loop add group of destination nodes that one hop more from the source node,
+				//compare to the group in the previous loop  
+				while (list_destination_n != NULL)
+				{
+					destination_n* destination_n_1 = NULL;
+
+					if (DEBUG)
+					{
+						char addrString[MAX_STRING_LENGTH];
+
+						IO_ConvertIpAddressToString(
+							&list_destination_n->destination->rt_dst,
+							addrString);
+
+						printf("Node %d, Last hop %s\n",
+							node->nodeId,
+							addrString);
+					}
+
+					//Peter comment: find from the topology table if there is some entry 
+					//whose last hop equal the specific dest hop of 2 or more (* since every loop will
+					// increase the one more hop count) hop neighbors
+					if (SYMMETRIC_TOPOLOGY_TABLE)
+					{
+						topo_last = OlsrLookupLastTopologyTableSYM(node, list_destination_n->destination->rt_dst);
+					}
+					else
+					{
+						topo_last = OlsrLookupLastTopologyTable(node, list_destination_n->destination->rt_dst);
+					}
+
+
+					if (NULL != topo_last)
+					{
+						topo_dest = topo_last->topology_list_of_destinations;
+
+
+						while (topo_dest != NULL)
+						{
+
+							Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+							if (RoutingOlsrCheckMyIfaceAddress(
+								node,
+								topo_dest->destination_node->topology_destination_dst) != -1)
+							{
+								topo_dest = topo_dest->next;
+								continue;
+							}
+
+
+							OlsrCalculateRoutingTableForSinglePathTopologySearchHelpFunc(node, addrReached, list_destination_n, &list_destination_n_1, &tmp_destination_tail, TRUE);
+
+
+							//Peter Added for test time complexity
+							if (_TEST_TIME_COMPLEXITY)
+							{
+
+								//if (node->nodeId == NODE_ID_FOR_TEST_OUTER_ANGLE || node->nodeId == NODE_ID_FOR_TEST_OUTER_EDGE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_ANGLE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_EDGE || node->nodeId == NODE_ID_FOR_TEST_CENTER)
+								if (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END)
+								{
+									uiLookupCnt++;
+
+								}
+							}
+
+							topo_dest = topo_dest->next;
+						}
+					}
+
+					destination_n_1 = list_destination_n;
+					list_destination_n = list_destination_n->next;
+					MEM_free(destination_n_1);
+				}
+
+				list_destination_n = list_destination_n_1;
+				//ui_metric_cost_limitation++;
+			}
+		}
+
+	}
+	else
+	{
+
+	}
+
+	if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+	{
+		//uiLookupCnt++;
+		*puiLookupCntForDeleteList = uiLookupCnt;
+	}
+
+
+	//return NULL;
+	return list_destination_n;	
+
+
+}
+
+
+destination_n* ProcessRoutingTableAccordingToRecentDeleteListV21(Node* node, UInt32 * puiRequireRediscovery, UInt32 * puiLookupCntForDeleteList)
+{
+
+
+	//now we just try a strict standard that only allow 
+
+	destination_n * list_destination_n = NULL;
+
+
+
+	RoutingOlsr * olsr = (RoutingOlsr *) node->appData.olsr;
+
+	tco_node_addr * tco_delete_list_tmp = olsr->recent_delete_list;
+
+	tco_node_addr * tco_delete_list_backup = NULL;
+
+	while (tco_delete_list_tmp != NULL)
+	{
+
+		insert_into_tco_node_addr_set(&(tco_delete_list_backup), tco_delete_list_tmp->nid);
+
+		tco_delete_list_tmp = tco_delete_list_tmp->next;
+	}
+
+
+	tco_delete_list_tmp = tco_delete_list_backup;
+
+	UInt32 uiLookupCnt = 0;
+
+
+	*puiRequireRediscovery = 0;
+	//*pbRequireRediscovery = FALSE;
+
+
+	//if (tco_delete_list_tmp->nid == 10 && olsr->naRecentChangedAddressByTC == 15 && node->nodeId == 16)
+	//{
+
+	//DebugBreak();
+	//}
+
+
+	//prte and prteTC will exist or non-exist at the same time
+	rt_entry* prteTC = QueryRoutingTableAccordingToNodeId(node, olsr->naRecentChangedAddressByTC);
+	if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+	{
+		uiLookupCnt++;
+	}
+
+	if (prteTC != NULL)
+	{
+
+		
+		//BOOL bEncounterCannotFindExchange = FALSE;
+
+		BOOL bExistReachTCFromTDNodeTBD = FALSE;
+
+		prteTC->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+		prteTC->rt_entry_infos.bCostChanged = FALSE;
+		prteTC->rt_entry_infos.bRequireDelete = FALSE;
+
+		prteTC->rt_entry_infos.uiCostChg = 0;
+
+
+		while (tco_delete_list_tmp != NULL)
+		{
+			
+			if (prteTC->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == tco_delete_list_tmp->nid)
+			{
+
+				if (prteTC->rt_metric == 2)
+				{
+
+					BOOL b2HopNeighborCausedConnection = FALSE;
+					b2HopNeighborCausedConnection = ConnectivetyCausedBy2HopNeighbor(node, prteTC->rt_entry_infos.rtu_dst, tco_delete_list_tmp->nid);
+
+					if (b2HopNeighborCausedConnection)
+					{
+
+						remove_from_tco_node_addr_set(&(tco_delete_list_backup), tco_delete_list_tmp->nid);
+
+						break;
+					}										
+				}
+				
+
+
+				bExistReachTCFromTDNodeTBD = TRUE;
+
+				remove_from_tco_node_addr_set(&(tco_delete_list_backup), tco_delete_list_tmp->nid);
+
+
+				break;
+			}
+
+			tco_delete_list_tmp = tco_delete_list_tmp->next;
+		}
+
+
+		if (bExistReachTCFromTDNodeTBD)
+		{
+			//DebugBreak();
+			//the same as bExistReachTCFromTDNodeTBD for this specific case
+
+			//find exchange for this,
+			//if can not find, then do not do following further exchange
+			BOOL bExchangeFound = FindRouteExchangeV21(node, NULL, prteTC, FALSE, NULL, &uiLookupCnt);
+
+			if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+			{
+
+				*puiLookupCntForDeleteList = uiLookupCnt;
+			}
+
+			if (!bExchangeFound)
+			{
+
+				//OlsrDeleteRoutingTable(prteTC);
+				//prteTC = NULL;
+
+				if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+				{
+					//uiLookupCnt++;
+					*puiLookupCntForDeleteList = uiLookupCnt;
+				}
+
+
+				if (tco_delete_list_backup != NULL)
+				{
+					clear_tco_node_addr_set(&tco_delete_list_backup);
+				}
+
+				//*pbRequireRediscovery = TRUE;
+				*puiRequireRediscovery = 2;
+				return NULL;
+			}
+
+		}
+		else
+		{
+
+			
+		}
+
+
+
+		BOOL bEncounterCannotFindExchange = FALSE;
+
+
+
+		tco_delete_list_tmp = tco_delete_list_backup;
+		//now it should not including the entry get to TCNode, since it is removed from the list,
+		//so only those nodes reached (it is possible that nodes can be reached but consider TCNode as last hop)
+		//by TCNode is remained 
+
+
+		tco_node_addr * disconnected_list = NULL;
+
+		//int iDisconnectCount = 0;
+
+		while (tco_delete_list_tmp != NULL)
+		{
+
+			rt_entry* prte = QueryRoutingTableAccordingToNodeId(node, tco_delete_list_tmp->nid);
+
+			if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+			{
+				uiLookupCnt++;
+			}
+
+			if (prte != NULL)
+			{
+				
+				if (prte->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == olsr->naRecentChangedAddressByTC)
+				{
+
+					if (prte->rt_metric == 2)
+					{
+						BOOL b2HopNeighborCausedConnection = FALSE;
+
+						b2HopNeighborCausedConnection = ConnectivetyCausedBy2HopNeighbor(node, prte->rt_entry_infos.rtu_dst, olsr->naRecentChangedAddressByTC);
+						if (b2HopNeighborCausedConnection)
+						{
+
+							
+
+							tco_delete_list_tmp = tco_delete_list_tmp->next;
+
+							continue;
+						}
+					}
+
+					insert_into_tco_node_addr_set(&(disconnected_list), tco_delete_list_tmp->nid);
+					//iDisconnectCount++;
+
+
+
+				}
+				else
+				{
+					//it is possible that nodes can be reached but not consider TCNode as last hop
+					//skip these nodes
+
+				}
+
+			}
+			else
+			{
+
+				//should not happen
+			}
+
+
+			tco_delete_list_tmp = tco_delete_list_tmp->next;
+		}
+
+
+		
+
+		destination_n * list_destination_TS_plus_one = NULL;
+
+		destination_n * list_destination_TS_plus_two = NULL;
+
+
+		tco_node_addr * ATS_list = NULL;
+
+		if (bExistReachTCFromTDNodeTBD && prteTC->rt_entry_infos.bDescendentRequireFurtherUpdate)
+		{
+
+			topology_last_entry * t_last_sym = OlsrLookupLastTopologyTableSYM(node, prteTC->rt_dst);
+			
+			if (t_last_sym != NULL)
+			{
+				if (prteTC->rt_entry_infos.bCostChanged)
+				{
+					//plus one
+					destination_list* topo_dest = NULL;
+					topo_dest = t_last_sym->topology_list_of_destinations;
+
+					while (topo_dest != NULL)
+					{
+
+						Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+						topo_dest = topo_dest->next;
+
+						rt_entry* prteNearby = QueryRoutingTableAccordingToNodeId(node, addrReached.interfaceAddr.ipv4);
+
+						if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+						{
+							uiLookupCnt++;
+						}
+
+						if (prteNearby != NULL)
+						{
+							
+							if (prteNearby->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == olsr->naRecentChangedAddressByTC)
+							{
+
+								prteNearby->rt_entry_infos.bCostChanged = FALSE;
+								prteNearby->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+								prteNearby->rt_entry_infos.bRequireDelete = FALSE;
+
+								
+								BOOL bExchangeFound = FindRouteExchangeV21(node, NULL, prteNearby, TRUE, prteTC, &uiLookupCnt);
+								if (bExchangeFound)
+								{
+
+									if (prteNearby->rt_entry_infos.bDescendentRequireFurtherUpdate)
+									{
+
+										//add to list
+
+										destination_n* list_destination_tmp;
+										list_destination_tmp = (destination_n* )
+											MEM_malloc(sizeof(destination_n));
+
+										memset(
+											list_destination_tmp,
+											0,
+											sizeof(destination_n));
+
+										list_destination_tmp->destination = prteNearby;
+
+										if (prteNearby->rt_entry_infos.bCostChanged)
+										{
+
+											//cost change, more specificly, plus one
+											list_destination_tmp->next = list_destination_TS_plus_two;
+											list_destination_TS_plus_two = list_destination_tmp;
+
+										}
+										else
+										{
+											//only route change
+											list_destination_tmp->next = list_destination_TS_plus_one;
+											list_destination_TS_plus_one = list_destination_tmp;
+										}
+
+									}
+									else
+									{
+										//do not need to add to list, since all their descendants are not require change
+									}
+								}
+								else
+								{
+
+									//will never happen, since at least the TC is ok,
+								}
+
+							}
+						}
+					}
+					
+					
+				}
+				else
+				{
+					//only route change
+					destination_list* topo_dest = NULL;
+					topo_dest = t_last_sym->topology_list_of_destinations;
+
+					while (topo_dest != NULL)
+					{
+
+						Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+						topo_dest = topo_dest->next;
+						
+						rt_entry* prteNearby = QueryRoutingTableAccordingToNodeId(node, addrReached.interfaceAddr.ipv4);
+
+						if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+						{
+							uiLookupCnt++;
+						}
+
+						if (prteNearby != NULL)
+						{
+							
+							if (prteNearby->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == olsr->naRecentChangedAddressByTC)
+							{
+
+
+								prteNearby->rt_entry_infos.uiCostChg = 0;
+
+								prteNearby->rt_entry_infos.bCostChanged = FALSE;
+
+
+								prteNearby->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+								prteNearby->rt_entry_infos.bRequireDelete = FALSE;
+
+								//just change for same route
+								BOOL bExchangeFound = FindRouteExchangeV20(node, NULL, prteNearby, TRUE, &uiLookupCnt);
+								if (bExchangeFound)
+								{
+
+									if (prteNearby->rt_entry_infos.bDescendentRequireFurtherUpdate)
+									{
+
+										//add to list
+
+
+										destination_n* list_destination_tmp;
+										list_destination_tmp = (destination_n* )
+											MEM_malloc(sizeof(destination_n));
+
+										memset(
+											list_destination_tmp,
+											0,
+											sizeof(destination_n));
+
+										list_destination_tmp->destination = prteNearby;
+										list_destination_tmp->next = list_destination_TS_plus_one;
+										list_destination_TS_plus_one = list_destination_tmp;
+
+
+									}						
+								}
+								else
+								{
+
+									//will never happen, since at least the TC is ok,
+								}
+
+							}
+						}
+					}
+				}
+			}			
+		}
+		else
+		{
+			//means ATS, if any, do not require further change, and so as their descendants
+
+			//
+		}
+
+
+		//determine whether whether it is exchangeable for the DATS nodes
+		
+		//tco_node_addr * found_list = NULL;
+		//tco_node_addr * possible_found_list = NULL;
+
+		tco_node_addr * tmp_disconnected_list = NULL;
+
+
+		if (disconnected_list != NULL)
+		{
+			
+
+			while (disconnected_list != NULL)
+			{
+				
+				//copy the set
+
+				tco_node_addr * tmp_addr = disconnected_list;
+				while (tmp_addr != NULL)
+				{
+
+					insert_into_tco_node_addr_set(&(tmp_disconnected_list), tmp_addr->nid);
+					tmp_addr = tmp_addr->next;
+				}
+
+				tco_node_addr * tmp_addr_tmp = tmp_disconnected_list;
+
+				BOOL bAtleastFindOne = FALSE;
+				
+				while (tmp_addr_tmp != NULL)
+				{
+
+					rt_entry* prte = QueryRoutingTableAccordingToNodeId(node, tmp_addr_tmp->nid);
+
+					if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+					{
+						uiLookupCnt++;
+					}
+
+					if (prte != NULL)
+					{
+
+						//the exchange here need to support unconsider set,
+						//to avoid circular dependency 
+
+						prte->rt_entry_infos.uiCostChg = 0;
+
+						prte->rt_entry_infos.bCostChanged = FALSE;
+						prte->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+						prte->rt_entry_infos.bRequireDelete = FALSE;
+
+
+						BOOL bPToF = FALSE;
+						BOOL bExchangeFound = FindRouteExchangeV21(node, NULL, prte, FALSE, NULL, &uiLookupCnt, FALSE, &(disconnected_list), NULL, NULL, NULL, NULL, &bPToF);
+
+						if (!bExchangeFound)
+						{
+
+							if (bPToF)
+							{
+								//insert_into_tco_node_addr_set(&(possible_found_list), tmp_addr_tmp->nid);
+								//DebugBreak();
+							}
+							else
+							{
+
+								//OlsrDeleteRoutingTable(prte);
+								//prte = NULL;
+
+
+								//*pbRequireRediscovery = TRUE;
+
+								bEncounterCannotFindExchange = TRUE;
+
+								break;
+							}
+
+
+						}
+						else
+						{
+							remove_from_tco_node_addr_set(&(disconnected_list), tmp_addr_tmp->nid);
+							//insert_into_tco_node_addr_set(&(found_list), tmp_addr_tmp->nid);
+
+							bAtleastFindOne = TRUE;
+
+							if (prte->rt_entry_infos.bDescendentRequireFurtherUpdate)
+							{
+
+								destination_n* list_destination_tmp;
+								list_destination_tmp = (destination_n* )
+									MEM_malloc(sizeof(destination_n));
+
+								memset(
+									list_destination_tmp,
+									0,
+									sizeof(destination_n));
+
+								list_destination_tmp->destination = prte;
+
+								if (prte->rt_entry_infos.bCostChanged)
+								{
+									
+									//cost plus one
+									list_destination_tmp->next = list_destination_TS_plus_two;
+									list_destination_TS_plus_two = list_destination_tmp;
+								}
+								else
+								{
+
+									//only route change
+
+									list_destination_tmp->next = list_destination_TS_plus_one;
+									list_destination_TS_plus_one = list_destination_tmp;
+								}								
+								
+							}
+							else
+							{
+								//perfect exchange
+							}
+
+						}
+					}
+
+					tmp_addr_tmp = tmp_addr_tmp->next;
+				}
+
+				if (tmp_disconnected_list)
+				{
+					clear_tco_node_addr_set(&tmp_disconnected_list);
+				}
+			
+
+				if (bEncounterCannotFindExchange)
+				{
+					break;
+				}
+
+				if (!bAtleastFindOne)
+				{
+					bEncounterCannotFindExchange = TRUE;
+					break;
+				}
+
+			}
+
+
+
+			
+			
+			
+			if (bEncounterCannotFindExchange)
+			{
+
+
+				if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+				{
+					//uiLookupCnt++;
+					*puiLookupCntForDeleteList = uiLookupCnt;
+				}
+
+				//do Full Re-Calculation
+				/*
+				while (list_destination_n != NULL) 
+				{
+
+					destination_n* destination_n_1 = list_destination_n;
+					list_destination_n = list_destination_n->next;
+					MEM_free(destination_n_1);
+				}
+				*/
+
+				while (list_destination_TS_plus_one != NULL)
+				{
+					destination_n* destination_n_1 = list_destination_TS_plus_one;
+					list_destination_TS_plus_one = list_destination_TS_plus_one->next;
+					MEM_free(destination_n_1);
+				}
+
+				list_destination_TS_plus_one = NULL;
+
+
+				while (list_destination_TS_plus_two != NULL)
+				{
+					destination_n* destination_n_1 = list_destination_TS_plus_two;
+					list_destination_TS_plus_two = list_destination_TS_plus_two->next;
+					MEM_free(destination_n_1);
+				}
+
+				list_destination_TS_plus_two = NULL;
+
+				if (disconnected_list != NULL)
+				{
+					clear_tco_node_addr_set(&disconnected_list);
+				}
+
+
+				//list_destination_n = NULL;
+
+				if (tco_delete_list_backup != NULL)
+				{
+					clear_tco_node_addr_set(&tco_delete_list_backup);
+				}
+
+				//*pbRequireRediscovery = TRUE;
+				*puiRequireRediscovery = 1;
+
+				return NULL;
+
+			}
+			
+
+			
+		}
+		else
+		{
+			//
+		}
+
+
+		//deal with list_destination_TS_plus_one list_destination_TS_plus_two
+
+		if (list_destination_TS_plus_one != NULL || list_destination_TS_plus_two != NULL)
+		{
+
+			if (list_destination_TS_plus_one != NULL)
+			{
+				if (list_destination_TS_plus_two == NULL)
+				{
+
+				}
+				else
+				{
+					// deal with list_destination_TS_plus_one
+					// actually, only need to deal with route change here
+ 
+					while (list_destination_TS_plus_one != NULL)
+					{
+						//DebugBreak();
+						destination_n* destination_n_1 = NULL;
+						destination_list* topo_dest = NULL;
+						topology_last_entry* topo_last = OlsrLookupLastTopologyTableSYM(node, list_destination_TS_plus_one->destination->rt_dst);
+						if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+						{
+							uiLookupCnt++;
+						}
+
+						if (NULL != topo_last)
+						{
+							topo_dest = topo_last->topology_list_of_destinations;
+
+							while (topo_dest != NULL)
+							{
+
+								Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+								if (RoutingOlsrCheckMyIfaceAddress(
+									node,
+									topo_dest->destination_node->topology_destination_dst) != -1)
+								{
+									topo_dest = topo_dest->next;
+									continue;
+								}
+
+
+								UInt32 uiInnerExchangeLUCnt = 0;
+
+
+								//destination_n * list_destination_TS_plus_three = NULL;
+								//here since only change for route, list_destination_TS_plus_three should not be needed
+
+								OlsrCalculateRoutingTableForSinglePathTopologySearchHelpFuncV21(node, addrReached, list_destination_TS_plus_one, &list_destination_TS_plus_one, &list_destination_TS_plus_two, &uiInnerExchangeLUCnt);
+
+
+								//Peter Added for test time complexity
+								if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+								{
+									uiLookupCnt += uiInnerExchangeLUCnt;
+
+									//if (node->nodeId == NODE_ID_FOR_TEST_OUTER_ANGLE || node->nodeId == NODE_ID_FOR_TEST_OUTER_EDGE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_ANGLE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_EDGE || node->nodeId == NODE_ID_FOR_TEST_CENTER)
+									if (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END)
+									{
+										uiLookupCnt++;
+
+									}
+								}
+
+								topo_dest = topo_dest->next;
+							}
+						}
+
+						destination_n_1 = list_destination_TS_plus_one;
+						list_destination_TS_plus_one = list_destination_TS_plus_one->next;
+						MEM_free(destination_n_1);
+					}
+
+
+				}
+			}
+			else
+			{
+				//only  list_destination_TS_plus_two
+			}
+
+		}
+		else
+		{
+			//mean if any exchange exist, then all of them find perfect exchange, nothing required for further update, 
+		}
+
+		destination_n * list_destination_n_1 = list_destination_TS_plus_two;
+
+		if (list_destination_n_1 != NULL)
+		{
+
+			//printf("OlsrCalculateRoutingTableAdv stage #2.2.1 \n");
+
+				//printf("nodeId = %d \n", node->nodeId);
+		
+
+			//BOOL bFirstRound = TRUE;
+			//do update WRT to lasthop for this case
+			list_destination_n = list_destination_n_1;
+
+			list_destination_n_1 = NULL;
+
+			//destination_n* list_destination_n_2 = NULL;
+
+			topology_last_entry* topo_last = NULL;
+			destination_list* topo_dest = NULL;
+
+			while (list_destination_n != NULL)
+			{
+				//list_destination_n_1 = NULL;
+
+				//Peter comment: every loop add group of destination nodes that one hop more from the source node,
+				//compare to the group in the previous loop  
+				while (list_destination_n != NULL)
+				{
+					int iCosttmp = -1;
+					
+					destination_n* destination_n_1 = NULL;
+
+					if (DEBUG)
+					{
+						char addrString[MAX_STRING_LENGTH];
+
+						IO_ConvertIpAddressToString(
+							&list_destination_n->destination->rt_dst,
+							addrString);
+
+						printf("Node %d, Last hop %s\n",
+							node->nodeId,
+							addrString);
+					}
+
+					//Peter comment: find from the topology table if there is some entry 
+					//whose last hop equal the specific dest hop of 2 or more (* since every loop will
+					// increase the one more hop count) hop neighbors
+					if (SYMMETRIC_TOPOLOGY_TABLE)
+					{
+						topo_last = OlsrLookupLastTopologyTableSYM(node, list_destination_n->destination->rt_dst);
+					}
+					else
+					{
+						topo_last = OlsrLookupLastTopologyTable(node, list_destination_n->destination->rt_dst);
+					}
+
+
+					if (NULL != topo_last)
+					{
+						topo_dest = topo_last->topology_list_of_destinations;
+
+						while (topo_dest != NULL)
+						{
+
+							Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+							if (RoutingOlsrCheckMyIfaceAddress(
+								node,
+								topo_dest->destination_node->topology_destination_dst) != -1)
+							{
+								topo_dest = topo_dest->next;
+								continue;
+							}
+
+
+							UInt32 uiInnerExchangeLUCnt = 0;
+							OlsrCalculateRoutingTableForSinglePathTopologySearchHelpFuncV21(node, addrReached, list_destination_n, &list_destination_n, &list_destination_n_1, &uiInnerExchangeLUCnt);
+
+
+							//Peter Added for test time complexity
+							if (_TEST_TIME_COMPLEXITY)
+							{
+								uiLookupCnt += uiInnerExchangeLUCnt;
+
+								//if (node->nodeId == NODE_ID_FOR_TEST_OUTER_ANGLE || node->nodeId == NODE_ID_FOR_TEST_OUTER_EDGE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_ANGLE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_EDGE || node->nodeId == NODE_ID_FOR_TEST_CENTER)
+								if (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END)
+								{
+									uiLookupCnt++;
+
+								}
+							}
+
+							topo_dest = topo_dest->next;
+						}
+					}
+
+					destination_n_1 = list_destination_n;
+					list_destination_n = list_destination_n->next;
+
+					/*
+					if (iCosttmp == -1)
+					{
+						iCosttmp = destination_n_1->destination->rt_entry_infos.rtu_metric;
+
+					}
+					else
+					{
+						if (iCosttmp == destination_n_1->destination->rt_entry_infos.rtu_metric)
+						{
+
+						}
+						else
+						{
+							printf("******************************&&&&&&&&&&&& cost mismatch!!!  iCosttmp = %d while destination_n_1->destination->rt_entry_infos.rtu_metric = %d \n", 
+								iCosttmp, destination_n_1->destination->rt_entry_infos.rtu_metric);
+						}
+					}
+
+					//printf("******************************&&&&&&&&&&&&  nodeId= %d, iCosttmp = %d \n", node->nodeId, iCosttmp);
+					*/
+
+					MEM_free(destination_n_1);
+				}
+
+				/*
+				list_destination_n = list_destination_n_1;
+				
+				*/
+
+				if (list_destination_n_1 != NULL)
+				{
+					list_destination_n = list_destination_n_1;
+					
+					//list_destination_n_1 = list_destination_n_2;
+					list_destination_n_1 = NULL;
+					//list_destination_n_2 = NULL;
+				}
+				else
+				{
+											
+					list_destination_n = NULL;
+					
+					/*
+					if (list_destination_n_2 != NULL)
+					{
+						list_destination_n = list_destination_n_2;
+						
+						//list_destination_n_1 is already NULL
+						list_destination_n_2 = NULL;
+					}
+					else
+					{
+						//no new entry require to be further update, so end here
+						list_destination_n = NULL;
+						//list_destination_n_1 is already NULL
+						//list_destination_n_2 is already NULL
+						//break;
+					}
+					*/
+				}
+
+				//ui_metric_cost_limitation++;
+
+				//bFirstRound = FALSE;
+			}
+
+			//printf("OlsrCalculateRoutingTableAdv stage #2.2.2 \n");
+
+		
+		}
+		
+						
+		if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+		{
+			//uiLookupCnt++;
+			*puiLookupCntForDeleteList = uiLookupCnt;
+		}
+
+
+	}
+	else
+	{
+		//process for delete is not required 
+	}
+
+	if (tco_delete_list_backup != NULL)
+	{
+		clear_tco_node_addr_set(&tco_delete_list_backup);
+	}
+
+	//return NULL;
+	return list_destination_n;	
+
+}
+
+
+
+
+
+
+destination_n* ProcessRoutingTableAccordingToRecentDeleteListV20(Node* node, BOOL * pbRequireRediscovery, UInt32 * puiLookupCntForDeleteList)
+{
+
+
+	//now we just try a strict standard that only allow 
+
+	destination_n * list_destination_n_1 = NULL;
+
+	RoutingOlsr * olsr = (RoutingOlsr *) node->appData.olsr;
+
+	tco_node_addr * tco_delete_list_tmp = olsr->recent_delete_list;			
+
+	UInt32 uiLookupCnt = 0;
+
+	*pbRequireRediscovery = FALSE;
+
+
+	//if (tco_delete_list_tmp->nid == 10 && olsr->naRecentChangedAddressByTC == 15 && node->nodeId == 16)
+	//{
+
+		//DebugBreak();
+	//}
+
+
+	//prte and prteTC will exist or non-exist at the same time
+	rt_entry* prteTC = QueryRoutingTableAccordingToNodeId(node, olsr->naRecentChangedAddressByTC);
+	if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+	{
+		uiLookupCnt++;
+	}
+
+	if (prteTC != NULL)
+	{
+
+
+		//BOOL bEncounterCannotFindExchange = FALSE;
+
+		BOOL bExistReachTCFromTDNodeTBD = FALSE;
+
+		prteTC->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+		prteTC->rt_entry_infos.bCostChanged = FALSE;
+		prteTC->rt_entry_infos.bRequireDelete = FALSE;
+
+		prteTC->rt_entry_infos.uiCostChg = 0;
+
+
+		while (tco_delete_list_tmp != NULL)
+		{
+
+			if (prteTC->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == tco_delete_list_tmp->nid)
+			{
+
+				if (prteTC->rt_metric == 2)
+				{
+
+					BOOL b2HopNeighborCausedConnection = FALSE;
+					b2HopNeighborCausedConnection = ConnectivetyCausedBy2HopNeighbor(node, prteTC->rt_entry_infos.rtu_dst, tco_delete_list_tmp->nid);
+
+					if (b2HopNeighborCausedConnection)
+					{
+
+						remove_from_tco_node_addr_set(&(olsr->recent_delete_list), tco_delete_list_tmp->nid);
+
+						break;
+					}										
+				}
+
+
+
+				bExistReachTCFromTDNodeTBD = TRUE;
+
+				remove_from_tco_node_addr_set(&(olsr->recent_delete_list), tco_delete_list_tmp->nid);
+
+
+				break;
+			}
+
+			tco_delete_list_tmp = tco_delete_list_tmp->next;
+		}
+
+
+		if (bExistReachTCFromTDNodeTBD)
+		{
+
+			//the same as bExistReachTCFromTDNodeTBD for this specific case
+
+			//find exchange for this,
+			//if can not find, then do not do following further exchange
+			BOOL bExchangeFound = FindRouteExchangeV20(node, NULL, prteTC, FALSE, &uiLookupCnt);
+
+			if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+			{
+
+				*puiLookupCntForDeleteList = uiLookupCnt;
+			}
+
+			if (!bExchangeFound)
+			{
+
+				//OlsrDeleteRoutingTable(prteTC);
+				//prteTC = NULL;
+
+				if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+				{
+					//uiLookupCnt++;
+					*puiLookupCntForDeleteList = uiLookupCnt;
+				}
+
+				*pbRequireRediscovery = TRUE;
+				return NULL;
+			}
+
+		}
+		else
+		{
+
+			//further check for bRequireUpdate is not needed for this specific case
+		}
+
+
+
+		//µ½Õâ²½£¬¾ÍËµÃ÷ bExistReachTCFromTDNodeTBD ²»»áÔì³ÉÈÎºÎ cost µÄ¸Ä±ä
+		//FindRouteExchangeV20 Ö»ÔÊÐí×î¶àÊÇroute ±ä»¯
+	
+		BOOL bEncounterCannotFindExchange = FALSE;
+
+		
+
+		tco_delete_list_tmp = olsr->recent_delete_list;
+		//now it should not including the entry get to TCNode, since it is removed from the list,
+		//so only those nodes reached (it is possible that nodes can be reached but consider TCNode as last hop)
+		//by TCNode is remained 
+
+		//tco_node_addr * disconnected_list = NULL;
+
+		//int iDisconnectCount = 0;
+		
+		while (tco_delete_list_tmp != NULL)
+		{
+
+			rt_entry* prte = QueryRoutingTableAccordingToNodeId(node, tco_delete_list_tmp->nid);
+
+			if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+			{
+				uiLookupCnt++;
+			}
+
+			if (prte != NULL)
+			{
+
+				
+
+				if (prte->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == olsr->naRecentChangedAddressByTC)
+				{
+
+					if (prte->rt_metric == 2)
+					{
+						BOOL b2HopNeighborCausedConnection = FALSE;
+
+						b2HopNeighborCausedConnection = ConnectivetyCausedBy2HopNeighbor(node, prte->rt_entry_infos.rtu_dst, olsr->naRecentChangedAddressByTC);
+						if (b2HopNeighborCausedConnection)
+						{
+
+							//remove_from_tco_node_addr_set(&(olsr->recent_delete_list), tco_delete_list_tmp->nid);
+
+							tco_delete_list_tmp = tco_delete_list_tmp->next;
+
+							continue;
+						}
+					}
+					
+					//insert_into_tco_node_addr_set(&(disconnected_list), tco_delete_list_tmp->nid);
+					//iDisconnectCount++;
+
+
+					//prte->rt_entry_infos.bRequireExchange = TRUE;
+					//prte->rt_entry_infos.bRequireUpdate = FALSE;	
+
+
+					prte->rt_entry_infos.uiCostChg = 0;
+
+					prte->rt_entry_infos.bCostChanged = FALSE;
+					prte->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+					
+
+					BOOL bExchangeFound = FindRouteExchangeV20(node, NULL, prte, FALSE, &uiLookupCnt);
+					if (!bExchangeFound)
+					{
+
+						//OlsrDeleteRoutingTable(prte);
+						//prte = NULL;
+
+						*pbRequireRediscovery = TRUE;
+
+						bEncounterCannotFindExchange = TRUE;
+
+						break;
+					}
+					else
+					{
+
+						if (prte->rt_entry_infos.bDescendentRequireFurtherUpdate)
+						{
+
+							destination_n* list_destination_tmp;
+							list_destination_tmp = (destination_n* )
+								MEM_malloc(sizeof(destination_n));
+
+							memset(
+								list_destination_tmp,
+								0,
+								sizeof(destination_n));
+
+							list_destination_tmp->destination = prte;
+							list_destination_tmp->next = list_destination_n_1;
+							list_destination_n_1 = list_destination_tmp;
+						}
+						
+					}					
+				
+				}
+				else
+				{
+					//it is possible that nodes can be reached but not consider TCNode as last hop
+					//skip these nodes
+
+				}
+
+			}
+			else
+			{
+
+				//should not happen
+			}
+
+
+			tco_delete_list_tmp = tco_delete_list_tmp->next;
+		}
+
+
+		if (bEncounterCannotFindExchange)
+		{
+
+
+			if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+			{
+				//uiLookupCnt++;
+				*puiLookupCntForDeleteList = uiLookupCnt;
+			}
+
+			//do Full Re-Calculation
+			while (list_destination_n_1 != NULL) 
+			{
+
+				destination_n* destination_n_1 = list_destination_n_1;
+				list_destination_n_1 = list_destination_n_1->next;
+				MEM_free(destination_n_1);
+			}
+
+			list_destination_n_1 = NULL;
+
+			*pbRequireRediscovery = TRUE;
+
+			return NULL;
+
+		}
+		
+
+
+
+		topology_last_entry * t_last_sym = OlsrLookupLastTopologyTableSYM(node, prteTC->rt_dst);
+		if (t_last_sym != NULL && bExistReachTCFromTDNodeTBD && prteTC->rt_entry_infos.bDescendentRequireFurtherUpdate)
+		{
+
+			destination_list* topo_dest = NULL;
+			topo_dest = t_last_sym->topology_list_of_destinations;
+
+
+			while (topo_dest != NULL)
+			{
+
+				Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+
+				topo_dest = topo_dest->next;
+
+				rt_entry* prteNearby = QueryRoutingTableAccordingToNodeId(node, addrReached.interfaceAddr.ipv4);
+
+				if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+				{
+					uiLookupCnt++;
+				}
+
+				if (prteNearby != NULL)
+				{
+					
+
+					if (prteNearby->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == olsr->naRecentChangedAddressByTC)
+					{
+
+						prteNearby->rt_entry_infos.uiCostChg = 0;
+
+						prteNearby->rt_entry_infos.bCostChanged = FALSE;
+						prteNearby->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+						prteNearby->rt_entry_infos.bRequireDelete = FALSE;
+
+						//just change for same route
+						BOOL bExchangeFound = FindRouteExchangeV20(node, NULL, prteNearby, TRUE, &uiLookupCnt);
+						if (bExchangeFound)
+						{
+						
+							if (prteNearby->rt_entry_infos.bDescendentRequireFurtherUpdate)
+							{
+
+								//add to list
+
+
+								destination_n* list_destination_tmp;
+								list_destination_tmp = (destination_n* )
+									MEM_malloc(sizeof(destination_n));
+
+								memset(
+									list_destination_tmp,
+									0,
+									sizeof(destination_n));
+
+								list_destination_tmp->destination = prteNearby;
+								list_destination_tmp->next = list_destination_n_1;
+								list_destination_n_1 = list_destination_tmp;
+
+							
+							}						
+						}
+						else
+						{
+
+							//will not happen
+						}
+					
+
+					}
+				
+				}
+
+			}
+
+		}
+		
+
+
+
+
+		if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+		{
+			//uiLookupCnt++;
+			*puiLookupCntForDeleteList = uiLookupCnt;
+		}
+
+		if (bEncounterCannotFindExchange)
+		{
+
+			//do Full Re-Calculation
+			while (list_destination_n_1 != NULL) 
+			{
+
+				destination_n* destination_n_1 = list_destination_n_1;
+				list_destination_n_1 = list_destination_n_1->next;
+				MEM_free(destination_n_1);
+			}
+
+			list_destination_n_1 = NULL;
+
+			*pbRequireRediscovery = TRUE;
+
+			return NULL;
+
+		}
+
+
+		//should success, further process the update list:
+		if (list_destination_n_1 != NULL)
+		{
+
+			//printf("OlsrCalculateRoutingTableAdv stage #2.2.1 \n");
+
+			//printf("nodeId = %d \n", node->nodeId);
+
+
+			//BOOL bFirstRound = TRUE;
+			//do update WRT to lasthop for this case
+			destination_n * list_destination_n = list_destination_n_1;
+
+			while (list_destination_n_1 != NULL)
+			{
+				list_destination_n_1 = NULL;
+
+				topology_last_entry* topo_last = NULL;
+				destination_list* topo_dest = NULL;
+
+
+				//Peter comment: every loop add group of destination nodes that one hop more from the source node,
+				//compare to the group in the previous loop  
+				while (list_destination_n != NULL)
+				{
+					destination_n* destination_n_1 = NULL;
+
+					if (DEBUG)
+					{
+						char addrString[MAX_STRING_LENGTH];
+
+						IO_ConvertIpAddressToString(
+							&list_destination_n->destination->rt_dst,
+							addrString);
+
+						printf("Node %d, Last hop %s\n",
+							node->nodeId,
+							addrString);
+					}
+
+					//Peter comment: find from the topology table if there is some entry 
+					//whose last hop equal the specific dest hop of 2 or more (* since every loop will
+					// increase the one more hop count) hop neighbors
+					if (SYMMETRIC_TOPOLOGY_TABLE)
+					{
+						topo_last = OlsrLookupLastTopologyTableSYM(node, list_destination_n->destination->rt_dst);
+					}
+					else
+					{
+						topo_last = OlsrLookupLastTopologyTable(node, list_destination_n->destination->rt_dst);
+					}
+
+
+					if (NULL != topo_last)
+					{
+						topo_dest = topo_last->topology_list_of_destinations;
+
+						while (topo_dest != NULL)
+						{
+
+							Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+							if (RoutingOlsrCheckMyIfaceAddress(
+								node,
+								topo_dest->destination_node->topology_destination_dst) != -1)
+							{
+								topo_dest = topo_dest->next;
+								continue;
+							}
+
+
+							UInt32 uiInnerExchangeLUCnt = 0;
+							OlsrCalculateRoutingTableForSinglePathTopologySearchHelpFuncV20(node, addrReached, list_destination_n, &list_destination_n_1, &uiInnerExchangeLUCnt);
+
+
+							//Peter Added for test time complexity
+							if (_TEST_TIME_COMPLEXITY)
+							{
+								uiLookupCnt += uiInnerExchangeLUCnt;
+
+								//if (node->nodeId == NODE_ID_FOR_TEST_OUTER_ANGLE || node->nodeId == NODE_ID_FOR_TEST_OUTER_EDGE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_ANGLE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_EDGE || node->nodeId == NODE_ID_FOR_TEST_CENTER)
+								if (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END)
+								{
+									uiLookupCnt++;
+
+								}
+							}
+
+							topo_dest = topo_dest->next;
+						}
+					}
+
+					destination_n_1 = list_destination_n;
+					list_destination_n = list_destination_n->next;
+					MEM_free(destination_n_1);
+				}
+
+				list_destination_n = list_destination_n_1;
+				//ui_metric_cost_limitation++;
+
+				//bFirstRound = FALSE;
+			}
+
+
+			//printf("OlsrCalculateRoutingTableAdv stage #2.2.2 \n");
+		}
+
+	}
+	else
+	{
+		//process for delete is not required 
+	}
+
+
+
+	return list_destination_n_1;	
+
+}
+
+destination_n* ProcessRoutingTableAccordingToRecentDeleteListV3(Node* node, BOOL * pbRequireRediscovery, UInt32 * puiLookupCntForDeleteList)
+{
+
+	destination_n * list_destination_n = NULL;
+
+	RoutingOlsr * olsr = (RoutingOlsr *) node->appData.olsr;
+
+	tco_node_addr * tco_delete_list_tmp = olsr->recent_delete_list;			
+
+	UInt32 uiLookupCnt = 0;
+
+	*pbRequireRediscovery = FALSE;
+
+	
+	//if (tco_delete_list_tmp->nid == 10 && olsr->naRecentChangedAddressByTC == 15 && node->nodeId == 16)
+	{
+
+		//DebugBreak();
+	}
+	
+	
+	BOOL bCannotFindExchangeForAtLeastOneDest = FALSE;
+	
+
+	//prte and prteTC will exist or non-exist at the same time
+	rt_entry* prteTC = QueryRoutingTableAccordingToNodeId(node, olsr->naRecentChangedAddressByTC);
+	if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+	{
+		uiLookupCnt++;
+	}
+
+	if (prteTC != NULL)
+	{
+
+		BOOL bExistReachTCFromTDNodeTBD = FALSE;
+
+		prteTC->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+		prteTC->rt_entry_infos.bCostChanged = FALSE;
+		prteTC->rt_entry_infos.bRequireDelete = FALSE;
+
+		prteTC->rt_entry_infos.uiCostChg = 0;
+
+
+		while (tco_delete_list_tmp != NULL)
+		{
+			
+			if (prteTC->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == tco_delete_list_tmp->nid)
+			{
+
+				if (prteTC->rt_metric == 2)
+				{
+
+					BOOL b2HopNeighborCausedConnection = FALSE;
+					b2HopNeighborCausedConnection = ConnectivetyCausedBy2HopNeighbor(node, prteTC->rt_entry_infos.rtu_dst, tco_delete_list_tmp->nid);
+
+					if (b2HopNeighborCausedConnection)
+					{
+
+						remove_from_tco_node_addr_set(&(olsr->recent_delete_list), tco_delete_list_tmp->nid);
+
+						break;
+					}										
+				}
+				
+
+
+				bExistReachTCFromTDNodeTBD = TRUE;
+
+				remove_from_tco_node_addr_set(&(olsr->recent_delete_list), tco_delete_list_tmp->nid);
+
+
+				break;
+			}
+
+			tco_delete_list_tmp = tco_delete_list_tmp->next;
+		}
+
+
+		if (bExistReachTCFromTDNodeTBD)
+		{
+
+			//the same as bExistReachTCFromTDNodeTBD for this specific case
+
+			//find exchange for this,
+			//if can not find, then do not do following further exchange
+			BOOL bExchangeFound = FindRouteExchangeV2(node, prteTC, FALSE, &uiLookupCnt);
+
+			if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+			{
+				
+				*puiLookupCntForDeleteList = uiLookupCnt;
+			}
+
+			if (!bExchangeFound)
+			{
+
+				//OlsrDeleteRoutingTable(prteTC);
+				//prteTC = NULL;
+			
+				*pbRequireRediscovery = TRUE;
+				return NULL;
+			}
+			
+		}
+		else
+		{
+
+			//further check for bRequireUpdate is not needed for this specific case
+		}
+
+
+	
+
+		BOOL bEncounterCannotFindExchange = FALSE;
+
+		
+
+		tco_delete_list_tmp = olsr->recent_delete_list;
+		//now it should not including the entry get to TCNode, since it is removed from the list,
+		//so only those nodes reached (it is possible that nodes can be reached but consider TCNode as last hop)
+		//by TCNode is remained 
+
+		tco_node_addr * disconnected_list = NULL;
+		
+		while (tco_delete_list_tmp != NULL)
+		{
+
+			rt_entry* prte = QueryRoutingTableAccordingToNodeId(node, tco_delete_list_tmp->nid);
+
+			if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+			{
+				uiLookupCnt++;
+			}
+
+			if (prte != NULL)
+			{
+
+				//prte->rt_entry_infos.bRequireExchange = FALSE;
+				//prte->rt_entry_infos.bRequireUpdate = FALSE;
+
+				prte->rt_entry_infos.uiCostChg = 0;
+
+				prte->rt_entry_infos.bCostChanged = FALSE;
+				prte->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+				prteTC->rt_entry_infos.bRequireDelete = FALSE;
+
+				if (prte->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == olsr->naRecentChangedAddressByTC)
+				{
+
+					if (prte->rt_metric == 2)
+					{
+						BOOL b2HopNeighborCausedConnection = FALSE;
+
+						b2HopNeighborCausedConnection = ConnectivetyCausedBy2HopNeighbor(node, prte->rt_entry_infos.rtu_dst, olsr->naRecentChangedAddressByTC);
+						if (b2HopNeighborCausedConnection)
+						{
+
+							//remove_from_tco_node_addr_set(&(olsr->recent_delete_list), tco_delete_list_tmp->nid);
+
+							tco_delete_list_tmp = tco_delete_list_tmp->next;
+
+							continue;
+						}
+					}
+					
+					insert_into_tco_node_addr_set(&(disconnected_list), tco_delete_list_tmp->nid);
+
+
+					//prte->rt_entry_infos.bRequireExchange = TRUE;
+					//prte->rt_entry_infos.bRequireUpdate = FALSE;					
+					
+				
+				}
+				else
+				{
+					//it is possible that nodes can be reached but not consider TCNode as last hop
+					//skip these nodes
+
+				}
+
+			}
+			else
+			{
+
+				//should not happen
+			}
+
+
+			tco_delete_list_tmp = tco_delete_list_tmp->next;
+		}
+
+
+
+		//!!!!!¼´Ê¹ÓÃÕâÖÖ°ì·¨Ò²ÎÞ·¨±ÜÃâ¼ä½ÓµÄ»¥ÏàÒÀÀµ
+		//Even if use this method, indirect dependency is still hard to avoid
+
+		//Try the first round, do not consider nodes in disconnected_list as potential exchanger at this time.
+		tco_node_addr * found_list = NULL;
+		tco_node_addr * possible_found_list = NULL;
+
+
+		tco_node_addr * tmp_disconnected_list = disconnected_list;
+		while (tmp_disconnected_list != NULL)
+		{
+
+			rt_entry* prte = QueryRoutingTableAccordingToNodeId(node, tmp_disconnected_list->nid);
+
+			if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+			{
+				uiLookupCnt++;
+			}
+
+			if (prte != NULL)
+			{
+			
+				//the exchange here need to support unconsider set,
+				//to avoid circular dependency 
+
+				BOOL bPToF = FALSE;
+				BOOL bExchangeFound = FindRouteExchangeV2(node, prte, FALSE, &uiLookupCnt, FALSE, &(disconnected_list), &bPToF);
+
+				if (!bExchangeFound)
+				{
+
+					
+					if (!bPToF)
+					{
+						insert_into_tco_node_addr_set(&(possible_found_list), tmp_disconnected_list->nid);
+					}
+					else
+					{
+
+						//OlsrDeleteRoutingTable(prte);
+						//prte = NULL;
+
+
+						*pbRequireRediscovery = TRUE;
+
+						bEncounterCannotFindExchange = TRUE;
+
+						break;
+					}
+
+					
+				}
+				else
+				{
+
+					insert_into_tco_node_addr_set(&(found_list), tmp_disconnected_list->nid);
+
+					//if (prte->rt_entry_infos.bDescendentRequireFurtherUpdate)
+					{
+						
+						destination_n* list_destination_tmp;
+						list_destination_tmp = (destination_n* )
+							MEM_malloc(sizeof(destination_n));
+
+						memset(
+							list_destination_tmp,
+							0,
+							sizeof(destination_n));
+
+						list_destination_tmp->destination = prte;
+						list_destination_tmp->next = list_destination_n;
+						list_destination_n = list_destination_tmp;
+					}
+					
+				}
+			}
+
+			tmp_disconnected_list = tmp_disconnected_list->next;
+		}
+
+
+		
+
+
+		if (bEncounterCannotFindExchange || !bEncounterCannotFindExchange && possible_found_list != NULL && found_list == NULL)
+		{
+
+			//some node can not find exchange, or all the unfound are mutual dependent, without any furthur oppotunity in found_list
+
+			//clear the lists
+
+			if (disconnected_list)
+			{
+
+				clear_tco_node_addr_set(&disconnected_list);
+			}
+
+			if (found_list)
+			{
+				clear_tco_node_addr_set(&found_list);
+			}
+			
+			if (possible_found_list)
+			{
+				clear_tco_node_addr_set(&possible_found_list);
+			}
+			
+
+			//do Full Re-Calculation
+			while (list_destination_n != NULL) 
+			{
+
+				destination_n* destination_n_1 = list_destination_n;
+				list_destination_n = list_destination_n->next;
+				MEM_free(destination_n_1);
+			}
+
+			list_destination_n = NULL;
+
+			*pbRequireRediscovery = TRUE;
+
+		
+			if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+			{
+				//uiLookupCnt++;
+				*puiLookupCntForDeleteList = uiLookupCnt;
+			}
+			
+			return NULL;
+
+		}
+		else //!bEncounterCannotFindExchange && 
+		{
+			//the second round of exchange, 
+			//only use the found_list for exchange
+
+			if (possible_found_list != NULL)
+			{
+				while (possible_found_list != NULL)
+				{
+					//must be found_list != NULL 
+
+					tco_node_addr * tmp_possible_found_list = NULL;
+					tco_node_addr * tmp_addr = possible_found_list;
+
+					//copy current possible list
+					while (tmp_addr != NULL)
+					{
+
+						insert_into_tco_node_addr_set(&(tmp_possible_found_list), tmp_addr->nid);
+
+						tmp_addr = tmp_addr->next;
+					}
+
+					tco_node_addr * tmp_possible_addr = tmp_possible_found_list;
+
+					BOOL bUpdated = FALSE;
+
+					while (tmp_possible_addr != NULL)
+					{
+
+						rt_entry* prte = QueryRoutingTableAccordingToNodeId(node, tmp_possible_addr->nid);
+
+						if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+						{
+							uiLookupCnt++;
+						}
+
+						if (prte != NULL)
+						{
+
+
+							if (FindLastExchange(node, prte, &found_list, &uiLookupCnt))
+							{
+
+								insert_into_tco_node_addr_set(&(found_list), tmp_possible_addr->nid);
+
+								remove_from_tco_node_addr_set(&possible_found_list, tmp_possible_addr->nid);
+
+									bUpdated = TRUE;
+								//break;
+							}
+
+						}
+
+
+						tmp_possible_addr = tmp_possible_addr->next;
+					}
+
+					if (tmp_possible_found_list != NULL)
+					{
+
+						clear_tco_node_addr_set(&tmp_possible_found_list);
+					}
+
+					if (!bUpdated)
+					{
+						//so there would be some possible route can never found reasonable exchange,
+
+						if (disconnected_list)
+						{
+
+							clear_tco_node_addr_set(&disconnected_list);
+						}
+
+						if (found_list)
+						{
+							clear_tco_node_addr_set(&found_list);
+						}
+
+						if (possible_found_list)
+						{
+							clear_tco_node_addr_set(&possible_found_list);
+						}
+
+						//do Full Re-Calculation
+						while (list_destination_n != NULL) 
+						{
+
+							destination_n* destination_n_1 = list_destination_n;
+							list_destination_n = list_destination_n->next;
+							MEM_free(destination_n_1);
+						}
+
+						list_destination_n = NULL;
+
+						*pbRequireRediscovery = TRUE;
+
+
+						if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+						{
+							//uiLookupCnt++;
+							*puiLookupCntForDeleteList = uiLookupCnt;
+						}
+
+						return NULL;
+
+						//break;
+					}								
+				}
+
+
+			}
+			else
+			{
+				//all are already in found_list and in output list
+
+				//It is possible that further update is not needed.
+				
+			}
+						
+			//all are in found_list and in output list now 		
+			
+		}
+
+
+		topology_last_entry * t_last_sym = OlsrLookupLastTopologyTableSYM(node, prteTC->rt_dst);
+		if (t_last_sym != NULL && bExistReachTCFromTDNodeTBD)
+		{
+
+			destination_list* topo_dest = NULL;
+			topo_dest = t_last_sym->topology_list_of_destinations;
+
+
+
+
+			//rt_entry* prtetmpFormer = NULL;
+
+			//BOOL bSameCostFormer = FALSE;
+			//BOOL bCostPlusOneFormer = FALSE;
+
+			//BOOL bExistSameCostWithSameRouterFormer = FALSE;
+
+			while (topo_dest != NULL)
+			{
+
+				Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+
+				topo_dest = topo_dest->next;
+
+				rt_entry* prteNearby = QueryRoutingTableAccordingToNodeId(node, addrReached.interfaceAddr.ipv4);
+
+				if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+				{
+					uiLookupCnt++;
+				}
+
+				if (prteNearby != NULL)
+				{
+
+
+					//prteNearby->rt_entry_infos.bRequireExchange = FALSE;
+					//prteNearby->rt_entry_infos.bRequireUpdate = FALSE;
+					prteNearby->rt_entry_infos.bCostChanged = FALSE;
+					prteNearby->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+					prteNearby->rt_entry_infos.bRequireDelete = FALSE;
+
+
+					prteNearby->rt_entry_infos.uiCostChg = 0;
+
+
+
+					if (prteNearby->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == olsr->naRecentChangedAddressByTC)
+					{
+
+						//if (bExistReachTCFromTDNodeTBD)
+						{
+
+							if (prteTC->rt_entry_infos.bDescendentRequireFurtherUpdate)
+							{
+
+								if (prteTC->rt_entry_infos.bCostChanged)
+								{
+
+									//prteNearby->rt_entry_infos.bRequireExchange = TRUE;
+
+
+									//prteNearby->rt_entry_infos.bRequireUpdate = FALSE;
+
+
+
+									BOOL bExchangeFound = FindRouteExchangeV2(node, prteNearby, TRUE, &uiLookupCnt);
+
+									if (!bExchangeFound)
+									{
+
+										OlsrDeleteRoutingTable(prteNearby);
+										prteNearby = NULL;
+
+										*pbRequireRediscovery = TRUE;
+
+										bEncounterCannotFindExchange = TRUE;
+
+										break;
+									}
+
+								}
+								else
+								{
+									//only route changed  
+
+									//prteNearby->rt_entry_infos.bRequireExchange = FALSE;
+
+									//prteNearby->rt_entry_infos.bRequireUpdate = TRUE;
+
+									prteNearby->rt_interface = prteTC->rt_interface;
+									prteNearby->rt_router = prteTC->rt_router;
+
+									if (_OLSR_MULTIPATH)
+									{
+
+
+										prteNearby->rt_entry_infos.rtu_DegreeWRTNode = prteTC->rt_entry_infos.rtu_DegreeWRTNode;
+										prteNearby->rt_entry_infos.rtu_DistanceWRTNode = prteTC->rt_entry_infos.rtu_DistanceWRTNode;
+										prteNearby->rt_entry_infos.related_neighbor = prteTC->rt_entry_infos.related_neighbor;
+									}
+
+									prteNearby->rt_entry_infos.bDescendentRequireFurtherUpdate = TRUE;
+									prteNearby->rt_entry_infos.bCostChanged = FALSE;
+									prteNearby->rt_entry_infos.bRequireDelete = FALSE;
+
+									prteNearby->rt_entry_infos.uiCostChg = 0;
+
+								}
+							}
+						
+						
+							//add to list
+
+
+							destination_n* list_destination_tmp;
+							list_destination_tmp = (destination_n* )
+								MEM_malloc(sizeof(destination_n));
+
+							memset(
+								list_destination_tmp,
+								0,
+								sizeof(destination_n));
+
+							list_destination_tmp->destination = prteNearby;
+							list_destination_tmp->next = list_destination_n;
+							list_destination_n = list_destination_tmp;
+
+						}
+						/*
+						else
+						{
+
+							//mean these nodes do not need to update wrt to the earlier exchange (the node that can reach TCNode) happened,
+							//but just need to consider themselves
+
+							
+
+						}
+						*/
+
+					}
+
+				
+
+				
+				}
+
+			}
+
+
+		}
+
+
+		if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+		{
+			//uiLookupCnt++;
+			*puiLookupCntForDeleteList = uiLookupCnt;
+		}
+
+		if (bEncounterCannotFindExchange)
+		{
+
+			//do Full Re-Calculation
+			while (list_destination_n != NULL) 
+			{
+
+				destination_n* destination_n_1 = list_destination_n;
+				list_destination_n = list_destination_n->next;
+				MEM_free(destination_n_1);
+			}
+
+			list_destination_n = NULL;
+
+			*pbRequireRediscovery = TRUE;
+
+			return NULL;
+
+		}
+
+	}
+	else
+	{
+		//process for delete is not required 
+	}
+
+
+	
+	return list_destination_n;
+}
+
+
+
+destination_n* ProcessRoutingTableAccordingToRecentDeleteListV2(Node* node, BOOL * pbRequireRediscovery, UInt32 * puiLookupCntForDeleteList)
+{
+
+	destination_n * list_destination_n = NULL;
+
+	RoutingOlsr * olsr = (RoutingOlsr *) node->appData.olsr;
+
+	tco_node_addr * tco_delete_list_tmp = olsr->recent_delete_list;			
+
+	UInt32 uiLookupCnt = 0;
+
+	*pbRequireRediscovery = FALSE;
+
+	
+	//if (tco_delete_list_tmp->nid == 10 && olsr->naRecentChangedAddressByTC == 15 && node->nodeId == 16)
+	{
+
+		//DebugBreak();
+	}
+	
+	
+	BOOL bCannotFindExchangeForAtLeastOneDest = FALSE;
+	
+
+	//prte and prteTC will exist or non-exist at the same time
+	rt_entry* prteTC = QueryRoutingTableAccordingToNodeId(node, olsr->naRecentChangedAddressByTC);
+
+
+	if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+	{
+		uiLookupCnt++;
+	}
+
+	if (prteTC != NULL)
+	{
+
+		BOOL bExistReachTCFromTDNodeTBD = FALSE;
+
+		//prteTC->rt_entry_infos.bRequireUpdate = FALSE;
+		//prteTC->rt_entry_infos.bRequireExchange = FALSE;
+		prteTC->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+		prteTC->rt_entry_infos.bCostChanged = FALSE;
+		prteTC->rt_entry_infos.bRequireDelete = FALSE;
+
+		prteTC->rt_entry_infos.uiCostChg = 0;
+
+
+		while (tco_delete_list_tmp != NULL)
+		{
+			
+			if (prteTC->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == tco_delete_list_tmp->nid)
+			{
+
+				//OlsrLookup2HopNeighborTable
+				if (prteTC->rt_metric == 2)
+				{
+
+					neighbor_2_entry *two_hop_neighbor = NULL;
+
+					two_hop_neighbor = OlsrLookup2HopNeighborTable(node, prteTC->rt_entry_infos.rtu_dst);
+
+					if (two_hop_neighbor)
+					{
+						neighbor_list_entry* list_1 = NULL;
+
+						list_1 = two_hop_neighbor->neighbor_2_nblist;
+
+						BOOL b2HopNeighborCausedConnection = FALSE;
+						while (list_1 != NULL)
+						{
+							if (list_1->neighbor->neighbor_main_addr.interfaceAddr.ipv4 == tco_delete_list_tmp->nid)
+							{
+								b2HopNeighborCausedConnection = TRUE;
+								break;
+							}
+
+							list_1 = list_1->neighbor_next;
+						}
+
+						if (b2HopNeighborCausedConnection)
+						{
+
+
+							remove_from_tco_node_addr_set(&(olsr->recent_delete_list), tco_delete_list_tmp->nid);
+
+							break;
+						}
+					}
+				}
+				
+
+
+				bExistReachTCFromTDNodeTBD = TRUE;
+
+				remove_from_tco_node_addr_set(&(olsr->recent_delete_list), tco_delete_list_tmp->nid);
+
+
+				//prteTC->rt_entry_infos.bRequireUpdate = FALSE;
+				
+				//prteTC->rt_entry_infos.bRequireExchange = TRUE;
+
+				
+
+				break;
+			}
+
+			tco_delete_list_tmp = tco_delete_list_tmp->next;
+		}
+
+
+		if (bExistReachTCFromTDNodeTBD)
+		//if (prteTC->rt_entry_infos.bRequireExchange)
+		{
+
+			//the same as bExistReachTCFromTDNodeTBD for this specific case
+
+			//find exchange for this,
+			//if can not find, then do not do following further exchange
+			BOOL bExchangeFound = FindRouteExchange(node, prteTC, FALSE, &uiLookupCnt);
+
+			if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+			{
+				
+				*puiLookupCntForDeleteList = uiLookupCnt;
+			}
+
+			if (!bExchangeFound)
+			{
+
+				OlsrDeleteRoutingTable(prteTC);
+				prteTC = NULL;
+			
+				*pbRequireRediscovery = TRUE;
+				return NULL;
+			}
+			
+		}
+		else
+		{
+
+			//further check for bRequireUpdate is not needed for this specific case
+		}
+
+
+	
+
+		BOOL bEncounterCannotFindExchange = FALSE;
+
+		tco_delete_list_tmp = olsr->recent_delete_list;
+		//now it should not including the entry get to TCNode, since it is removed from the list,
+		//so only those nodes reached (it is possible that nodes can be reached but consider TCNode as last hop)
+		//by TCNode is remained 
+		while (tco_delete_list_tmp != NULL)
+		{
+
+
+			rt_entry* prte = QueryRoutingTableAccordingToNodeId(node, tco_delete_list_tmp->nid);
+
+			if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+			{
+				uiLookupCnt++;
+			}
+
+			if (prte != NULL)
+			{
+
+				//prte->rt_entry_infos.bRequireExchange = FALSE;
+				//prte->rt_entry_infos.bRequireUpdate = FALSE;
+				prte->rt_entry_infos.bCostChanged = FALSE;
+				prte->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+				//prteTC->rt_entry_infos.bRequireDelete = FALSE;
+
+				prte->rt_entry_infos.uiCostChg = 0;
+
+				if (prte->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == olsr->naRecentChangedAddressByTC)
+				{
+
+					if (prte->rt_metric == 2)
+					{
+						neighbor_2_entry *two_hop_neighbor = NULL;
+
+						two_hop_neighbor = OlsrLookup2HopNeighborTable(node, prte->rt_entry_infos.rtu_dst);
+
+						if (two_hop_neighbor)
+						{
+							neighbor_list_entry* list_1 = NULL;
+
+							list_1 = two_hop_neighbor->neighbor_2_nblist;
+
+							BOOL b2HopNeighborCausedConnection = FALSE;
+							while (list_1 != NULL)
+							{
+								if (list_1->neighbor->neighbor_main_addr.interfaceAddr.ipv4 == olsr->naRecentChangedAddressByTC)
+								{
+									b2HopNeighborCausedConnection = TRUE;
+									break;
+								}
+
+								list_1 = list_1->neighbor_next;
+							}
+
+							if (b2HopNeighborCausedConnection)
+							{
+
+
+								//remove_from_tco_node_addr_set(&(olsr->recent_delete_list), tco_delete_list_tmp->nid);
+
+								tco_delete_list_tmp = tco_delete_list_tmp->next;
+
+								continue;
+							}
+						}
+					}
+					
+
+
+					//prte->rt_entry_infos.bRequireExchange = TRUE;
+					//prte->rt_entry_infos.bRequireUpdate = FALSE;
+					
+					BOOL bExchangeFound = FindRouteExchange(node, prte, FALSE, &uiLookupCnt);
+
+					if (!bExchangeFound)
+					{
+
+						OlsrDeleteRoutingTable(prte);
+						prte = NULL;
+
+						*pbRequireRediscovery = TRUE;
+						
+						bEncounterCannotFindExchange = TRUE;
+
+						break;
+					}
+					else
+					{
+
+						destination_n* list_destination_tmp;
+						list_destination_tmp = (destination_n* )
+							MEM_malloc(sizeof(destination_n));
+
+						memset(
+							list_destination_tmp,
+							0,
+							sizeof(destination_n));
+
+						list_destination_tmp->destination = prte;
+						list_destination_tmp->next = list_destination_n;
+						list_destination_n = list_destination_tmp;
+					}
+				
+				}
+				else
+				{
+					//it is possible that nodes can be reached but not consider TCNode as last hop
+					//skip these nodes
+
+				}
+
+			}
+			else
+			{
+
+				//should not happen
+			}
+
+
+			tco_delete_list_tmp = tco_delete_list_tmp->next;
+		}
+
+		
+
+		if (bEncounterCannotFindExchange)
+		{
+
+			//do Full Re-Calculation
+			while (list_destination_n != NULL) 
+			{
+
+				destination_n* destination_n_1 = list_destination_n;
+				list_destination_n = list_destination_n->next;
+				MEM_free(destination_n_1);
+			}
+
+			list_destination_n = NULL;
+
+			*pbRequireRediscovery = TRUE;
+
+		
+			if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+			{
+				//uiLookupCnt++;
+				*puiLookupCntForDeleteList = uiLookupCnt;
+			}
+			
+			return NULL;
+
+		}
+
+
+		topology_last_entry * t_last_sym = OlsrLookupLastTopologyTableSYM(node, prteTC->rt_dst);
+		if (t_last_sym != NULL && bExistReachTCFromTDNodeTBD)
+		{
+
+			destination_list* topo_dest = NULL;
+			topo_dest = t_last_sym->topology_list_of_destinations;
+
+
+
+
+			//rt_entry* prtetmpFormer = NULL;
+
+			//BOOL bSameCostFormer = FALSE;
+			//BOOL bCostPlusOneFormer = FALSE;
+
+			//BOOL bExistSameCostWithSameRouterFormer = FALSE;
+
+			while (topo_dest != NULL)
+			{
+
+				Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+
+				topo_dest = topo_dest->next;
+
+				rt_entry* prteNearby = QueryRoutingTableAccordingToNodeId(node, addrReached.interfaceAddr.ipv4);
+
+				if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+				{
+					uiLookupCnt++;
+				}
+
+				if (prteNearby != NULL)
+				{
+
+
+					//prteNearby->rt_entry_infos.bRequireExchange = FALSE;
+					//prteNearby->rt_entry_infos.bRequireUpdate = FALSE;
+					prteNearby->rt_entry_infos.bCostChanged = FALSE;
+					prteNearby->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+					prteNearby->rt_entry_infos.bRequireDelete = FALSE;
+
+					prteNearby->rt_entry_infos.uiCostChg = 0;
+
+
+
+					if (prteNearby->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == olsr->naRecentChangedAddressByTC)
+					{
+
+						//if (bExistReachTCFromTDNodeTBD)
+						{
+
+							if (prteTC->rt_entry_infos.bDescendentRequireFurtherUpdate)
+							{
+
+								if (prteTC->rt_entry_infos.bCostChanged)
+								{
+
+									//prteNearby->rt_entry_infos.bRequireExchange = TRUE;
+
+
+									//prteNearby->rt_entry_infos.bRequireUpdate = FALSE;
+
+
+
+									BOOL bExchangeFound = FindRouteExchange(node, prteNearby, TRUE, &uiLookupCnt);
+
+									if (!bExchangeFound)
+									{
+
+										OlsrDeleteRoutingTable(prteNearby);
+										prteNearby = NULL;
+
+										*pbRequireRediscovery = TRUE;
+
+										bEncounterCannotFindExchange = TRUE;
+
+										break;
+									}
+
+								}
+								else
+								{
+									//only route changed  
+
+									//prteNearby->rt_entry_infos.bRequireExchange = FALSE;
+
+									//prteNearby->rt_entry_infos.bRequireUpdate = TRUE;
+
+									prteNearby->rt_interface = prteTC->rt_interface;
+									prteNearby->rt_router = prteTC->rt_router;
+
+									if (_OLSR_MULTIPATH)
+									{
+
+
+
+										prteNearby->rt_entry_infos.rtu_DegreeWRTNode = prteTC->rt_entry_infos.rtu_DegreeWRTNode;
+										prteNearby->rt_entry_infos.rtu_DistanceWRTNode = prteTC->rt_entry_infos.rtu_DistanceWRTNode;
+										prteNearby->rt_entry_infos.related_neighbor = prteTC->rt_entry_infos.related_neighbor;
+
+									}
+
+
+									prteNearby->rt_entry_infos.bDescendentRequireFurtherUpdate = TRUE;
+									prteNearby->rt_entry_infos.bCostChanged = FALSE;
+									prteNearby->rt_entry_infos.bRequireDelete = FALSE;
+
+									prteNearby->rt_entry_infos.uiCostChg = 0;
+
+								}
+							}
+						
+						
+							//add to list
+
+
+							destination_n* list_destination_tmp;
+							list_destination_tmp = (destination_n* )
+								MEM_malloc(sizeof(destination_n));
+
+							memset(
+								list_destination_tmp,
+								0,
+								sizeof(destination_n));
+
+							list_destination_tmp->destination = prteNearby;
+							list_destination_tmp->next = list_destination_n;
+							list_destination_n = list_destination_tmp;
+
+						}
+						/*
+						else
+						{
+
+							//mean these nodes do not need to update wrt to the earlier exchange (the node that can reach TCNode) happened,
+							//but just need to consider themselves
+
+							
+
+						}
+						*/
+
+					}
+
+				
+
+				
+				}
+
+			}
+
+
+		}
+
+
+		if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+		{
+			//uiLookupCnt++;
+			*puiLookupCntForDeleteList = uiLookupCnt;
+		}
+
+		if (bEncounterCannotFindExchange)
+		{
+
+			//do Full Re-Calculation
+			while (list_destination_n != NULL) 
+			{
+
+				destination_n* destination_n_1 = list_destination_n;
+				list_destination_n = list_destination_n->next;
+				MEM_free(destination_n_1);
+			}
+
+			list_destination_n = NULL;
+
+			*pbRequireRediscovery = TRUE;
+
+			return NULL;
+
+		}
+
+	}
+	else
+	{
+		//process for delete is not required 
+	}
+
+
+	
+	return list_destination_n;
+}
+
+
+
+destination_n* ProcessRoutingTableAccordingToRecentDeleteListMP(Node* node, BOOL * pbRequireRediscovery, UInt32 * puiLookupCntForDeleteList)
+{
+
+
+	//DebugBreak();
+	
+	//printf("ProcessRoutingTableAccordingToRecentDeleteListMP \n");
+
+	destination_n * list_destination_n = NULL;
+
+	RoutingOlsr * olsr = (RoutingOlsr *) node->appData.olsr;
+
+	tco_node_addr * tco_delete_list_tmp = olsr->recent_delete_list;			
+
+	UInt32 uiLookupCnt = 0;
+
+	*pbRequireRediscovery = FALSE;
+
+	
+	//if (tco_delete_list_tmp->nid == 10 && olsr->naRecentChangedAddressByTC == 15 && node->nodeId == 16)
+	{
+
+		//DebugBreak();
+	}
+	
+	
+	BOOL bCannotFindExchangeForAtLeastOneDest = FALSE;
+	
+
+	//prte and prteTC will exist or non-exist at the same time
+
+
+
+	rthash * rhRetrieve = NULL;
+	
+
+	//	for ( ; prte != (rt_entry* ) rhRetrieve; prte = prte->rt_back)
+	rt_entry* prteTC = QueryRoutingTableAccordingToNodeId(node, olsr->naRecentChangedAddressByTC, NULL, &rhRetrieve);
+	
+
+	if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+	{
+		uiLookupCnt++;
+	}
+
+	if (prteTC != NULL)
+	{
+
+		for ( ; prteTC != (rt_entry* ) rhRetrieve; prteTC = prteTC->rt_back)
+		{
+
+			BOOL bExistReachTCFromTDNodeTBD = FALSE;
+
+			//prteTC->rt_entry_infos.bRequireUpdate = FALSE;
+			//prteTC->rt_entry_infos.bRequireExchange = FALSE;
+			prteTC->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+			prteTC->rt_entry_infos.bCostChanged = FALSE;
+			prteTC->rt_entry_infos.bRequireDelete = FALSE;
+
+			prteTC->rt_entry_infos.uiCostChg = 0;
+
+
+			tco_node_addr * ptna_set_tmp = NULL;
+
+			tco_delete_list_tmp = olsr->recent_delete_list;
+
+			while (tco_delete_list_tmp != NULL)
+			{
+
+				insert_into_tco_node_addr_set(&ptna_set_tmp, tco_delete_list_tmp->nid);
+
+
+				tco_delete_list_tmp = tco_delete_list_tmp->next;
+			}
+
+
+			tco_delete_list_tmp = ptna_set_tmp;
+
+			while (tco_delete_list_tmp != NULL)
+			{
+				
+				if (prteTC->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == tco_delete_list_tmp->nid)
+				{
+
+					//OlsrLookup2HopNeighborTable
+
+					neighbor_2_entry *two_hop_neighbor = NULL;
+					
+					two_hop_neighbor = OlsrLookup2HopNeighborTable(node, prteTC->rt_entry_infos.rtu_dst);
+					
+					if (two_hop_neighbor)
+					{
+						neighbor_list_entry* list_1 = NULL;
+
+						list_1 = two_hop_neighbor->neighbor_2_nblist;
+
+						BOOL b2HopNeighborCausedConnection = FALSE;
+						while (list_1 != NULL)
+						{
+							if (list_1->neighbor->neighbor_main_addr.interfaceAddr.ipv4 == tco_delete_list_tmp->nid)
+							{
+								b2HopNeighborCausedConnection = TRUE;
+								break;
+							}
+							
+							list_1 = list_1->neighbor_next;
+						}
+
+						if (b2HopNeighborCausedConnection)
+						{
+		
+
+							remove_from_tco_node_addr_set(&(ptna_set_tmp), tco_delete_list_tmp->nid);
+
+							break;
+						}
+					}
+
+
+					bExistReachTCFromTDNodeTBD = TRUE;
+
+					remove_from_tco_node_addr_set(&(ptna_set_tmp), tco_delete_list_tmp->nid);
+
+
+					//prteTC->rt_entry_infos.bRequireUpdate = FALSE;
+					
+					//prteTC->rt_entry_infos.bRequireExchange = TRUE;
+
+					
+
+					break;
+				}
+
+				tco_delete_list_tmp = tco_delete_list_tmp->next;
+			}
+
+
+			if (bExistReachTCFromTDNodeTBD)
+			//if (prteTC->rt_entry_infos.bRequireExchange)
+			{
+
+				//the same as bExistReachTCFromTDNodeTBD for this specific case
+
+				//find exchange for this,
+				//if can not find, then do not do following further exchange
+				BOOL bExchangeFound = FindRouteExchange(node, prteTC, FALSE, &uiLookupCnt, TRUE);
+
+				if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+				{
+					
+					*puiLookupCntForDeleteList = uiLookupCnt;
+				}
+
+				if (!bExchangeFound)
+				{
+					//comment: it seems unnecessary to delete since will re-discover
+					//OlsrDeleteRoutingTable(prteTC);
+					prteTC = NULL;
+				
+					*pbRequireRediscovery = TRUE;
+					return NULL;
+				}
+				
+			}
+			else
+			{
+
+				//further check for bRequireUpdate is not needed for this specific case
+			}
+
+
+
+			BOOL bEncounterCannotFindExchange = FALSE;
+
+			tco_delete_list_tmp = ptna_set_tmp;
+			//now it should not including the entry get to TCNode, since it is removed from the list,
+			//so only those nodes reached (it is possible that nodes can be reached but consider TCNode as last hop)
+			//by TCNode is remained 
+			while (tco_delete_list_tmp != NULL)
+			{
+
+				rt_entry* prteFirst = NULL;
+				rt_entry* prte = QueryRoutingTableAccordingToNodeId(node, tco_delete_list_tmp->nid, &prteTC->rt_entry_infos.rtu_router.interfaceAddr.ipv4, NULL, &prteFirst);
+
+				if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+				{
+					uiLookupCnt++;
+				}
+
+				if (prte != NULL)
+				{
+
+					//prte->rt_entry_infos.bRequireExchange = FALSE;
+					//prte->rt_entry_infos.bRequireUpdate = FALSE;
+
+					prte->rt_entry_infos.uiCostChg = 0;
+
+					prte->rt_entry_infos.bCostChanged = FALSE;
+					prte->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+					prte->rt_entry_infos.bRequireDelete = FALSE;
+
+					if (prte->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == olsr->naRecentChangedAddressByTC)
+					{
+
+
+						neighbor_2_entry *two_hop_neighbor = NULL;
+
+						two_hop_neighbor = OlsrLookup2HopNeighborTable(node, prte->rt_entry_infos.rtu_dst);
+
+						if (two_hop_neighbor)
+						{
+							neighbor_list_entry* list_1 = NULL;
+
+							list_1 = two_hop_neighbor->neighbor_2_nblist;
+
+							BOOL b2HopNeighborCausedConnection = FALSE;
+							while (list_1 != NULL)
+							{
+								if (list_1->neighbor->neighbor_main_addr.interfaceAddr.ipv4 == olsr->naRecentChangedAddressByTC)
+								{
+									b2HopNeighborCausedConnection = TRUE;
+									break;
+								}
+
+								list_1 = list_1->neighbor_next;
+							}
+
+							if (b2HopNeighborCausedConnection)
+							{
+
+
+								//remove_from_tco_node_addr_set(&(olsr->recent_delete_list), tco_delete_list_tmp->nid);
+
+								tco_delete_list_tmp = tco_delete_list_tmp->next;
+
+								continue;
+							}
+						}
+
+
+						//prte->rt_entry_infos.bRequireExchange = TRUE;
+						//prte->rt_entry_infos.bRequireUpdate = FALSE;
+						
+						BOOL bExchangeFound = FindRouteExchange(node, prte, FALSE, &uiLookupCnt, TRUE);
+
+						if (!bExchangeFound)
+						{
+							//seems unnecessary to delete
+							
+							if (prteFirst != NULL)
+							{
+								//if there is more than one entry for this dest, then it can be delete
+								if (prteFirst->rt_entry_infos.oa_total_routes_count >= 2)
+								{
+
+
+									//OlsrDeleteRoutingTable(prte);
+
+									
+									 prteFirst->rt_entry_infos.oa_total_routes_count--;
+
+									 if (prte != prteFirst)
+									 {
+										OlsrRemoveList((olsr_qelem *)prte);
+										 //rt_entry* prteTmp = QueryRoutingTableAccordingToNodeId(node, tco_delete_list_tmp->nid);
+									 }
+									 else	//prte == prteFirst
+									 {
+
+										OlsrRemoveList((olsr_qelem *)prte);
+
+										rt_entry* prteTmpNewFirst = QueryRoutingTableAccordingToNodeId(node, tco_delete_list_tmp->nid);
+
+										if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+										{
+											uiLookupCnt++;
+										}
+
+										if (prteTmpNewFirst != NULL)
+										{
+
+											prteTmpNewFirst->rt_entry_infos.oa_total_routes_count = prte->rt_entry_infos.oa_total_routes_count;
+											prteTmpNewFirst->rt_entry_infos.oa_dWeightedDirectionDiffer = prte->rt_entry_infos.oa_dWeightedDirectionDiffer;
+											prteTmpNewFirst->rt_entry_infos.oa_maximum_allowed_cost = prte->rt_entry_infos.oa_maximum_allowed_cost;
+
+										}
+
+									 }
+
+									prte->rt_entry_infos.bRequireDelete = TRUE;
+									prte->rt_entry_infos.bDescendentRequireFurtherUpdate = TRUE;
+
+									destination_n* list_destination_tmp;
+									list_destination_tmp = (destination_n* )
+										MEM_malloc(sizeof(destination_n));
+
+									memset(
+										list_destination_tmp,
+										0,
+										sizeof(destination_n));
+
+									list_destination_tmp->destination = prte;
+									list_destination_tmp->next = list_destination_n;
+									list_destination_n = list_destination_tmp;
+									 
+									
+								}
+								else	// < 2
+								{
+									
+									//OlsrDeleteRoutingTable(prte);
+									prte = NULL;
+
+
+
+
+									*pbRequireRediscovery = TRUE;
+
+									bEncounterCannotFindExchange = TRUE;
+
+									break;
+								}
+							}
+							else
+							{
+								//will never happen, since we have pre != NULL
+
+							}
+
+							
+						}
+						else
+						{
+
+							destination_n* list_destination_tmp;
+							list_destination_tmp = (destination_n* )
+								MEM_malloc(sizeof(destination_n));
+
+							memset(
+								list_destination_tmp,
+								0,
+								sizeof(destination_n));
+
+							list_destination_tmp->destination = prte;
+							list_destination_tmp->next = list_destination_n;
+							list_destination_n = list_destination_tmp;
+						}
+					
+					}
+					else
+					{
+						//it is possible that nodes can be reached but not consider TCNode as last hop
+						//skip these nodes
+
+					}
+
+				}
+				else
+				{
+
+					//should not happen
+				}
+
+
+				tco_delete_list_tmp = tco_delete_list_tmp->next;
+			}
+
+			
+
+			if (bEncounterCannotFindExchange)
+			{
+
+				//do Full Re-Calculation
+				while (list_destination_n != NULL) 
+				{
+
+					destination_n* destination_n_1 = list_destination_n;
+					list_destination_n = list_destination_n->next;
+					MEM_free(destination_n_1);
+				}
+
+				list_destination_n = NULL;
+
+				*pbRequireRediscovery = TRUE;
+
+			
+				if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+				{
+					//uiLookupCnt++;
+					*puiLookupCntForDeleteList = uiLookupCnt;
+				}
+				
+				return NULL;
+
+			}
+
+
+			topology_last_entry * t_last_sym = OlsrLookupLastTopologyTableSYM(node, prteTC->rt_dst);
+			if (t_last_sym != NULL && bExistReachTCFromTDNodeTBD)
+			{
+
+				destination_list* topo_dest = NULL;
+				topo_dest = t_last_sym->topology_list_of_destinations;
+
+
+
+
+				//rt_entry* prtetmpFormer = NULL;
+
+				//BOOL bSameCostFormer = FALSE;
+				//BOOL bCostPlusOneFormer = FALSE;
+
+				//BOOL bExistSameCostWithSameRouterFormer = FALSE;
+
+				while (topo_dest != NULL)
+				{
+
+					Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+
+					topo_dest = topo_dest->next;
+
+					rt_entry* prteNearby = QueryRoutingTableAccordingToNodeId(node, addrReached.interfaceAddr.ipv4, &prteTC->rt_entry_infos.rtu_router.interfaceAddr.ipv4, NULL);
+					 
+					if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+					{
+						uiLookupCnt++;
+					}
+
+					if (prteNearby != NULL)
+					{
+
+
+						//prteNearby->rt_entry_infos.bRequireExchange = FALSE;
+						//prteNearby->rt_entry_infos.bRequireUpdate = FALSE;
+						prteNearby->rt_entry_infos.bCostChanged = FALSE;
+						prteNearby->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+						prteNearby->rt_entry_infos.bRequireDelete = FALSE;
+
+						prteNearby->rt_entry_infos.uiCostChg = 0;
+
+
+						if (prteNearby->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == olsr->naRecentChangedAddressByTC)
+						{
+
+							//if (bExistReachTCFromTDNodeTBD)
+							{
+
+								if (prteTC->rt_entry_infos.bDescendentRequireFurtherUpdate)
+								{
+
+									if (prteTC->rt_entry_infos.bCostChanged)
+									{
+
+										//prteNearby->rt_entry_infos.bRequireExchange = TRUE;
+
+										//prteNearby->rt_entry_infos.bRequireUpdate = FALSE;
+
+										BOOL bExchangeFound = FindRouteExchange(node, prteNearby, TRUE, &uiLookupCnt, TRUE);
+
+										if (!bExchangeFound)
+										{
+
+											OlsrDeleteRoutingTable(prteNearby);
+											prteNearby = NULL;
+
+											*pbRequireRediscovery = TRUE;
+
+											bEncounterCannotFindExchange = TRUE;
+
+											break;
+										}
+
+									}
+									else
+									{
+										//only route changed  
+
+										//prteNearby->rt_entry_infos.bRequireExchange = FALSE;
+
+										//prteNearby->rt_entry_infos.bRequireUpdate = TRUE;
+
+										prteNearby->rt_interface = prteTC->rt_interface;
+										prteNearby->rt_router = prteTC->rt_router;
+
+
+										
+										prteNearby->rt_entry_infos.rtu_DegreeWRTNode = prteTC->rt_entry_infos.rtu_DegreeWRTNode;
+										prteNearby->rt_entry_infos.rtu_DistanceWRTNode = prteTC->rt_entry_infos.rtu_DistanceWRTNode;
+										prteNearby->rt_entry_infos.related_neighbor = prteTC->rt_entry_infos.related_neighbor;
+
+										prteNearby->rt_entry_infos.bDescendentRequireFurtherUpdate = TRUE;
+										prteNearby->rt_entry_infos.bCostChanged = FALSE;
+										prteNearby->rt_entry_infos.bRequireDelete = FALSE;
+
+										prteNearby->rt_entry_infos.uiCostChg = 0;
+
+									}
+								}
+							
+							
+								//add to list
+
+
+								destination_n* list_destination_tmp;
+								list_destination_tmp = (destination_n* )
+									MEM_malloc(sizeof(destination_n));
+
+								memset(
+									list_destination_tmp,
+									0,
+									sizeof(destination_n));
+
+								list_destination_tmp->destination = prteNearby;
+								list_destination_tmp->next = list_destination_n;
+								list_destination_n = list_destination_tmp;
+
+							}
+							/*
+							else
+							{
+
+								//mean these nodes do not need to update wrt to the earlier exchange (the node that can reach TCNode) happened,
+								//but just need to consider themselves
+
+								
+
+							}
+							*/
+
+						}
+				
+					}
+
+				}
+
+			}
+
+
+			if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+			{
+				//uiLookupCnt++;
+				*puiLookupCntForDeleteList = uiLookupCnt;
+			}
+
+			if (bEncounterCannotFindExchange)
+			{
+
+				//do Full Re-Calculation
+				while (list_destination_n != NULL) 
+				{
+
+					destination_n* destination_n_1 = list_destination_n;
+					list_destination_n = list_destination_n->next;
+					MEM_free(destination_n_1);
+				}
+
+				list_destination_n = NULL;
+
+				*pbRequireRediscovery = TRUE;
+
+				return NULL;
+
+			}
+
+		}
+
+	}
+	else
+	{
+		//process for delete is not required 
+	}
+
+
+	
+	return list_destination_n;
+}
+
+
+
+
+destination_n* ProcessRoutingTableAccordingToRecentAddListV42(Node* node, UInt32 * puiLookupCntForAddList)
+{
+	destination_n* list_destination_n = NULL;
+
+	RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+
+
+	UInt32 uiLCFA = 0;
+
+
+	if (remove_from_tco_node_addr_set(&olsr->recent_add_list, olsr->naRecentChangedAddressByTC))
+	{
+		//include the route itself and new 2hop neighbors are added
+
+		if (olsr->bNeighborChgCausedRemoveFromHigherHop)
+		{
+
+			//exchange??
+			//currently just use the most easy way that form the delete list
+
+			tco_node_addr * disconnected_list = NULL;
+			insert_into_tco_node_addr_set(&disconnected_list, olsr->naRecentChangedAddressByTC);
+
+			tco_node_addr * destination_list_n_1 = disconnected_list;
+			tco_node_addr * destination_list_n = disconnected_list;
+
+			while (destination_list_n_1 != NULL)
+			{
+				destination_list_n_1 = NULL;
+
+				topology_last_entry* topo_last = NULL;
+				destination_list* topo_dest = NULL;
+
+
+				//Peter comment: every loop add group of destination nodes that one hop more from the source node,
+				//compare to the group in the previous loop  
+				while (destination_list_n != NULL)
+				{
+					tco_node_addr* tna_tmp = NULL;
+
+					Address addrCurrent;
+					addrCurrent.networkType = NETWORK_IPV4;
+					addrCurrent.interfaceAddr.ipv4 = destination_list_n->nid;
+
+					//Peter comment: find from the topology table if there is some entry 
+					//whose last hop equal the specific dest hop of 2 or more (* since every loop will
+					// increase the one more hop count) hop neighbors
+					if (SYMMETRIC_TOPOLOGY_TABLE)
+					{
+						topo_last = OlsrLookupLastTopologyTableSYM(node, addrCurrent);
+					}
+					else
+					{
+						topo_last = OlsrLookupLastTopologyTable(node, addrCurrent);
+					}
+
+
+					if (NULL != topo_last)
+					{
+						topo_dest = topo_last->topology_list_of_destinations;
+
+						while (topo_dest != NULL)
+						{
+
+							Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+
+							rt_entry* prte_tmp = QueryRoutingTableAccordingToNodeId(node, addrReached.interfaceAddr.ipv4);
+
+							if (_TEST_TIME_COMPLEXITY && puiLookupCntForAddList)
+							{
+								uiLCFA++;
+							}
+
+							if (prte_tmp != NULL)
+							{
+								if (prte_tmp->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == destination_list_n->nid)
+								{
+									insert_into_tco_node_addr_set(&(destination_list_n_1), addrReached.interfaceAddr.ipv4);
+
+									OlsrDeleteRoutingTable(prte_tmp);
+
+									insert_into_tco_node_addr_set(&(olsr->recent_delete_list), addrReached.interfaceAddr.ipv4);
+
+								}
+							}				
+
+
+							topo_dest = topo_dest->next;
+						}
+					}
+
+					tna_tmp = destination_list_n;
+					destination_list_n = destination_list_n->next;
+					MEM_free(tna_tmp);
+				}
+
+				destination_list_n = destination_list_n_1;
+
+			}
+
+			//so all the descendants of this old 2Hop neighbor were deleted, and traced in  olsr->recent_delete_list
+		}
+
+		if (olsr->recent_add_list == NULL)
+		{
+			OlsrFillRoutingTableWithSpecificNeighbor(node, olsr->naRecentChangedAddressByTC);
+			//see ###$$$ in file Speed-10-6x6-low-TraceRT_SP_ARC_2_tmp15, a special case, may need further study
+
+			//it seems it is possible for old un-used 2hop neighbor to exist (seems unreasonable, but do exist)
+			list_destination_n = OlsrFillRoutingTableWith2HopNeighborsForSpecificNeighbor(node, olsr->naRecentChangedAddressByTC, &uiLCFA);
+		}
+		else
+		{
+			OlsrFillRoutingTableWithSpecificNeighbor(node, olsr->naRecentChangedAddressByTC);
+			list_destination_n = OlsrFillRoutingTableWith2HopNeighborsForSpecificNeighbor(node, olsr->naRecentChangedAddressByTC, &uiLCFA);
+		}
+
+
+	}
+	else
+	{
+		//only 2hop neighbors are new added
+
+		list_destination_n = OlsrFillRoutingTableWith2HopNeighborsForSpecificNeighbor(node, olsr->naRecentChangedAddressByTC, &uiLCFA);
+
+
+	}
+
+	if (_TEST_TIME_COMPLEXITY && puiLookupCntForAddList != NULL)
+	{
+		*puiLookupCntForAddList += uiLCFA;
+	}	
+
+
+	return list_destination_n;
+}
+
+
+
+destination_n* ProcessRoutingTableAccordingToRecentAddListV46(Node* node, destination_n ** plist_destination_delete, UInt32 * puiLookupCntForAddList)
+{
+
+	destination_n* list_destination_n = NULL;
+
+	RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+
+
+	UInt32 uiLCFA = 0;
+
+
+	if (remove_from_tco_node_addr_set(&olsr->recent_add_list, olsr->naRecentChangedAddressByTC))
+	{
+		//include the route itself and new 2hop neighbors are added
+
+
+		UInt16 uiOldCostTC = MAX_COST;
+
+		if (olsr->bNeighborChgCausedRemoveFromHigherHop)
+		{
+
+			rt_entry* prteTC = QueryRoutingTableAccordingToNodeId(node, olsr->naRecentChangedAddressByTC);
+
+
+			if (_TEST_TIME_COMPLEXITY && puiLookupCntForAddList)
+			{
+				uiLCFA++;
+			}
+							
+
+			if (prteTC != NULL)
+			{
+
+				uiOldCostTC = prteTC->rt_metric;
+
+				//this should be true
+
+				topology_last_entry* topo_last = NULL;
+				destination_list* topo_dest = NULL;
+				if (SYMMETRIC_TOPOLOGY_TABLE)
+				{
+					topo_last = OlsrLookupLastTopologyTableSYM(node, prteTC->rt_dst);
+				}
+				else
+				{
+					topo_last = OlsrLookupLastTopologyTable(node, prteTC->rt_dst);
+				}
+
+
+				if (NULL != topo_last)
+				{
+					topo_dest = topo_last->topology_list_of_destinations;
+
+					while (topo_dest != NULL)
+					{
+
+						Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+						topo_dest = topo_dest->next;
+
+						BOOL b2HopNeighborCausedConnection = FALSE;
+
+						b2HopNeighborCausedConnection = ConnectivetyCausedBy2HopNeighbor(node, addrReached, olsr->naRecentChangedAddressByTC);
+						if (b2HopNeighborCausedConnection)
+						{
+							continue;
+						}
+
+
+						rt_entry* prte_tmp = QueryRoutingTableAccordingToNodeId(node, addrReached.interfaceAddr.ipv4);
+
+						if (_TEST_TIME_COMPLEXITY && puiLookupCntForAddList)
+						{
+							uiLCFA++;
+						}
+
+						if (prte_tmp != NULL)
+						{
+							if (prte_tmp->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == olsr->naRecentChangedAddressByTC)
+							{
+								//insert_into_tco_node_addr_set(&(destination_list_n_1), addrReached.interfaceAddr.ipv4);
+
+								//OlsrDeleteRoutingTable(prte_tmp);
+
+								//prte_tmp->rt_metric = MAX_COST;
+
+								insert_into_tco_node_addr_set(&(olsr->recent_delete_list), addrReached.interfaceAddr.ipv4);
+								//insert_into_tco_node_addr_set(&disconnected_list, addrReached.interfaceAddr.ipv4);
+
+							}
+						}				
+
+
+					}
+				}
+
+
+			}
+
+
+						
+			
+
+			//exchange??
+			//currently just use the most easy way that form the delete list
+
+			/*
+			if (disconnected_list != NULL && prteTC->rt_metric > 2)
+			{
+				printf("********************************** disconnected_list != NULL, for node %d and olsr->naRecentChangedAddressByTC %d, with prteTC->rt_metric %d, include but not limit to %d \n", node->nodeId, olsr->naRecentChangedAddressByTC, prteTC->rt_metric, disconnected_list->nid);
+			}
+			*/
+
+
+			
+
+			//so all the descendants of this old 2Hop neighbor were deleted, and traced in  olsr->recent_delete_list
+		}
+
+		if (olsr->recent_add_list == NULL)
+		{
+			OlsrFillRoutingTableWithSpecificNeighbor(node, olsr->naRecentChangedAddressByTC);
+			//see ###$$$ in file Speed-10-6x6-low-TraceRT_SP_ARC_2_tmp15, a special case, may need further study
+			
+			//it seems it is possible for old un-used 2hop neighbor to exist (seems unreasonable, but do exist)
+			list_destination_n = OlsrFillRoutingTableWith2HopNeighborsForSpecificNeighbor(node, olsr->naRecentChangedAddressByTC, &uiLCFA);
+		}
+		else
+		{
+			OlsrFillRoutingTableWithSpecificNeighbor(node, olsr->naRecentChangedAddressByTC);
+			list_destination_n = OlsrFillRoutingTableWith2HopNeighborsForSpecificNeighbor(node, olsr->naRecentChangedAddressByTC, &uiLCFA);
+		}
+
+
+		if (olsr->bNeighborChgCausedRemoveFromHigherHop) 
+		{
+
+			if (olsr->recent_delete_list != NULL)
+			{
+
+				
+
+				//destination_n * list_p0_n = NULL;
+
+
+				e2_s e2_plus_one;
+				e2_s e2_plus_two;
+				e2_s e2_plus_three;
+
+
+
+				e2_plus_one.list_delete = NULL;
+				e2_plus_one.list_p0 = NULL;
+				e2_plus_one.list_p1 = NULL;
+				e2_plus_one.list_p2 = NULL;
+
+
+				e2_plus_two.list_delete = NULL;
+				e2_plus_two.list_p0 = NULL;
+				e2_plus_two.list_p1 = NULL;
+				e2_plus_two.list_p2 = NULL;
+
+
+
+				e2_plus_three.list_delete = NULL;
+				e2_plus_three.list_p0 = NULL;
+				e2_plus_three.list_p1 = NULL;
+				e2_plus_three.list_p2 = NULL;
+
+
+
+
+
+				e2_s e2s_n;
+				e2_s e2s_n_1;
+
+				e2s_n.list_delete = NULL;
+				e2s_n.list_p0 = NULL;
+				e2s_n.list_p1 = NULL;
+				e2s_n.list_p2 = NULL;
+
+				e2s_n_1.list_delete = NULL;
+				e2s_n_1.list_p0 = NULL;
+				e2s_n_1.list_p1 = NULL;
+				e2s_n_1.list_p2 = NULL;
+				
+				
+				//uiOldCostTC = 2 means the cost for nodes in current delete list = 3
+				//if (list_destination_n != NULL && uiOldCostTC != 2)
+
+
+				if (list_destination_n != NULL)
+				{
+
+					// we try to update the list_destination_n firstly
+
+					UInt16 uiCurrentCost = 2; //for 2HopNeighbor
+					destination_n* list_destination_n_1 = list_destination_n;
+
+					while (list_destination_n_1 != NULL)
+					{
+						list_destination_n_1 = NULL;
+
+						destination_n*  tmp_destination_tail = NULL;
+
+						//Peter comment: every loop add group of destination nodes that one hop more from the source node,
+						//compare to the group in the previous loop  
+						while (list_destination_n != NULL)
+						{
+							destination_n* destination_n_1 = NULL;
+
+							if (DEBUG)
+							{
+								char addrString[MAX_STRING_LENGTH];
+
+								IO_ConvertIpAddressToString(
+									&list_destination_n->destination->rt_dst,
+									addrString);
+
+								printf("Node %d, Last hop %s\n",
+									node->nodeId,
+									addrString);
+							}
+
+							topology_last_entry* topo_last = NULL;
+							//Peter comment: find from the topology table if there is some entry 
+							//whose last hop equal the specific dest hop of 2 or more (* since every loop will
+							// increase the one more hop count) hop neighbors
+							if (SYMMETRIC_TOPOLOGY_TABLE)
+							{
+								topo_last = OlsrLookupLastTopologyTableSYM(node, list_destination_n->destination->rt_dst);
+							}
+							else
+							{
+								topo_last = OlsrLookupLastTopologyTable(node, list_destination_n->destination->rt_dst);
+							}
+
+
+							if (NULL != topo_last)
+							{
+								destination_list* topo_dest = topo_last->topology_list_of_destinations;
+
+
+								while (topo_dest != NULL)
+								{
+
+									Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+									if (RoutingOlsrCheckMyIfaceAddress(
+										node,
+										topo_dest->destination_node->topology_destination_dst) != -1)
+									{
+										topo_dest = topo_dest->next;
+										continue;
+									}
+
+									//destination_n* tmp_tmp_for_new_destination = NULL;
+									OlsrCalculateRoutingTableForSinglePathTopologySearchHelpFunc(node, addrReached, list_destination_n, &list_destination_n_1, &tmp_destination_tail, TRUE);
+									
+														
+
+									//uiOldCostTC + 1 is the current un-determined cost for these entry in delete list
+									//(uiOldCostTC + 1) + 2) = uiOldCostTC + 3 means we allow +2 exchange so far
+									if (uiCurrentCost <= (uiOldCostTC + 3))
+									{
+										if (tmp_destination_tail != NULL && olsr->recent_delete_list != NULL)
+										{
+											if (tmp_destination_tail->destination->rt_entry_infos.rtu_dst.interfaceAddr.ipv4 == addrReached.interfaceAddr.ipv4)
+											{
+												//the reached one is added or updated
+
+												remove_from_tco_node_addr_set(&olsr->recent_delete_list, addrReached.interfaceAddr.ipv4);
+											}
+										}												
+									}
+									
+
+									//Peter Added for test time complexity
+									if (_TEST_TIME_COMPLEXITY)
+									{
+
+										//if (node->nodeId == NODE_ID_FOR_TEST_OUTER_ANGLE || node->nodeId == NODE_ID_FOR_TEST_OUTER_EDGE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_ANGLE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_EDGE || node->nodeId == NODE_ID_FOR_TEST_CENTER)
+										if (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END)
+										{
+											uiLCFA++;
+
+										}
+									}
+
+									topo_dest = topo_dest->next;
+								}
+							}
+
+							destination_n_1 = list_destination_n;
+							list_destination_n = list_destination_n->next;
+							MEM_free(destination_n_1);
+						}
+
+						uiCurrentCost++;
+
+						list_destination_n = list_destination_n_1;
+						//ui_metric_cost_limitation++;
+					}
+
+				
+				
+				}
+			
+
+				//list_destination_n == NULL now !!!!!!
+				if (olsr->recent_delete_list != NULL)			
+				{
+
+					tco_node_addr * tmp_recent_delete_list = NULL;
+
+					tco_node_addr * tmp_addr = olsr->recent_delete_list;
+
+
+					destination_n * p_destination_del = NULL;
+					
+					while (tmp_addr != NULL)
+					{
+
+						rt_entry* prte = QueryRoutingTableAccordingToNodeId(node, tmp_addr->nid);
+						
+						destination_n* list_destination_tmp;
+						list_destination_tmp = (destination_n* )
+							MEM_malloc(sizeof(destination_n));
+
+						memset(
+							list_destination_tmp,
+							0,
+							sizeof(destination_n));
+
+						list_destination_tmp->destination = prte;
+						
+						list_destination_tmp->next = p_destination_del;
+						p_destination_del = list_destination_tmp;
+
+						//insert_into_tco_node_addr_set(&(tmp_recent_delete_list), tmp_addr->nid);
+
+						tmp_addr = tmp_addr->next;
+					}
+
+					//tmp_addr = tmp_recent_delete_list;
+
+
+
+					//exchange, since no other can reduce its cost
+
+					//just try to exchange with same cost
+					//and leave it to delete list otherwise
+
+					destination_n * p_destination_del2 = NULL;
+
+					{
+
+						destination_n * p_destination_tmp = p_destination_del;
+						while (p_destination_tmp != NULL)
+						{
+
+							rt_entry* prte = p_destination_tmp->destination;
+
+
+							if (_TEST_TIME_COMPLEXITY && puiLookupCntForAddList)
+							{
+								uiLCFA++;
+							}
+
+
+							if (prte != NULL)
+							{
+
+								//the exchange here need to support unconsider set,
+								//to avoid circular dependency 
+
+								prte->rt_entry_infos.uiCostChg = 0;
+
+								prte->rt_entry_infos.bCostChanged = FALSE;
+								prte->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+								prte->rt_entry_infos.bRequireDelete = FALSE;
+
+
+								BOOL bExchangeFound = FindRouteExchangeV20(node, p_destination_tmp, prte, FALSE, NULL);
+								if (!bExchangeFound)
+								{
+									destination_n* list_destination_tmp;
+									list_destination_tmp = (destination_n* )
+										MEM_malloc(sizeof(destination_n));
+
+									memset(
+										list_destination_tmp,
+										0,
+										sizeof(destination_n));
+
+									list_destination_tmp->destination = prte;
+
+									{
+										list_destination_tmp->children = p_destination_tmp->children;
+										list_destination_tmp->bChildrenDetermined = p_destination_tmp->bChildrenDetermined;
+
+										p_destination_tmp->children = NULL;
+									}
+
+
+
+									//only route change
+									list_destination_tmp->next = p_destination_del2;
+									p_destination_del2 = list_destination_tmp;
+
+								}
+								else
+								{
+									
+									remove_from_tco_node_addr_set(&(olsr->recent_delete_list), prte->rt_entry_infos.rtu_dst.interfaceAddr.ipv4);
+
+									if (prte->rt_entry_infos.bDescendentRequireFurtherUpdate)
+									{
+
+										//route change
+
+										destination_n* list_destination_tmp;
+										list_destination_tmp = (destination_n* )
+											MEM_malloc(sizeof(destination_n));
+
+										memset(
+											list_destination_tmp,
+											0,
+											sizeof(destination_n));
+
+										list_destination_tmp->destination = prte;
+
+										{
+											list_destination_tmp->children = p_destination_tmp->children;
+											list_destination_tmp->bChildrenDetermined = p_destination_tmp->bChildrenDetermined;
+
+											p_destination_tmp->children = NULL;
+										}
+
+
+										//only route change
+										list_destination_tmp->next = e2_plus_one.list_p0;
+										e2_plus_one.list_p0 = list_destination_tmp;
+
+									
+									}
+									else
+									{
+										//perfect exchange
+										
+									}
+
+								}
+							}
+
+							destination_n * destination_n_1 = p_destination_tmp;						
+							p_destination_tmp = p_destination_tmp->next;
+
+							MEM_free(destination_n_1);
+						}
+
+
+						/*
+						if (tmp_recent_delete_list != NULL)
+						{
+							clear_tco_node_addr_set(&tmp_recent_delete_list);
+						}
+						*/
+
+					}
+
+
+
+
+					//backup for 22 exchange  for +2
+					tco_node_addr * disconnected_list_backup = NULL;
+					tco_node_addr * tmp_addr2 = olsr->recent_delete_list;
+					while (tmp_addr2 != NULL)
+					{
+
+						insert_into_tco_node_addr_set(&(disconnected_list_backup), tmp_addr2->nid);
+						tmp_addr2 = tmp_addr2->next;
+					}
+
+
+					destination_n * p_destination_del3 = NULL;
+					{
+
+						// need to find whether  can be exchanged by +1, since all +0 (list_destination_TS_plus_one) are determined
+
+						//tco_node_addr * tmp_disconnected_list = NULL;
+
+						if (olsr->recent_delete_list != NULL)
+						{
+
+							//while (disconnected_list != NULL)
+							{
+
+								//copy the set
+
+								/*
+								tco_node_addr * tmp_addr = olsr->recent_delete_list;
+								while (tmp_addr != NULL)
+								{
+
+									insert_into_tco_node_addr_set(&(tmp_disconnected_list), tmp_addr->nid);
+									tmp_addr = tmp_addr->next;
+								}
+
+								tco_node_addr * tmp_addr_tmp = tmp_disconnected_list;
+								*/
+
+								//BOOL bAtleastFindOne = FALSE;
+								destination_n * p_destination_tmp = p_destination_del2;
+								while (p_destination_tmp != NULL)
+								{
+
+									//rt_entry* prte = QueryRoutingTableAccordingToNodeId(node, tmp_addr_tmp->nid);
+
+									rt_entry* prte = p_destination_tmp->destination;
+
+									if (_TEST_TIME_COMPLEXITY && puiLookupCntForAddList)
+									{
+										uiLCFA++;
+									}
+									
+
+									if (prte != NULL)
+									{
+
+										//the exchange here need to support unconsider set,
+										//to avoid circular dependency 
+
+										prte->rt_entry_infos.uiCostChg = 0;
+
+										prte->rt_entry_infos.bCostChanged = FALSE;
+										prte->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+										prte->rt_entry_infos.bRequireDelete = FALSE;
+
+
+										BOOL bExchangeFound = FindRouteExchangeV21(node, p_destination_tmp, prte, FALSE, NULL, &uiLCFA, FALSE, &olsr->recent_delete_list, NULL, NULL, 
+											&disconnected_list_backup);
+										if (!bExchangeFound)
+										{
+
+											destination_n* list_destination_tmp;
+											list_destination_tmp = (destination_n* )
+												MEM_malloc(sizeof(destination_n));
+
+											memset(
+												list_destination_tmp,
+												0,
+												sizeof(destination_n));
+
+											list_destination_tmp->destination = prte;
+
+											{
+												list_destination_tmp->children = p_destination_tmp->children;
+												list_destination_tmp->bChildrenDetermined = p_destination_tmp->bChildrenDetermined;
+
+												p_destination_tmp->children = NULL;
+											}
+
+
+
+											//only route change
+											list_destination_tmp->next = p_destination_del3;
+											p_destination_del3 = list_destination_tmp;
+
+
+
+										}
+										else
+										{
+
+											remove_from_tco_node_addr_set(&(olsr->recent_delete_list), prte->rt_entry_infos.rtu_dst.interfaceAddr.ipv4);
+											//insert_into_tco_node_addr_set(&(found_list), tmp_addr_tmp->nid);
+
+											//bAtleastFindOne = TRUE;
+
+											if (prte->rt_entry_infos.bDescendentRequireFurtherUpdate)
+											{
+
+												if (prte->rt_entry_infos.uiCostChg == 1)
+												{
+													destination_n* list_destination_tmp;
+													list_destination_tmp = (destination_n* )
+														MEM_malloc(sizeof(destination_n));
+
+													memset(
+														list_destination_tmp,
+														0,
+														sizeof(destination_n));
+
+													list_destination_tmp->destination = prte;
+
+													{
+														list_destination_tmp->children = p_destination_tmp->children;
+														list_destination_tmp->bChildrenDetermined = p_destination_tmp->bChildrenDetermined;
+
+														p_destination_tmp->children = NULL;
+													}
+
+
+													list_destination_tmp->next = e2_plus_two.list_p1;
+													e2_plus_two.list_p1 = list_destination_tmp;
+
+												}
+												else
+												{
+													//should not happen
+												}
+
+											}
+											else
+											{
+												//perfect exchange
+												//should not happen
+											}
+
+										}
+									}
+
+									//p_destination_tmp = p_destination_tmp->next;
+
+									destination_n * destination_n_1 = p_destination_tmp;						
+									p_destination_tmp = p_destination_tmp->next;
+
+									MEM_free(destination_n_1);
+								}
+
+
+								/*
+								if (tmp_disconnected_list != NULL)
+								{
+									clear_tco_node_addr_set(&tmp_disconnected_list);
+								}
+								*/
+
+							}
+
+
+						}
+						else
+						{
+							//
+						}
+
+
+					}
+
+
+
+					//deal with children of list_destination_TS_plus_one_p0
+
+					UInt32 uiInnerExchangeLUCnt = 0;
+
+					SubFuncForLoopHelpFuncV22(node, (&e2_plus_one.list_p0), NULL, NULL, &e2_plus_two, &uiInnerExchangeLUCnt, &(olsr->recent_delete_list));
+
+					if (_TEST_TIME_COMPLEXITY && puiLookupCntForAddList)
+					{
+						
+						uiLCFA += uiInnerExchangeLUCnt;
+
+					}
+
+		
+
+					uiInnerExchangeLUCnt = 0;
+
+					if (g_iToAchieveSameRoute == 1)
+					{
+						
+						destination_n* list_avoid_consider_for_p1 = NULL;
+						tco_node_addr* tco_avoid_consider_list_p1 = NULL;
+
+
+						//p1 list, +0 exchange
+						if (e2_plus_two.list_p1 != NULL)
+						{
+
+							while (e2_plus_two.list_p1 != NULL)
+							{
+
+								destination_n* destination_n_1 = NULL;
+								destination_list* topo_dest = NULL;
+								
+								if (e2_plus_two.list_p1->bChildrenDetermined)
+								{
+									destination_n * dst_child = e2_plus_two.list_p1->children;
+									while (dst_child != NULL)
+									{
+
+
+										Address addrReached = dst_child->destination->rt_entry_infos.rtu_dst;							
+
+										UInt32 uiInnerExchangeLUCnt = 0;
+
+										OlsrCalculateRoutingTableForSinglePathTopologySearchHelpFuncV24(node, dst_child, addrReached, e2_plus_two.list_p1, &e2_plus_two.list_p0, 
+											&list_avoid_consider_for_p1, &uiInnerExchangeLUCnt, &tco_avoid_consider_list_p1, &olsr->recent_delete_list);
+
+										dst_child = dst_child->next;
+									}
+								}
+								else
+								{
+									topology_last_entry* topo_last = OlsrLookupLastTopologyTableSYM(node, e2_plus_two.list_p1->destination->rt_dst);
+
+									if (NULL != topo_last)
+									{
+										topo_dest = topo_last->topology_list_of_destinations;
+
+										while (topo_dest != NULL)
+										{
+
+											Address addrReached = topo_dest->destination_node->topology_destination_dst;							
+
+											UInt32 uiInnerExchangeLUCnt = 0;
+
+											OlsrCalculateRoutingTableForSinglePathTopologySearchHelpFuncV24(node, NULL, addrReached, e2_plus_two.list_p1, &e2_plus_two.list_p0, 
+												&list_avoid_consider_for_p1, &uiInnerExchangeLUCnt, &tco_avoid_consider_list_p1, &olsr->recent_delete_list);
+
+											topo_dest = topo_dest->next;
+										}
+									}
+
+								}
+								
+
+
+								destination_n_1 = e2_plus_two.list_p1;
+								e2_plus_two.list_p1 = e2_plus_two.list_p1->next;
+								MEM_free(destination_n_1);
+							}
+
+
+						}
+
+
+
+
+						if (list_avoid_consider_for_p1 != NULL)
+						{
+
+							while (list_avoid_consider_for_p1 != NULL)
+							{
+
+								destination_n* destination_n_1 = NULL;
+
+								
+								if (_TEST_TIME_COMPLEXITY && puiLookupCntForAddList)
+								{
+
+									uiLCFA ++;
+
+								}
+
+
+								//while (topo_dest != NULL)
+								{
+
+									Address addrReached = list_avoid_consider_for_p1->destination->rt_dst;
+
+									UInt32 uiInnerExchangeLUCnt = 0;
+
+									rt_entry* preExisting = list_avoid_consider_for_p1->destination;
+
+
+									preExisting->rt_entry_infos.bCostChanged = FALSE;
+									preExisting->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+									preExisting->rt_entry_infos.bRequireDelete = FALSE;
+
+									preExisting->rt_entry_infos.uiCostChg = 0;
+
+
+									BOOL bExchangeFound = FindRouteExchangeV21(node, list_avoid_consider_for_p1, preExisting, TRUE, NULL, &uiInnerExchangeLUCnt, FALSE, &tco_avoid_consider_list_p1, &olsr->recent_delete_list, 
+										NULL, &disconnected_list_backup);
+									
+									if (!bExchangeFound)
+									{
+
+										//should certainly find
+
+									}
+									else
+									{
+										if (preExisting->rt_entry_infos.bDescendentRequireFurtherUpdate)
+										{
+
+											destination_n* list_destination_tmp;
+											list_destination_tmp = (destination_n* )
+												MEM_malloc(sizeof(destination_n));
+
+											memset(
+												list_destination_tmp,
+												0,
+												sizeof(destination_n));
+
+											//list_destination_tmp->destination = preExisting;
+
+											list_destination_tmp->destination = preExisting;
+
+											{
+												list_destination_tmp->children = list_avoid_consider_for_p1->children;
+												list_destination_tmp->bChildrenDetermined = list_avoid_consider_for_p1->bChildrenDetermined;
+
+												list_avoid_consider_for_p1->children = NULL;
+											}
+
+											list_destination_tmp->next = e2_plus_three.list_p1;
+											e2_plus_three.list_p1 = list_destination_tmp;
+
+
+											//+1 case								
+
+										}
+
+									}								
+
+								}
+
+
+
+								destination_n_1 = list_avoid_consider_for_p1;
+								list_avoid_consider_for_p1 = list_avoid_consider_for_p1->next;
+
+
+								remove_from_tco_node_addr_set(&tco_avoid_consider_list_p1, destination_n_1->destination->rt_entry_infos.rtu_dst.interfaceAddr.ipv4);
+
+								MEM_free(destination_n_1);			
+
+
+							}
+
+						}
+
+
+						clear_tco_node_addr_set(&tco_avoid_consider_list_p1);
+						
+					}
+					else
+					{
+
+						SubFuncForLoopHelpFuncV22(node, (&e2_plus_two.list_p1), &e2_plus_one, &e2_plus_two, &e2_plus_three, &uiInnerExchangeLUCnt, &olsr->recent_delete_list);
+
+					}
+
+
+
+
+					destination_n * p_destination_del4 = NULL;
+					{
+
+						// need to find whether DATS can be exchanged by +2, since all +1 (till list_destination_TS_plus_two) are determined
+
+						//tco_node_addr * tmp_disconnected_list = NULL;
+
+						if (olsr->recent_delete_list != NULL)
+						{
+
+							//while (disconnected_list != NULL)
+							{
+
+								//copy the set
+
+								/*
+								tco_node_addr * tmp_addr = olsr->recent_delete_list;
+								while (tmp_addr != NULL)
+								{
+
+									insert_into_tco_node_addr_set(&(tmp_disconnected_list), tmp_addr->nid);
+									tmp_addr = tmp_addr->next;
+								}
+
+								tco_node_addr * tmp_addr_tmp = tmp_disconnected_list;
+								*/
+
+								//BOOL bAtleastFindOne = FALSE;
+
+								destination_n * p_destination_tmp = p_destination_del3;
+
+								while (p_destination_tmp != NULL)
+								{
+
+									//rt_entry* prte = QueryRoutingTableAccordingToNodeId(node, tmp_addr_tmp->nid);
+
+									rt_entry* prte = p_destination_tmp->destination;
+
+									if (_TEST_TIME_COMPLEXITY && puiLookupCntForAddList)
+									{
+
+										uiLCFA ++;
+
+									}
+
+									if (prte != NULL)
+									{
+
+										//the exchange here need to support unconsider set,
+										//to avoid circular dependency 
+
+										prte->rt_entry_infos.uiCostChg = 0;
+
+										prte->rt_entry_infos.bCostChanged = FALSE;
+										prte->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+										prte->rt_entry_infos.bRequireDelete = FALSE;
+
+
+										BOOL bExchangeFound = FindRouteExchangeV22(node, p_destination_tmp, prte, FALSE, NULL, &uiLCFA, FALSE, &olsr->recent_delete_list, NULL, &disconnected_list_backup);
+										if (!bExchangeFound)
+										{
+											destination_n* list_destination_tmp;
+											list_destination_tmp = (destination_n* )
+												MEM_malloc(sizeof(destination_n));
+
+											memset(
+												list_destination_tmp,
+												0,
+												sizeof(destination_n));
+
+											list_destination_tmp->destination = prte;
+
+											{
+												list_destination_tmp->children = p_destination_tmp->children;
+												list_destination_tmp->bChildrenDetermined = p_destination_tmp->bChildrenDetermined;
+
+												p_destination_tmp->children = NULL;
+											}
+
+
+
+											//only route change
+											list_destination_tmp->next = p_destination_del4;
+											p_destination_del4 = list_destination_tmp;
+
+										}
+										else
+										{
+
+											remove_from_tco_node_addr_set(&(olsr->recent_delete_list), prte->rt_entry_infos.rtu_dst.interfaceAddr.ipv4);
+											//insert_into_tco_node_addr_set(&(found_list), tmp_addr_tmp->nid);
+
+											//bAtleastFindOne = TRUE;
+
+											if (prte->rt_entry_infos.bDescendentRequireFurtherUpdate)
+											{
+
+												if (prte->rt_entry_infos.uiCostChg == 2)
+												{
+													destination_n* list_destination_tmp;
+													list_destination_tmp = (destination_n* )
+														MEM_malloc(sizeof(destination_n));
+
+													memset(
+														list_destination_tmp,
+														0,
+														sizeof(destination_n));
+
+													list_destination_tmp->destination = prte;
+
+													{
+														list_destination_tmp->children = p_destination_tmp->children;
+														list_destination_tmp->bChildrenDetermined = p_destination_tmp->bChildrenDetermined;
+
+														p_destination_tmp->children = NULL;
+													}
+
+
+													list_destination_tmp->next = e2_plus_three.list_p2;
+													e2_plus_three.list_p2 = list_destination_tmp;
+
+												}
+												else
+												{
+													//should not happen
+												}
+
+											}
+											else
+											{
+												//perfect exchange
+												//should not happen
+											}
+
+										}
+									}
+
+									destination_n * destination_n_1 = p_destination_tmp;						
+									p_destination_tmp = p_destination_tmp->next;
+
+									MEM_free(destination_n_1);
+								}
+
+
+								/*
+								if (tmp_disconnected_list != NULL)
+								{
+									clear_tco_node_addr_set(&tmp_disconnected_list);
+								}
+								*/
+
+							}
+
+
+						}
+						else
+						{
+							//
+						}
+
+
+					}
+
+					clear_tco_node_addr_set(&disconnected_list_backup);
+
+
+					//tco_node_addr * tna_tmp = olsr->recent_delete_list;
+					
+					destination_n * p_destination_tmp = p_destination_del4;
+					while (p_destination_tmp != NULL)
+					{
+
+						//rt_entry* prte = QueryRoutingTableAccordingToNodeId(node, tna_tmp->nid);
+						rt_entry* prte = p_destination_tmp->destination;
+
+						prte->rt_metric = MAX_COST;
+
+						
+						destination_n* list_destination_tmp;
+						list_destination_tmp = (destination_n* )
+							MEM_malloc(sizeof(destination_n));
+
+						memset(
+							list_destination_tmp,
+							0,
+							sizeof(destination_n));
+
+						list_destination_tmp->destination = prte;
+
+						
+						{
+							list_destination_tmp->children = p_destination_tmp->children;
+							list_destination_tmp->bChildrenDetermined = p_destination_tmp->bChildrenDetermined;
+
+							p_destination_tmp->children = NULL;
+						}
+											
+
+
+						list_destination_tmp->next = e2_plus_one.list_delete;
+						e2_plus_one.list_delete = list_destination_tmp;
+
+						
+						
+						//p_destination_tmp = p_destination_tmp->next;
+
+						destination_n * destination_n_1 = p_destination_tmp;						
+						p_destination_tmp = p_destination_tmp->next;
+
+						MEM_free(destination_n_1);
+					}
+
+
+					clear_tco_node_addr_set(&olsr->recent_delete_list);
+
+
+					//destination_n* list_destination_delete = NULL;
+
+					DeleteListProgress(node, &e2_plus_one, &e2_plus_two, &olsr->recent_delete_list, plist_destination_delete);
+
+					
+					DeleteListProgress(node, &e2_plus_two, &e2_plus_three, &olsr->recent_delete_list, plist_destination_delete);
+
+
+
+					//destination_n * list_n_minus_1_p0 = NULL;
+
+					tco_node_addr * tco_avoid_consider_list = NULL;
+					destination_n * list_avoid_consider_for_p2 = NULL;
+
+
+
+					uiInnerExchangeLUCnt = 0;
+					SubFuncForLoopHelpFuncV23(node, e2_plus_three, &e2_plus_two.list_p0, &list_avoid_consider_for_p2, &uiInnerExchangeLUCnt, &tco_avoid_consider_list);
+
+					if (_TEST_TIME_COMPLEXITY && puiLookupCntForAddList)
+					{
+
+						uiLCFA += uiInnerExchangeLUCnt;
+
+					}
+							
+					uiInnerExchangeLUCnt = 0;
+
+					SubFuncForLoopHelpFuncV22(node, (&e2_plus_two.list_p0), NULL, NULL, &e2_plus_three, &uiInnerExchangeLUCnt, &tco_avoid_consider_list);
+
+					if (_TEST_TIME_COMPLEXITY && puiLookupCntForAddList)
+					{
+
+						uiLCFA += uiInnerExchangeLUCnt;
+
+					}
+
+
+					ProcessRecurrentPlus2(node, uiOldCostTC + 3, &tco_avoid_consider_list, &olsr->recent_delete_list, e2_plus_three, &list_avoid_consider_for_p2, plist_destination_delete, &uiLCFA);
+				
+
+
+
+					clear_tco_node_addr_set(&tco_avoid_consider_list);			
+
+
+
+				}				
+
+			}
+			else
+			{
+				//no further process required, since the following update discovery will deal with all TC's old children
+
+			}
+
+		}
+
+
+	}
+	else
+	{
+		//only 2hop neighbors are new added
+
+		list_destination_n = OlsrFillRoutingTableWith2HopNeighborsForSpecificNeighbor(node, olsr->naRecentChangedAddressByTC, &uiLCFA);
+
+		
+	}
+
+	if (_TEST_TIME_COMPLEXITY && puiLookupCntForAddList != NULL)
+	{
+		*puiLookupCntForAddList += uiLCFA;
+	}	
+
+
+	return list_destination_n;
+}
+
+
+//void ProcessRecurrentPlus2(Node* node, tco_node_addr * tco_avoid_consider_list, tco_node_addr ** ptna_delete, UInt32 * puiLookupCntForDeleteList, destination_n* list_to_delete, e2_s e2_plus_three, destination_n *  list_avoid_consider_for_p2, destination_n & list_destination_delete)
+void ProcessRecurrentPlus2(Node* node, UInt16 uiStartCost, tco_node_addr ** ptco_avoid_consider_list, tco_node_addr ** ptna_delete, e2_s e2_plus_three, destination_n ** plist_avoid_consider_for_p2, destination_n ** list_destination_delete, UInt32 * puiLookupCntForDeleteList)
+{
+
+		e2_s e2_s_n;
+		e2_s e2_s_n_1;
+
+		UInt32 uiInnerExchangeLUCnt = 0;
+
+		UInt16 uiLookupCnt = 0;
+
+
+		//e2_s_n_minus_1.list_delete = e2_plus_two.list_delete;
+		//e2_s_n_minus_1.list_p0 = e2_plus_two.list_p0;
+		//e2_s_n_minus_1.list_p1 = e2_plus_two.list_p1;
+		//e2_s_n_minus_1.list_p2 = e2_plus_two.list_p2;
+
+
+		e2_s_n.list_delete = e2_plus_three.list_delete;
+		e2_s_n.list_p0 = e2_plus_three.list_p0;
+		e2_s_n.list_p1 = e2_plus_three.list_p1;
+		e2_s_n.list_p2 = e2_plus_three.list_p2;
+
+		e2_s_n_1.list_delete = e2_s_n.list_delete;
+		e2_s_n_1.list_p0 = e2_s_n.list_p0;
+		e2_s_n_1.list_p1 = e2_s_n.list_p1;
+		e2_s_n_1.list_p2 = e2_s_n.list_p2;
+
+
+
+	
+
+		while (e2_s_n_1.list_delete != NULL || e2_s_n_1.list_p0 != NULL || e2_s_n_1.list_p1 != NULL || e2_s_n_1.list_p2 != NULL || *plist_avoid_consider_for_p2 != NULL)
+		{
+
+
+			e2_s_n_1.list_delete = NULL;
+			e2_s_n_1.list_p0 = NULL;
+			e2_s_n_1.list_p1 = NULL;
+			e2_s_n_1.list_p2 = NULL;
+
+
+
+			destination_n* list_destination_recent_delete = NULL;
+			destination_n* tmp_last_destination = NULL;
+
+
+			//deal with delete list
+			/*
+			if (e2_s_n.list_delete)
+			{
+
+				while (e2_s_n.list_delete != NULL)
+				{
+					//DebugBreak();
+					destination_n* destination_n_1 = NULL;
+					destination_list* topo_dest = NULL;
+					topology_last_entry* topo_last = OlsrLookupLastTopologyTableSYM(node, e2_s_n.list_delete->destination->rt_dst);
+					if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+					{
+						uiLookupCnt++;
+					}
+
+
+					BOOL bInsideNode = TRUE;
+
+					destination_n* list_destination_tmp_children = NULL;
+
+					if (NULL != topo_last)
+					{
+						topo_dest = topo_last->topology_list_of_destinations;
+
+						while (topo_dest != NULL)
+						{
+
+							Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+						
+
+							UInt32 uiInnerExchangeLUCnt = 0;
+
+
+							
+							rt_entry* prteNearby = QueryRoutingTableAccordingToNodeId(node, addrReached.interfaceAddr.ipv4);
+							if (prteNearby != NULL)
+							{
+
+								if (prteNearby->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == e2_s_n.list_delete->destination->rt_entry_infos.rtu_dst.interfaceAddr.ipv4)
+								{
+
+
+									prteNearby->rt_metric = MAX_COST;
+
+									destination_n* list_destination_tmp;
+									list_destination_tmp = (destination_n* )
+										MEM_malloc(sizeof(destination_n));
+
+									memset(
+										list_destination_tmp,
+										0,
+										sizeof(destination_n));
+
+									list_destination_tmp->destination = prteNearby;
+									
+
+									//list_destination_tmp->next = e2_s_n_1.list_delete;
+									//e2_s_n_1.list_delete = list_destination_tmp;
+
+									//TO_IMPROVE_PERFORMANCE
+									list_destination_tmp->next = e2_s_n.list_delete->children;
+									e2_s_n.list_delete->children = list_destination_tmp;
+
+
+									
+									//insert_into_tco_node_addr_set(&(destination_list_n_1), addrReached.interfaceAddr.ipv4);
+
+									//OlsrDeleteRoutingTable(prte_tmp);
+
+									//insert_into_tco_node_addr_set(&(olsr->recent_add_list), addrReached.interfaceAddr.ipv4);
+
+
+
+								}
+								else
+								{
+									if (e2_s_n.list_delete->destination->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == prteNearby->rt_entry_infos.rtu_dst.interfaceAddr.ipv4)
+									{
+
+
+									}
+									else
+									{
+
+										//if there is any other adjacent nodes outside the tree, then 
+
+										bInsideNode = FALSE;
+
+									}
+								}
+							
+							}
+							
+							//OlsrCalculateRoutingTableForSinglePathTopologySearchHelpFuncV22(node, addrReached, e2_plus_one.list_p0, &e2_plus_one, &e2_plus_two, &e2_plus_three, &uiInnerExchangeLUCnt, &ATS_list, &disconnected_list);
+
+
+							//Peter Added for test time complexity
+							if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+							{
+								uiLookupCnt += uiInnerExchangeLUCnt;
+
+								//if (node->nodeId == NODE_ID_FOR_TEST_OUTER_ANGLE || node->nodeId == NODE_ID_FOR_TEST_OUTER_EDGE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_ANGLE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_EDGE || node->nodeId == NODE_ID_FOR_TEST_CENTER)
+								if (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END)
+								{
+									uiLookupCnt++;
+
+								}
+							}
+
+							topo_dest = topo_dest->next;
+						}
+					}
+
+					destination_n_1 = e2_s_n.list_delete;
+					e2_s_n.list_delete = e2_s_n.list_delete->next;
+					//MEM_free(destination_n_1);
+
+					if (!bInsideNode)
+					{
+						insert_into_tco_node_addr_set(ptna_delete, destination_n_1->destination->rt_entry_infos.rtu_dst.interfaceAddr.ipv4);
+
+					}
+					
+
+					//TO_IMPROVE_PERFORMANCE
+					
+					destination_n_1->next = list_destination_recent_delete;
+					list_destination_recent_delete = destination_n_1;
+
+					if (tmp_last_destination == NULL)
+					{
+						tmp_last_destination = list_destination_recent_delete;
+					}
+					
+					
+
+					//destination_n_1->next = *list_destination_delete;
+					//*list_destination_delete = destination_n_1;
+				}
+			}
+			*/
+
+
+			destination_n * list_avoid_consider_for_p2_remain = NULL;
+
+			tco_node_addr * tmp_tco_avoid_consider_list = NULL;
+
+			
+			if (*plist_avoid_consider_for_p2 != NULL)
+			{						
+
+				if (g_iToAchieveSameRoute == 1)
+				{
+
+					tco_node_addr * tmp_addr = *ptco_avoid_consider_list;
+					while (tmp_addr != NULL)
+					{
+
+						insert_into_tco_node_addr_set(&(tmp_tco_avoid_consider_list), tmp_addr->nid);
+						tmp_addr = tmp_addr->next;
+					}
+				}
+
+				
+				while (*plist_avoid_consider_for_p2 != NULL)
+				{
+
+					BOOL bNotDeleteForSameRouteSP = FALSE;
+					//DebugBreak();
+					destination_n* destination_n_1 = NULL;
+					//destination_list* topo_dest = NULL;
+					//topology_last_entry* topo_last = OlsrLookupLastTopologyTableSYM(node, list_avoid_consider_for_p2->destination->rt_dst);
+					if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+					{
+						uiLookupCnt++;
+					}
+
+					//if (NULL != topo_last)
+					{
+						//topo_dest = topo_last->topology_list_of_destinations;
+
+						//while (topo_dest != NULL)
+						{
+
+							Address addrReached = (*plist_avoid_consider_for_p2)->destination->rt_dst;
+
+							UInt32 uiInnerExchangeLUCnt = 0;
+						
+							rt_entry* preExisting = (*plist_avoid_consider_for_p2)->destination;
+
+							
+							preExisting->rt_entry_infos.bCostChanged = FALSE;
+							preExisting->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+							preExisting->rt_entry_infos.bRequireDelete = FALSE;
+
+							preExisting->rt_entry_infos.uiCostChg = 0;
+
+							BOOL bExchangeFound = FindRouteExchangeV21(node, *plist_avoid_consider_for_p2, preExisting, FALSE, NULL, &uiInnerExchangeLUCnt, FALSE, ptco_avoid_consider_list, NULL, NULL, &tmp_tco_avoid_consider_list);
+
+							if (!bExchangeFound)
+							{
+
+								if (g_iToAchieveSameRoute == 1)
+								{
+									bNotDeleteForSameRouteSP = TRUE;
+								}
+								else
+								{
+									destination_n* list_destination_tmp;
+									list_destination_tmp = (destination_n* )
+										MEM_malloc(sizeof(destination_n));
+
+									memset(
+										list_destination_tmp,
+										0,
+										sizeof(destination_n));
+
+									//list_destination_tmp->destination = preExisting;
+
+									//
+									preExisting->rt_metric = preExisting->rt_metric + 2;
+
+									preExisting->rt_entry_infos.bCostChanged = TRUE;
+									preExisting->rt_entry_infos.bDescendentRequireFurtherUpdate = TRUE;
+
+
+									preExisting->rt_entry_infos.uiCostChg = 2;
+
+									list_destination_tmp->destination = preExisting;
+
+									
+									{
+										list_destination_tmp->children = (*plist_avoid_consider_for_p2)->children;
+										list_destination_tmp->bChildrenDetermined = (*plist_avoid_consider_for_p2)->bChildrenDetermined;
+
+										(*plist_avoid_consider_for_p2)->children = NULL;
+									}
+
+									list_destination_tmp->next = e2_s_n_1.list_p2;
+									e2_s_n_1.list_p2 = list_destination_tmp;
+								}
+
+
+							}
+							else
+							{
+								if (preExisting->rt_entry_infos.bDescendentRequireFurtherUpdate)
+								{
+
+									destination_n* list_destination_tmp;
+									list_destination_tmp = (destination_n* )
+										MEM_malloc(sizeof(destination_n));
+
+									memset(
+										list_destination_tmp,
+										0,
+										sizeof(destination_n));
+
+									//list_destination_tmp->destination = preExisting;
+
+									list_destination_tmp->destination = preExisting;
+
+
+									{
+										list_destination_tmp->children = (*plist_avoid_consider_for_p2)->children;
+										list_destination_tmp->bChildrenDetermined = (*plist_avoid_consider_for_p2)->bChildrenDetermined;
+
+										(*plist_avoid_consider_for_p2)->children = NULL;
+									}
+
+
+
+									list_destination_tmp->next = e2_s_n.list_p1;
+									e2_s_n.list_p1 = list_destination_tmp;
+								
+
+									//+1 case								
+									
+								}
+								/*
+								else
+								{
+									preExisting = NULL;
+								}
+								*/
+							}
+
+
+
+							//Peter Added for test time complexity
+							if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+							{
+								uiLookupCnt += uiInnerExchangeLUCnt;
+
+								//if (node->nodeId == NODE_ID_FOR_TEST_OUTER_ANGLE || node->nodeId == NODE_ID_FOR_TEST_OUTER_EDGE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_ANGLE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_EDGE || node->nodeId == NODE_ID_FOR_TEST_CENTER)
+								if (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END)
+								{
+									uiLookupCnt++;
+
+								}
+							}
+
+							//topo_dest = topo_dest->next;
+						}
+					}
+
+
+					destination_n_1 = *plist_avoid_consider_for_p2;
+					*plist_avoid_consider_for_p2 = (*plist_avoid_consider_for_p2)->next;
+					
+					if (g_iToAchieveSameRoute == 1 && bNotDeleteForSameRouteSP)
+					{
+						
+						destination_n_1->next = list_avoid_consider_for_p2_remain;
+						list_avoid_consider_for_p2_remain = destination_n_1;
+					}
+					else
+					{
+						
+						if (g_iToAchieveSameRoute == 1)
+						{
+							
+							remove_from_tco_node_addr_set(ptco_avoid_consider_list, destination_n_1->destination->rt_entry_infos.rtu_dst.interfaceAddr.ipv4);
+						}
+
+						MEM_free(destination_n_1);
+					
+					}					
+					
+				}
+
+			}
+
+
+
+			if (g_iToAchieveSameRoute == 1)
+			{
+
+			}
+			else
+			{
+				clear_tco_node_addr_set(ptco_avoid_consider_list);
+			}
+
+			
+			destination_n * list_avoid_consider_for_p1 = NULL;
+			tco_node_addr * tco_avoid_consider_list_p1 = NULL;
+
+
+
+			uiInnerExchangeLUCnt = 0;
+
+			if (g_iToAchieveSameRoute == 1)
+			{
+
+				//p1 list, +0 exchange
+				if (e2_s_n.list_p1 != NULL)
+				{
+								
+					while (e2_s_n.list_p1 != NULL)
+					{
+				
+						destination_n* destination_n_1 = NULL;
+						destination_list* topo_dest = NULL;
+						
+						if (e2_s_n.list_p1->bChildrenDetermined)
+						{
+							
+							destination_n * dst_child = e2_s_n.list_p1->children;
+							while (dst_child != NULL)
+							{
+								
+
+								Address addrReached = dst_child->destination->rt_entry_infos.rtu_dst;							
+
+								UInt32 uiInnerExchangeLUCnt = 0;
+
+								OlsrCalculateRoutingTableForSinglePathTopologySearchHelpFuncV24(node, dst_child, addrReached, e2_s_n.list_p1, &e2_s_n.list_p0, 
+									&list_avoid_consider_for_p1, &uiInnerExchangeLUCnt, &tco_avoid_consider_list_p1, ptco_avoid_consider_list);
+
+								dst_child = dst_child->next;
+							}
+						}
+						else
+						{
+
+							topology_last_entry* topo_last = OlsrLookupLastTopologyTableSYM(node, e2_s_n.list_p1->destination->rt_dst);
+
+							if (NULL != topo_last)
+							{
+								topo_dest = topo_last->topology_list_of_destinations;
+
+								while (topo_dest != NULL)
+								{
+
+									Address addrReached = topo_dest->destination_node->topology_destination_dst;							
+
+									UInt32 uiInnerExchangeLUCnt = 0;
+
+									OlsrCalculateRoutingTableForSinglePathTopologySearchHelpFuncV24(node, NULL, addrReached, e2_s_n.list_p1, &e2_s_n.list_p0, 
+										&list_avoid_consider_for_p1, &uiInnerExchangeLUCnt, &tco_avoid_consider_list_p1, ptco_avoid_consider_list);
+
+									topo_dest = topo_dest->next;
+								}
+							}
+						}
+						
+						
+
+						destination_n_1 = e2_s_n.list_p1;
+						e2_s_n.list_p1 = e2_s_n.list_p1->next;
+						MEM_free(destination_n_1);
+					}
+				
+				
+				}
+
+
+
+
+				if (list_avoid_consider_for_p1 != NULL)
+				{
+								
+					while (list_avoid_consider_for_p1 != NULL)
+					{
+						
+						destination_n* destination_n_1 = NULL;
+					
+						if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+						{
+							uiLookupCnt++;
+						}
+						
+							
+						//while (topo_dest != NULL)
+						{
+
+							Address addrReached = list_avoid_consider_for_p1->destination->rt_dst;
+
+							UInt32 uiInnerExchangeLUCnt = 0;
+						
+							rt_entry* preExisting = list_avoid_consider_for_p1->destination;
+
+							
+							preExisting->rt_entry_infos.bCostChanged = FALSE;
+							preExisting->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+							preExisting->rt_entry_infos.bRequireDelete = FALSE;
+
+							preExisting->rt_entry_infos.uiCostChg = 0;
+
+
+							BOOL bExchangeFound = FindRouteExchangeV21(node, list_avoid_consider_for_p1, preExisting, TRUE, NULL, &uiInnerExchangeLUCnt, FALSE, ptco_avoid_consider_list, &tco_avoid_consider_list_p1, NULL, &tmp_tco_avoid_consider_list);
+							if (!bExchangeFound)
+							{
+
+								//should certainly find
+
+							}
+							else
+							{
+								if (preExisting->rt_entry_infos.bDescendentRequireFurtherUpdate)
+								{
+
+									destination_n* list_destination_tmp;
+									list_destination_tmp = (destination_n* )
+										MEM_malloc(sizeof(destination_n));
+
+									memset(
+										list_destination_tmp,
+										0,
+										sizeof(destination_n));
+
+									//list_destination_tmp->destination = preExisting;
+
+									list_destination_tmp->destination = preExisting;
+
+									{
+										list_destination_tmp->children = list_avoid_consider_for_p1->children;
+										list_destination_tmp->bChildrenDetermined = list_avoid_consider_for_p1->bChildrenDetermined;
+
+										list_avoid_consider_for_p1->children = NULL;
+									}
+
+									list_destination_tmp->next = e2_s_n_1.list_p1;
+									e2_s_n_1.list_p1 = list_destination_tmp;
+								
+
+									//+1 case								
+									
+								}
+								
+							}
+
+
+
+							//Peter Added for test time complexity
+							if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+							{
+								uiLookupCnt += uiInnerExchangeLUCnt;
+
+								//if (node->nodeId == NODE_ID_FOR_TEST_OUTER_ANGLE || node->nodeId == NODE_ID_FOR_TEST_OUTER_EDGE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_ANGLE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_EDGE || node->nodeId == NODE_ID_FOR_TEST_CENTER)
+								if (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END)
+								{
+									uiLookupCnt++;
+
+								}
+							}
+						
+						}
+						
+
+
+						destination_n_1 = list_avoid_consider_for_p1;
+						list_avoid_consider_for_p1 = list_avoid_consider_for_p1->next;
+												
+						
+						remove_from_tco_node_addr_set(&tco_avoid_consider_list_p1, destination_n_1->destination->rt_entry_infos.rtu_dst.interfaceAddr.ipv4);
+						
+						MEM_free(destination_n_1);			
+								
+						
+					}
+
+				}
+
+
+				clear_tco_node_addr_set(&tco_avoid_consider_list_p1);
+
+
+				//+2 exchange for +2 list
+				if (list_avoid_consider_for_p2_remain != NULL)
+				{
+								
+					while (list_avoid_consider_for_p2_remain != NULL)
+					{
+
+						
+						//DebugBreak();
+						destination_n* destination_n_1 = NULL;
+						//destination_list* topo_dest = NULL;
+						//topology_last_entry* topo_last = OlsrLookupLastTopologyTableSYM(node, list_avoid_consider_for_p2->destination->rt_dst);
+						if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+						{
+							uiLookupCnt++;
+						}
+
+						//if (NULL != topo_last)
+						{
+							//topo_dest = topo_last->topology_list_of_destinations;
+
+							//while (topo_dest != NULL)
+							{
+
+								Address addrReached = list_avoid_consider_for_p2_remain->destination->rt_dst;
+
+								UInt32 uiInnerExchangeLUCnt = 0;
+							
+								rt_entry* preExisting = list_avoid_consider_for_p2_remain->destination;
+
+								
+								preExisting->rt_entry_infos.bCostChanged = FALSE;
+								preExisting->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+								preExisting->rt_entry_infos.bRequireDelete = FALSE;
+
+								preExisting->rt_entry_infos.uiCostChg = 0;
+
+								BOOL bExchangeFound = FindRouteExchangeV22(node, list_avoid_consider_for_p2_remain, preExisting, TRUE, NULL, &uiInnerExchangeLUCnt, FALSE, ptco_avoid_consider_list, NULL, &tmp_tco_avoid_consider_list);
+								
+								if (!bExchangeFound)
+								{
+
+									//should find one
+
+								}
+								else
+								{
+									if (preExisting->rt_entry_infos.bDescendentRequireFurtherUpdate)
+									{
+
+										destination_n* list_destination_tmp;
+										list_destination_tmp = (destination_n* )
+											MEM_malloc(sizeof(destination_n));
+
+										memset(
+											list_destination_tmp,
+											0,
+											sizeof(destination_n));
+
+										//list_destination_tmp->destination = preExisting;
+
+										list_destination_tmp->destination = preExisting;
+
+										{
+											list_destination_tmp->children = list_avoid_consider_for_p2_remain->children;
+											list_destination_tmp->bChildrenDetermined = list_avoid_consider_for_p2_remain->bChildrenDetermined;
+
+											list_avoid_consider_for_p2_remain->children = NULL;
+										}
+
+
+										list_destination_tmp->next = e2_s_n_1.list_p2;
+										e2_s_n_1.list_p2 = list_destination_tmp;
+									
+
+										//+2 case								
+										
+									}
+									
+								}
+
+
+
+								//Peter Added for test time complexity
+								if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+								{
+									uiLookupCnt += uiInnerExchangeLUCnt;
+
+									//if (node->nodeId == NODE_ID_FOR_TEST_OUTER_ANGLE || node->nodeId == NODE_ID_FOR_TEST_OUTER_EDGE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_ANGLE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_EDGE || node->nodeId == NODE_ID_FOR_TEST_CENTER)
+									if (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END)
+									{
+										uiLookupCnt++;
+
+									}
+								}
+
+								//topo_dest = topo_dest->next;
+							}
+						}
+
+						destination_n_1 = list_avoid_consider_for_p2_remain;
+						list_avoid_consider_for_p2_remain = list_avoid_consider_for_p2_remain->next;
+
+						//remove_from_tco_node_addr_set(&tco_avoid_consider_list, destination_n_1->destination->rt_entry_infos.rtu_dst.interfaceAddr.ipv4);
+
+						MEM_free(destination_n_1);						
+												
+					}
+
+				}
+
+				clear_tco_node_addr_set(ptco_avoid_consider_list);
+				clear_tco_node_addr_set(&tmp_tco_avoid_consider_list);				
+
+			}
+			else
+			{
+
+				SubFuncForLoopHelpFuncV22(node, (&e2_s_n.list_p1), NULL, &e2_s_n, &e2_s_n_1, &uiInnerExchangeLUCnt);
+			}
+
+
+
+
+			/*
+			//delete exchange for 0
+
+			//TO_IMPROVE_PERFORMANCE
+			//list_destination_tmp->next = e2_s_n_1.list_delete;
+			//e2_s_n_1.list_delete = list_destination_tmp;
+			
+			if (tmp_last_destination != NULL)
+			{
+				//tmp_last_destination = list_destination_recent_delete;
+
+				destination_n* tmp_dst = NULL;
+
+				destination_n* p_tail = NULL;
+				destination_n* p_tail_p0 = NULL;
+
+				tmp_dst = list_destination_recent_delete;
+
+				while (tmp_dst != NULL)
+				{
+					
+					{
+						//tmp_dst->destination->rt_entry_infos.rtu_metric = MAX_COST;
+
+						if (e2_s_n_1.list_delete == NULL)
+						{
+							if (tmp_dst->children != NULL)
+							{
+
+								e2_s_n_1.list_delete = tmp_dst->children;
+								//*p_tmp_destination_tail = destination_n_1;
+								
+								p_tail = e2_s_n_1.list_delete;
+								
+								while (p_tail->next != NULL)
+								{
+									p_tail = p_tail->next;
+								}
+							}
+						
+						}
+						else
+						{
+
+							if (tmp_dst->children != NULL)
+							{
+								p_tail->next = tmp_dst->children;
+
+								while (p_tail->next != NULL)
+								{
+									p_tail = p_tail->next;
+								}
+							}						
+
+							//(*p_tmp_destination_tail)->next = destination_n_1;
+							//*p_tmp_destination_tail = (*p_tmp_destination_tail)->next;
+
+							//(*p_list_destination_n_1)->next = destination_n_1;
+						}
+
+
+						tmp_dst->children = NULL;
+					}
+
+
+
+
+					tmp_dst = tmp_dst->next;
+				}
+
+
+
+				tmp_last_destination->next = *list_destination_delete;
+				*list_destination_delete = list_destination_recent_delete;
+				
+			}
+			*/
+
+
+			/*
+			if (e2_s_n.list_delete != NULL)
+			{
+				destination_n * tmp_destination = NULL;
+
+				tmp_destination = e2_s_n.list_delete;
+
+				while (tmp_destination != NULL)
+				{
+			
+					destination_n* destination_n_1 = NULL;
+					destination_list* topo_dest = NULL;
+					
+					if (tmp_destination->bChildrenDetermined)
+					{
+
+						destination_n * dst_child = tmp_destination->children;
+						while (dst_child != NULL)
+						{
+
+							Address addrReached = dst_child->destination->rt_entry_infos.rtu_dst;							
+
+							UInt32 uiInnerExchangeLUCnt = 0;
+
+							OlsrCalculateRoutingTableForSinglePathTopologySearchHelpFuncV23(node, dst_child, e2_s_n, addrReached, tmp_destination, e2_s_n.list_p0, NULL, &uiInnerExchangeLUCnt, NULL);
+
+							
+							dst_child = dst_child->next;
+						}
+					}
+					else
+					{
+
+						topology_last_entry* topo_last = OlsrLookupLastTopologyTableSYM(node, tmp_destination->destination->rt_dst);
+					
+
+						if (NULL != topo_last)
+						{
+
+							topo_dest = topo_last->topology_list_of_destinations;
+							while (topo_dest != NULL)
+							{
+
+								Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+
+								UInt32 uiInnerExchangeLUCnt = 0;
+							
+								OlsrCalculateRoutingTableForSinglePathTopologySearchHelpFuncV23(node, NULL, e2_s_n, addrReached, tmp_destination, e2_s_n.list_p0, NULL, &uiInnerExchangeLUCnt, NULL);
+
+							
+								topo_dest = topo_dest->next;
+							}
+						}
+					}
+								
+
+					tmp_destination = tmp_destination->next;
+				
+				}
+
+				
+				while (e2_current.list_p2 != NULL)
+				{
+					destination_n* destination_n_1 = NULL;
+					destination_n_1 = e2_current.list_p2;
+					e2_current.list_p2 = e2_current.list_p2->next;
+					MEM_free(destination_n_1);
+				}
+				
+
+			}
+			*/
+
+			
+			
+
+			DeleteListProgress(node, &e2_s_n, &e2_s_n_1, ptna_delete, list_destination_delete);
+
+			
+
+			if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+			{
+				uiLookupCnt += uiInnerExchangeLUCnt;
+			}
+
+
+		
+
+
+			uiInnerExchangeLUCnt = 0;
+			SubFuncForLoopHelpFuncV23(node, e2_s_n_1, &e2_s_n.list_p0, plist_avoid_consider_for_p2, &uiInnerExchangeLUCnt, ptco_avoid_consider_list);
+
+			if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+			{
+				uiLookupCnt += uiInnerExchangeLUCnt;
+			}
+
+
+			
+
+			uiInnerExchangeLUCnt = 0;
+
+			SubFuncForLoopHelpFuncV22(node, (&e2_s_n.list_p0), NULL, NULL,  &e2_s_n_1, &uiInnerExchangeLUCnt, ptco_avoid_consider_list);
+
+			if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+			{
+				uiLookupCnt += uiInnerExchangeLUCnt;
+			}
+
+
+		
+			uiStartCost++;
+
+			e2_s_n.list_delete = e2_s_n_1.list_delete;
+			e2_s_n.list_p0 = e2_s_n_1.list_p0;
+			e2_s_n.list_p1 = e2_s_n_1.list_p1;
+			e2_s_n.list_p2 = e2_s_n_1.list_p2;
+			
+
+		}
+
+
+
+		clear_tco_node_addr_set(ptco_avoid_consider_list);
+
+
+}
+
+
+destination_n* ProcessRoutingTableAccordingToRecentAddListV45(Node* node, UInt32 * puiLookupCntForAddList)
+{
+	destination_n* list_destination_n = NULL;
+
+	RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+
+
+	UInt32 uiLCFA = 0;
+
+
+	if (remove_from_tco_node_addr_set(&olsr->recent_add_list, olsr->naRecentChangedAddressByTC))
+	{
+		//include the route itself and new 2hop neighbors are added
+
+
+		UInt16 uiOldCostTC = MAX_COST;
+
+		if (olsr->bNeighborChgCausedRemoveFromHigherHop)
+		{
+
+			rt_entry* prteTC = QueryRoutingTableAccordingToNodeId(node, olsr->naRecentChangedAddressByTC);
+
+
+			if (_TEST_TIME_COMPLEXITY && puiLookupCntForAddList)
+			{
+				uiLCFA++;
+			}
+							
+
+			if (prteTC != NULL)
+			{
+
+				uiOldCostTC = prteTC->rt_metric;
+
+				//this should be true
+
+				topology_last_entry* topo_last = NULL;
+				destination_list* topo_dest = NULL;
+				if (SYMMETRIC_TOPOLOGY_TABLE)
+				{
+					topo_last = OlsrLookupLastTopologyTableSYM(node, prteTC->rt_dst);
+				}
+				else
+				{
+					topo_last = OlsrLookupLastTopologyTable(node, prteTC->rt_dst);
+				}
+
+
+				if (NULL != topo_last)
+				{
+					topo_dest = topo_last->topology_list_of_destinations;
+
+					while (topo_dest != NULL)
+					{
+
+						Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+
+
+						topo_dest = topo_dest->next;
+
+						BOOL b2HopNeighborCausedConnection = FALSE;
+
+						b2HopNeighborCausedConnection = ConnectivetyCausedBy2HopNeighbor(node, addrReached, olsr->naRecentChangedAddressByTC);
+						if (b2HopNeighborCausedConnection)
+						{
+							continue;
+						}
+
+
+						rt_entry* prte_tmp = QueryRoutingTableAccordingToNodeId(node, addrReached.interfaceAddr.ipv4);
+
+						if (_TEST_TIME_COMPLEXITY && puiLookupCntForAddList)
+						{
+							uiLCFA++;
+						}
+
+						if (prte_tmp != NULL)
+						{
+							if (prte_tmp->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == olsr->naRecentChangedAddressByTC)
+							{
+								//insert_into_tco_node_addr_set(&(destination_list_n_1), addrReached.interfaceAddr.ipv4);
+
+								//OlsrDeleteRoutingTable(prte_tmp);
+
+								//prte_tmp->rt_metric = MAX_COST;
+
+								insert_into_tco_node_addr_set(&(olsr->recent_delete_list), addrReached.interfaceAddr.ipv4);
+								//insert_into_tco_node_addr_set(&disconnected_list, addrReached.interfaceAddr.ipv4);
+
+							}
+						}				
+
+
+					}
+				}
+
+
+			}
+
+
+						
+			
+
+			//exchange??
+			//currently just use the most easy way that form the delete list
+
+			/*
+			if (disconnected_list != NULL && prteTC->rt_metric > 2)
+			{
+				printf("********************************** disconnected_list != NULL, for node %d and olsr->naRecentChangedAddressByTC %d, with prteTC->rt_metric %d, include but not limit to %d \n", node->nodeId, olsr->naRecentChangedAddressByTC, prteTC->rt_metric, disconnected_list->nid);
+			}
+			*/
+
+
+			
+
+			//so all the descendants of this old 2Hop neighbor were deleted, and traced in  olsr->recent_delete_list
+		}
+
+		if (olsr->recent_add_list == NULL)
+		{
+			OlsrFillRoutingTableWithSpecificNeighbor(node, olsr->naRecentChangedAddressByTC);
+			//see ###$$$ in file Speed-10-6x6-low-TraceRT_SP_ARC_2_tmp15, a special case, may need further study
+			
+			//it seems it is possible for old un-used 2hop neighbor to exist (seems unreasonable, but do exist)
+			list_destination_n = OlsrFillRoutingTableWith2HopNeighborsForSpecificNeighbor(node, olsr->naRecentChangedAddressByTC, &uiLCFA);
+		}
+		else
+		{
+			OlsrFillRoutingTableWithSpecificNeighbor(node, olsr->naRecentChangedAddressByTC);
+			list_destination_n = OlsrFillRoutingTableWith2HopNeighborsForSpecificNeighbor(node, olsr->naRecentChangedAddressByTC, &uiLCFA);
+		}
+
+
+		if (olsr->bNeighborChgCausedRemoveFromHigherHop) 
+		{
+
+			if (olsr->recent_delete_list != NULL)
+			{
+
+				tco_node_addr * tmp_recent_delete_list = NULL;
+				
+				tco_node_addr * tmp_addr = olsr->recent_delete_list;
+				
+				
+				
+				while (tmp_addr != NULL)
+				{
+
+					insert_into_tco_node_addr_set(&(tmp_recent_delete_list), tmp_addr->nid);
+
+					tmp_addr = tmp_addr->next;
+				}
+
+				tmp_addr = tmp_recent_delete_list;
+
+
+				//destination_n * list_p0_n = NULL;
+				e2_s e2s_n;
+				e2_s e2s_n_1;
+
+				e2s_n.list_delete = NULL;
+				e2s_n.list_p0 = NULL;
+				e2s_n.list_p1 = NULL;
+				e2s_n.list_p2 = NULL;
+
+				e2s_n_1.list_delete = NULL;
+				e2s_n_1.list_p0 = NULL;
+				e2s_n_1.list_p1 = NULL;
+				e2s_n_1.list_p2 = NULL;
+				
+				
+				//uiOldCostTC = 2 means the cost for nodes in current delete list = 3
+				if (list_destination_n != NULL && uiOldCostTC != 2)
+				{
+
+					//just let them to be deleted
+				
+				}
+				else
+				{
+
+					//exchange, since no other can reduce its cost
+
+					//just try to exchange with same cost
+					//and leave it to delete list otherwise
+
+					
+
+					{
+
+
+						while (tmp_addr != NULL)
+						{
+
+							rt_entry* prte = QueryRoutingTableAccordingToNodeId(node, tmp_addr->nid);
+
+
+							if (_TEST_TIME_COMPLEXITY && puiLookupCntForAddList)
+							{
+								uiLCFA++;
+							}
+
+
+							if (prte != NULL)
+							{
+
+								//the exchange here need to support unconsider set,
+								//to avoid circular dependency 
+
+								prte->rt_entry_infos.uiCostChg = 0;
+
+								prte->rt_entry_infos.bCostChanged = FALSE;
+								prte->rt_entry_infos.bDescendentRequireFurtherUpdate = FALSE;
+								prte->rt_entry_infos.bRequireDelete = FALSE;
+
+
+								BOOL bExchangeFound = FindRouteExchangeV20(node, NULL, prte, FALSE, NULL);
+								if (!bExchangeFound)
+								{
+
+
+								}
+								else
+								{
+
+									
+									remove_from_tco_node_addr_set(&(olsr->recent_delete_list), tmp_addr->nid);
+
+									if (prte->rt_entry_infos.bDescendentRequireFurtherUpdate)
+									{
+
+										//route change
+
+										destination_n* list_destination_tmp;
+										list_destination_tmp = (destination_n* )
+											MEM_malloc(sizeof(destination_n));
+
+										memset(
+											list_destination_tmp,
+											0,
+											sizeof(destination_n));
+
+										list_destination_tmp->destination = prte;
+
+
+
+										//only route change
+
+										list_destination_tmp->next = e2s_n.list_p0;
+										e2s_n.list_p0 = list_destination_tmp;
+
+									
+									}
+									else
+									{
+										//perfect exchange
+										
+									}
+
+								}
+							}
+
+							tmp_addr = tmp_addr->next;
+						}
+
+
+
+					}
+
+				}
+				
+				
+				
+				//if (list_destination_n != NULL)
+				{
+					
+
+					
+					/*
+					while (tmp_addr != NULL)
+					{
+						destination_n* tmp_destination = list_destination_n;
+
+						while (tmp_destination != NULL)
+						{
+
+							topology_last_entry* topo_last = NULL;
+							destination_list* topo_dest = NULL;
+
+							topo_last = OlsrLookupLastTopologyTableSYM(node, tmp_destination->destination->rt_dst);
+
+							if (NULL != topo_last)
+							{
+								topo_dest = topo_last->topology_list_of_destinations;
+
+								while (topo_dest != NULL)
+								{
+
+									Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+									if (addrReached.interfaceAddr.ipv4 == tmp_addr->nid)
+									{
+
+										
+									}
+
+									topo_dest = topo_dest->next;
+								}
+							}
+
+							tmp_destination = tmp_destination->next;
+						}
+						
+				
+						tmp_addr = tmp_addr->next;
+					}
+					*/
+				 
+				}
+				
+				
+				
+				if (tmp_recent_delete_list != NULL)
+				{
+					clear_tco_node_addr_set(&tmp_recent_delete_list);
+				}
+				
+
+				tmp_addr = olsr->recent_delete_list;
+
+
+				destination_n * list_delete_n = NULL;
+				destination_n * list_delete_n_1 = NULL;
+				
+				while (tmp_addr != NULL)
+				{
+
+					
+					rt_entry* prtetmp = QueryRoutingTableAccordingToNodeId(node, tmp_addr->nid);
+
+
+					if (_TEST_TIME_COMPLEXITY && puiLookupCntForAddList)
+					{
+						uiLCFA++;
+					}
+
+					if (prtetmp != NULL)
+					{
+						
+						//
+						//prtetmp->rt_metric = MAX_COST;
+
+						
+						destination_n* list_destination_tmp;
+						list_destination_tmp = (destination_n* )
+							MEM_malloc(sizeof(destination_n));
+
+						memset(
+							list_destination_tmp,
+							0,
+							sizeof(destination_n));
+
+						list_destination_tmp->destination = prtetmp;
+
+
+						list_destination_tmp->next = list_delete_n;
+						list_delete_n = list_destination_tmp;
+
+						
+						//OlsrDeleteRoutingTable(prtetmp);
+					}
+					
+					tmp_addr = tmp_addr->next;
+				}
+
+				
+				clear_tco_node_addr_set(&olsr->recent_delete_list);
+				
+				
+				
+
+				//list_delete_n = NULL;
+				list_delete_n_1 = list_delete_n;
+
+				if (list_delete_n != NULL)
+				{
+
+					while (list_delete_n_1 != NULL)
+					{
+						list_delete_n_1 = NULL;
+
+
+
+						while (list_delete_n != NULL)
+						{
+							//DebugBreak();
+							destination_n* destination_n_1 = NULL;
+							destination_list* topo_dest = NULL;
+							topology_last_entry* topo_last = OlsrLookupLastTopologyTableSYM(node, list_delete_n->destination->rt_dst);
+							
+							/*
+							if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+							{
+								uiLookupCnt++;
+							}
+							*/
+
+
+							BOOL bInsideNode = TRUE;
+
+							if (NULL != topo_last)
+							{
+								topo_dest = topo_last->topology_list_of_destinations;
+
+								while (topo_dest != NULL)
+								{
+
+									Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+									/*
+									if (RoutingOlsrCheckMyIfaceAddress(
+										node,
+										topo_dest->destination_node->topology_destination_dst) != -1)
+									{
+										topo_dest = topo_dest->next;
+										continue;
+									}
+									*/
+
+
+									UInt32 uiInnerExchangeLUCnt = 0;
+									
+									rt_entry* prteNearby = QueryRoutingTableAccordingToNodeId(node, addrReached.interfaceAddr.ipv4);
+
+									if (_TEST_TIME_COMPLEXITY && puiLookupCntForAddList)
+									{
+										uiLCFA++;
+									}
+
+									if (prteNearby != NULL)
+									{
+
+										if (prteNearby->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == list_delete_n->destination->rt_entry_infos.rtu_dst.interfaceAddr.ipv4)
+										{
+
+
+											//prteNearby->rt_metric = MAX_COST;
+
+											destination_n* list_destination_tmp;
+											list_destination_tmp = (destination_n* )
+												MEM_malloc(sizeof(destination_n));
+
+											memset(
+												list_destination_tmp,
+												0,
+												sizeof(destination_n));
+
+											list_destination_tmp->destination = prteNearby;
+											
+
+											list_destination_tmp->next = list_delete_n_1;
+											list_delete_n_1 = list_destination_tmp;
+											
+											//insert_into_tco_node_addr_set(&(destination_list_n_1), addrReached.interfaceAddr.ipv4);
+
+											//OlsrDeleteRoutingTable(prte_tmp);
+
+											//insert_into_tco_node_addr_set(&(olsr->recent_add_list), addrReached.interfaceAddr.ipv4);
+
+										}
+										else
+										{
+											if (list_delete_n->destination->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == prteNearby->rt_entry_infos.rtu_dst.interfaceAddr.ipv4)
+											{
+
+
+											}
+											else
+											{
+
+												//if there is any other adjacent nodes outside the tree, then 
+
+												bInsideNode = FALSE;
+
+											}
+										}
+									
+									}
+									
+						
+
+									topo_dest = topo_dest->next;
+								}
+							}
+
+							destination_n_1 = list_delete_n;
+							list_delete_n = list_delete_n->next;
+							//MEM_free(destination_n_1);
+
+							if (!bInsideNode)
+							{
+
+								insert_into_tco_node_addr_set(&olsr->recent_delete_list, destination_n_1->destination->rt_entry_infos.rtu_dst.interfaceAddr.ipv4);
+							}
+
+							OlsrDeleteRoutingTable(destination_n_1->destination);
+							MEM_free(destination_n_1);
+							
+
+						}
+
+
+						list_delete_n = list_delete_n_1;
+
+					}
+									
+				}
+
+
+
+				if (e2s_n.list_p0 != NULL)
+				{
+
+					//destination_n * list_p0_n_1 = list_p0_n;
+					e2s_n_1.list_p0 = e2s_n.list_p0;
+
+					while (e2s_n_1.list_p0 != NULL)
+					{
+
+						e2s_n_1.list_p0 = NULL;				
+
+						while (e2s_n.list_p0 != NULL)
+						{
+							//DebugBreak();
+							destination_n* destination_n_1 = NULL;
+							destination_list* topo_dest = NULL;
+							topology_last_entry* topo_last = OlsrLookupLastTopologyTableSYM(node, e2s_n.list_p0->destination->rt_dst);
+							
+							/*
+							if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+							{
+								uiLookupCnt++;
+							}
+							*/
+
+							if (NULL != topo_last)
+							{
+								topo_dest = topo_last->topology_list_of_destinations;
+
+								while (topo_dest != NULL)
+								{
+
+									Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+									/*
+									if (RoutingOlsrCheckMyIfaceAddress(
+										node,
+										topo_dest->destination_node->topology_destination_dst) != -1)
+									{
+										topo_dest = topo_dest->next;
+										continue;
+									}
+									*/
+
+
+									UInt32 uiInnerExchangeLUCnt = 0;
+
+
+
+									OlsrCalculateRoutingTableForSinglePathTopologySearchHelpFuncV22(node, NULL, addrReached, e2s_n.list_p0, NULL, NULL, &e2s_n_1, &uiInnerExchangeLUCnt);
+
+
+									if (_TEST_TIME_COMPLEXITY && puiLookupCntForAddList)
+									{
+										uiLCFA += uiInnerExchangeLUCnt;
+									}
+
+									//Peter Added for test time complexity
+									/*
+									if (_TEST_TIME_COMPLEXITY && puiLookupCntForDeleteList)
+									{
+										uiLookupCnt += uiInnerExchangeLUCnt;
+
+										//if (node->nodeId == NODE_ID_FOR_TEST_OUTER_ANGLE || node->nodeId == NODE_ID_FOR_TEST_OUTER_EDGE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_ANGLE || node->nodeId == NODE_ID_FOR_TEST_MIDDLE_EDGE || node->nodeId == NODE_ID_FOR_TEST_CENTER)
+										if (node->nodeId >= NODE_ID_FOR_TEST_START && node->nodeId <= NODE_ID_FOR_TEST_END)
+										{
+											uiLookupCnt++;
+
+										}
+									}
+									*/
+
+									topo_dest = topo_dest->next;
+								}
+							}
+
+							destination_n_1 = e2s_n.list_p0;
+							e2s_n.list_p0 = e2s_n.list_p0->next;
+							MEM_free(destination_n_1);
+						}
+
+
+						e2s_n.list_p0 = e2s_n_1.list_p0;
+					}
+
+					
+				}
+
+
+				
+
+			}
+			else
+			{
+				//no further process required, since the following update discovery will deal with all TC's old children
+
+			}
+
+		}
+
+
+	}
+	else
+	{
+		//only 2hop neighbors are new added
+
+		list_destination_n = OlsrFillRoutingTableWith2HopNeighborsForSpecificNeighbor(node, olsr->naRecentChangedAddressByTC, &uiLCFA);
+
+		
+	}
+
+	if (_TEST_TIME_COMPLEXITY && puiLookupCntForAddList != NULL)
+	{
+		*puiLookupCntForAddList += uiLCFA;
+	}	
+
+
+	return list_destination_n;
+}
+
+
+
+destination_n* ProcessRoutingTableAccordingToRecentAddListV44(Node* node, UInt32 * puiLookupCntForAddList)
+{
+
+	destination_n* list_destination_n = NULL;
+
+	RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+
+
+	UInt32 uiLCFA = 0;
+
+
+	if (remove_from_tco_node_addr_set(&olsr->recent_add_list, olsr->naRecentChangedAddressByTC))
+	{
+		//include the route itself and new 2hop neighbors are added
+
+
+		UInt16 uiOldCostTC = MAX_COST;
+
+		if (olsr->bNeighborChgCausedRemoveFromHigherHop)
+		{
+
+			rt_entry* prteTC = QueryRoutingTableAccordingToNodeId(node, olsr->naRecentChangedAddressByTC);
+
+
+			if (_TEST_TIME_COMPLEXITY && puiLookupCntForAddList)
+			{
+				uiLCFA++;
+			}
+							
+
+			if (prteTC != NULL)
+			{
+
+				uiOldCostTC = prteTC->rt_metric;
+
+				//this should be true
+
+				topology_last_entry* topo_last = NULL;
+				destination_list* topo_dest = NULL;
+				if (SYMMETRIC_TOPOLOGY_TABLE)
+				{
+					topo_last = OlsrLookupLastTopologyTableSYM(node, prteTC->rt_dst);
+				}
+				else
+				{
+					topo_last = OlsrLookupLastTopologyTable(node, prteTC->rt_dst);
+				}
+
+
+				if (NULL != topo_last)
+				{
+					topo_dest = topo_last->topology_list_of_destinations;
+
+					while (topo_dest != NULL)
+					{
+
+						Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+
+
+						topo_dest = topo_dest->next;
+
+						BOOL b2HopNeighborCausedConnection = FALSE;
+
+						b2HopNeighborCausedConnection = ConnectivetyCausedBy2HopNeighbor(node, addrReached, olsr->naRecentChangedAddressByTC);
+						if (b2HopNeighborCausedConnection)
+						{
+							continue;
+						}
+
+
+						rt_entry* prte_tmp = QueryRoutingTableAccordingToNodeId(node, addrReached.interfaceAddr.ipv4);
+
+						if (_TEST_TIME_COMPLEXITY && puiLookupCntForAddList)
+						{
+							uiLCFA++;
+						}
+
+						if (prte_tmp != NULL)
+						{
+							if (prte_tmp->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == olsr->naRecentChangedAddressByTC)
+							{
+								//insert_into_tco_node_addr_set(&(destination_list_n_1), addrReached.interfaceAddr.ipv4);
+
+								OlsrDeleteRoutingTable(prte_tmp);
+
+								//prte_tmp->rt_metric = MAX_COST;
+
+								insert_into_tco_node_addr_set(&(olsr->recent_delete_list), addrReached.interfaceAddr.ipv4);
+								//insert_into_tco_node_addr_set(&disconnected_list, addrReached.interfaceAddr.ipv4);
+
+							}
+						}				
+
+
+					}
+				}
+
+
+			}
+
+
+			
+
+			
+
+			//so all the descendants of this old 2Hop neighbor were deleted, and traced in  olsr->recent_delete_list
+		}
+
+
+		if (olsr->recent_add_list == NULL)
+		{
+			OlsrFillRoutingTableWithSpecificNeighbor(node, olsr->naRecentChangedAddressByTC);
+			//see ###$$$ in file Speed-10-6x6-low-TraceRT_SP_ARC_2_tmp15, a special case, may need further study
+			
+			//it seems it is possible for old un-used 2hop neighbor to exist (seems unreasonable, but do exist)
+			list_destination_n = OlsrFillRoutingTableWith2HopNeighborsForSpecificNeighbor(node, olsr->naRecentChangedAddressByTC, &uiLCFA);
+		}
+		else
+		{
+			OlsrFillRoutingTableWithSpecificNeighbor(node, olsr->naRecentChangedAddressByTC);
+			list_destination_n = OlsrFillRoutingTableWith2HopNeighborsForSpecificNeighbor(node, olsr->naRecentChangedAddressByTC, &uiLCFA);
+		}
+
+
+		if (olsr->bNeighborChgCausedRemoveFromHigherHop) 
+		{
+
+			if (olsr->recent_delete_list != NULL)
+			{
+				tco_node_addr * tmp_recent_delete_list = NULL;
+
+				tco_node_addr * tmp_addr = olsr->recent_delete_list;
+
+
+
+				while (tmp_addr != NULL)
+				{
+
+					insert_into_tco_node_addr_set(&(tmp_recent_delete_list), tmp_addr->nid);
+
+					tmp_addr = tmp_addr->next;
+				}
+
+				//tmp_addr = tmp_recent_delete_list;
+
+
+				destination_n * list_delete_n = NULL;
+				destination_n * list_delete_n_1 = NULL;
+				
+					
+				tco_node_addr * destination_list_n_1 = tmp_recent_delete_list;
+				tco_node_addr * destination_list_n = tmp_recent_delete_list;
+
+				while (destination_list_n_1 != NULL)
+				{
+
+					destination_list_n_1 = NULL;
+
+					topology_last_entry* topo_last = NULL;
+					destination_list* topo_dest = NULL;
+
+
+					//Peter comment: every loop add group of destination nodes that one hop more from the source node,
+					//compare to the group in the previous loop  
+					while (destination_list_n != NULL)
+					{
+						tco_node_addr* tna_tmp = NULL;
+
+						Address addrCurrent;
+						addrCurrent.networkType = NETWORK_IPV4;
+						addrCurrent.interfaceAddr.ipv4 = destination_list_n->nid;
+
+						//Peter comment: find from the topology table if there is some entry 
+						//whose last hop equal the specific dest hop of 2 or more (* since every loop will
+						// increase the one more hop count) hop neighbors
+						if (SYMMETRIC_TOPOLOGY_TABLE)
+						{
+							topo_last = OlsrLookupLastTopologyTableSYM(node, addrCurrent);
+						}
+						else
+						{
+							topo_last = OlsrLookupLastTopologyTable(node, addrCurrent);
+						}
+
+
+						if (NULL != topo_last)
+						{
+							topo_dest = topo_last->topology_list_of_destinations;
+
+							while (topo_dest != NULL)
+							{
+
+								Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+
+								rt_entry* prte_tmp = QueryRoutingTableAccordingToNodeId(node, addrReached.interfaceAddr.ipv4);
+
+								if (_TEST_TIME_COMPLEXITY && puiLookupCntForAddList)
+								{
+									uiLCFA++;
+								}
+
+								if (prte_tmp != NULL)
+								{
+									if (prte_tmp->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == destination_list_n->nid)
+									{
+										insert_into_tco_node_addr_set(&(destination_list_n_1), addrReached.interfaceAddr.ipv4);
+
+										OlsrDeleteRoutingTable(prte_tmp);
+
+										insert_into_tco_node_addr_set(&(olsr->recent_delete_list), addrReached.interfaceAddr.ipv4);
+
+									}
+								}				
+
+
+								topo_dest = topo_dest->next;
+							}
+						}
+
+						tna_tmp = destination_list_n;
+						destination_list_n = destination_list_n->next;
+						MEM_free(tna_tmp);
+					}
+
+					destination_list_n = destination_list_n_1;
+
+				}
+				
+
+			}
+			else
+			{
+				//no further process required, since the following update discovery will deal with all TC's old children
+
+			}
+
+		}
+
+
+	}
+	else
+	{
+		//only 2hop neighbors are new added
+
+		list_destination_n = OlsrFillRoutingTableWith2HopNeighborsForSpecificNeighbor(node, olsr->naRecentChangedAddressByTC, &uiLCFA);
+
+		
+	}
+
+	if (_TEST_TIME_COMPLEXITY && puiLookupCntForAddList != NULL)
+	{
+		*puiLookupCntForAddList += uiLCFA;
+	}	
+
+
+	return list_destination_n;
+}
+
+
+destination_n* ProcessRoutingTableAccordingToRecentAddListV43(Node* node, UInt32 * puiLookupCntForAddList)
+{
+	destination_n* list_destination_n = NULL;
+
+	RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+
+
+	UInt32 uiLCFA = 0;
+
+
+	if (remove_from_tco_node_addr_set(&olsr->recent_add_list, olsr->naRecentChangedAddressByTC))
+	{
+		//include the route itself and new 2hop neighbors are added
+
+		tco_node_addr * disconnected_list = NULL;
+
+		UInt16 uiOldCostTC = MAX_COST;
+
+		if (olsr->bNeighborChgCausedRemoveFromHigherHop)
+		{
+
+		
+			//insert_into_tco_node_addr_set(&disconnected_list, olsr->naRecentChangedAddressByTC);
+
+			rt_entry* prteTC = QueryRoutingTableAccordingToNodeId(node, olsr->naRecentChangedAddressByTC);
+
+			if (prteTC != NULL)
+			{
+
+				uiOldCostTC = prteTC->rt_metric;
+
+				//this should be true
+
+				topology_last_entry* topo_last = NULL;
+				destination_list* topo_dest = NULL;
+				if (SYMMETRIC_TOPOLOGY_TABLE)
+				{
+					topo_last = OlsrLookupLastTopologyTableSYM(node, prteTC->rt_dst);
+				}
+				else
+				{
+					topo_last = OlsrLookupLastTopologyTable(node, prteTC->rt_dst);
+				}
+
+
+				if (NULL != topo_last)
+				{
+					topo_dest = topo_last->topology_list_of_destinations;
+
+					while (topo_dest != NULL)
+					{
+
+						Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+
+
+						topo_dest = topo_dest->next;
+
+						BOOL b2HopNeighborCausedConnection = FALSE;
+
+						b2HopNeighborCausedConnection = ConnectivetyCausedBy2HopNeighbor(node, addrReached, olsr->naRecentChangedAddressByTC);
+						if (b2HopNeighborCausedConnection)
+						{
+							continue;
+						}
+
+
+						rt_entry* prte_tmp = QueryRoutingTableAccordingToNodeId(node, addrReached.interfaceAddr.ipv4);
+
+						if (_TEST_TIME_COMPLEXITY && puiLookupCntForAddList)
+						{
+							uiLCFA++;
+						}
+
+						if (prte_tmp != NULL)
+						{
+							if (prte_tmp->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == olsr->naRecentChangedAddressByTC)
+							{
+								//insert_into_tco_node_addr_set(&(destination_list_n_1), addrReached.interfaceAddr.ipv4);
+
+								OlsrDeleteRoutingTable(prte_tmp);
+
+								insert_into_tco_node_addr_set(&(olsr->recent_delete_list), addrReached.interfaceAddr.ipv4);
+								insert_into_tco_node_addr_set(&disconnected_list, addrReached.interfaceAddr.ipv4);
+
+							}
+						}				
+
+
+					}
+				}
+
+
+			}
+
+
+
+			//if (disconnected_list != NULL)
+			{
+
+				/*
+				tco_node_addr * tmp_tna = disconnected_list;
+
+				while (tmp_tna != NULL)
+				{
+					
+					rt_entry* prtetmp = QueryRoutingTableAccordingToNodeId(node, tmp_tna->nid);
+					
+					if (prtetmp)
+					{
+						//OlsrDeleteRoutingTable(prtetmp);
+					}
+					
+
+					insert_into_tco_node_addr_set(&(olsr->recent_delete_list), tmp_tna->nid);
+					//insert_into_tco_node_addr_set(&disconnected_list, addrReached.interfaceAddr.ipv4);
+
+
+					tmp_tna = tmp_tna->next;
+				}
+				*/
+
+
+				tco_node_addr * destination_list_n_1 = disconnected_list;
+				tco_node_addr * destination_list_n = disconnected_list;
+
+				while (destination_list_n_1 != NULL)
+				{
+					destination_list_n_1 = NULL;
+
+					topology_last_entry* topo_last = NULL;
+					destination_list* topo_dest = NULL;
+
+
+					//Peter comment: every loop add group of destination nodes that one hop more from the source node,
+					//compare to the group in the previous loop  
+					while (destination_list_n != NULL)
+					{
+						tco_node_addr* tna_tmp = NULL;
+
+						Address addrCurrent;
+						addrCurrent.networkType = NETWORK_IPV4;
+						addrCurrent.interfaceAddr.ipv4 = destination_list_n->nid;
+
+						//Peter comment: find from the topology table if there is some entry 
+						//whose last hop equal the specific dest hop of 2 or more (* since every loop will
+						// increase the one more hop count) hop neighbors
+						if (SYMMETRIC_TOPOLOGY_TABLE)
+						{
+							topo_last = OlsrLookupLastTopologyTableSYM(node, addrCurrent);
+						}
+						else
+						{
+							topo_last = OlsrLookupLastTopologyTable(node, addrCurrent);
+						}
+
+
+						if (NULL != topo_last)
+						{
+							topo_dest = topo_last->topology_list_of_destinations;
+
+							while (topo_dest != NULL)
+							{
+
+								Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+
+								rt_entry* prte_tmp = QueryRoutingTableAccordingToNodeId(node, addrReached.interfaceAddr.ipv4);
+
+								if (_TEST_TIME_COMPLEXITY && puiLookupCntForAddList)
+								{
+									uiLCFA++;
+								}
+
+								if (prte_tmp != NULL)
+								{
+									if (prte_tmp->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == destination_list_n->nid)
+									{
+										insert_into_tco_node_addr_set(&(destination_list_n_1), addrReached.interfaceAddr.ipv4);
+
+										OlsrDeleteRoutingTable(prte_tmp);
+
+										insert_into_tco_node_addr_set(&(olsr->recent_delete_list), addrReached.interfaceAddr.ipv4);
+
+									}
+								}				
+
+
+								topo_dest = topo_dest->next;
+							}
+						}
+
+						tna_tmp = destination_list_n;
+						destination_list_n = destination_list_n->next;
+						MEM_free(tna_tmp);
+					}
+
+					destination_list_n = destination_list_n_1;
+
+				}
+
+			}
+			//else
+			{
+				//no further process required, since the following updata discovery will deal with all TC's old children
+				
+			}
+			
+			
+
+			//exchange??
+			//currently just use the most easy way that form the delete list
+
+			/*
+			if (disconnected_list != NULL && prteTC->rt_metric > 2)
+			{
+				printf("********************************** disconnected_list != NULL, for node %d and olsr->naRecentChangedAddressByTC %d, with prteTC->rt_metric %d, include but not limit to %d \n", node->nodeId, olsr->naRecentChangedAddressByTC, prteTC->rt_metric, disconnected_list->nid);
+			}
+			*/
+
+
+			
+
+			//so all the descendants of this old 2Hop neighbor were deleted, and traced in  olsr->recent_delete_list
+		}
+
+		if (olsr->recent_add_list == NULL)
+		{
+			OlsrFillRoutingTableWithSpecificNeighbor(node, olsr->naRecentChangedAddressByTC);
+			//see ###$$$ in file Speed-10-6x6-low-TraceRT_SP_ARC_2_tmp15, a special case, may need further study
+			
+			//it seems it is possible for old un-used 2hop neighbor to exist (seems unreasonable, but do exist)
+			list_destination_n = OlsrFillRoutingTableWith2HopNeighborsForSpecificNeighbor(node, olsr->naRecentChangedAddressByTC, &uiLCFA);
+		}
+		else
+		{
+			OlsrFillRoutingTableWithSpecificNeighbor(node, olsr->naRecentChangedAddressByTC);
+			list_destination_n = OlsrFillRoutingTableWith2HopNeighborsForSpecificNeighbor(node, olsr->naRecentChangedAddressByTC, &uiLCFA);
+		}
+
+
+
+		if (olsr->bNeighborChgCausedRemoveFromHigherHop)
+		{
+
+			if (disconnected_list != NULL)
+			{
+
+				/*
+				tco_node_addr * tmp_tna = disconnected_list;
+
+				while (tmp_tna != NULL)
+				{
+					
+					rt_entry* prtetmp = QueryRoutingTableAccordingToNodeId(node, tmp_tna->nid);
+					
+					if (prtetmp)
+					{
+						//OlsrDeleteRoutingTable(prtetmp);
+					}
+					
+
+					insert_into_tco_node_addr_set(&(olsr->recent_delete_list), tmp_tna->nid);
+					//insert_into_tco_node_addr_set(&disconnected_list, addrReached.interfaceAddr.ipv4);
+
+
+					tmp_tna = tmp_tna->next;
+				}
+				*/
+
+				/*
+				tco_node_addr * destination_list_n_1 = disconnected_list;
+				tco_node_addr * destination_list_n = disconnected_list;
+
+				while (destination_list_n_1 != NULL)
+				{
+					destination_list_n_1 = NULL;
+
+					topology_last_entry* topo_last = NULL;
+					destination_list* topo_dest = NULL;
+
+
+					//Peter comment: every loop add group of destination nodes that one hop more from the source node,
+					//compare to the group in the previous loop  
+					while (destination_list_n != NULL)
+					{
+						tco_node_addr* tna_tmp = NULL;
+
+						Address addrCurrent;
+						addrCurrent.networkType = NETWORK_IPV4;
+						addrCurrent.interfaceAddr.ipv4 = destination_list_n->nid;
+
+						//Peter comment: find from the topology table if there is some entry 
+						//whose last hop equal the specific dest hop of 2 or more (* since every loop will
+						// increase the one more hop count) hop neighbors
+						if (SYMMETRIC_TOPOLOGY_TABLE)
+						{
+							topo_last = OlsrLookupLastTopologyTableSYM(node, addrCurrent);
+						}
+						else
+						{
+							topo_last = OlsrLookupLastTopologyTable(node, addrCurrent);
+						}
+
+
+						if (NULL != topo_last)
+						{
+							topo_dest = topo_last->topology_list_of_destinations;
+
+							while (topo_dest != NULL)
+							{
+
+								Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+
+								rt_entry* prte_tmp = QueryRoutingTableAccordingToNodeId(node, addrReached.interfaceAddr.ipv4);
+
+								if (_TEST_TIME_COMPLEXITY && puiLookupCntForAddList)
+								{
+									uiLCFA++;
+								}
+
+								if (prte_tmp != NULL)
+								{
+									if (prte_tmp->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == destination_list_n->nid)
+									{
+										insert_into_tco_node_addr_set(&(destination_list_n_1), addrReached.interfaceAddr.ipv4);
+
+										OlsrDeleteRoutingTable(prte_tmp);
+
+										insert_into_tco_node_addr_set(&(olsr->recent_delete_list), addrReached.interfaceAddr.ipv4);
+
+									}
+								}				
+
+
+								topo_dest = topo_dest->next;
+							}
+						}
+
+						tna_tmp = destination_list_n;
+						destination_list_n = destination_list_n->next;
+						MEM_free(tna_tmp);
+					}
+
+					destination_list_n = destination_list_n_1;
+
+				}
+				*/
+
+			}
+			else
+			{
+				//no further process required, since the following updata discovery will deal with all TC's old children
+				
+			}
+			
+
+		}
+
+		clear_tco_node_addr_set(&disconnected_list);
+
+
+	}
+	else
+	{
+		//only 2hop neighbors are new added
+
+		list_destination_n = OlsrFillRoutingTableWith2HopNeighborsForSpecificNeighbor(node, olsr->naRecentChangedAddressByTC, &uiLCFA);
+
+		
+	}
+
+	if (_TEST_TIME_COMPLEXITY && puiLookupCntForAddList != NULL)
+	{
+		*puiLookupCntForAddList += uiLCFA;
+	}	
+
+
+	return list_destination_n;
+}
+
+
+destination_n* ProcessRoutingTableAccordingToRecentAddListV2(Node* node, UInt32 * puiLookupCntForAddList, tco_node_addr ** ptna_set, destination_n** plist_destination_delete)
+{
+
+	destination_n* list_destination_n = NULL;
+
+	destination_n* tmp_destination_tail = NULL;
+
+	RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+
+
+	UInt32 uiLCFA = 0;
+
+	tco_node_addr * tco_add_list_tmp = NULL;
+
+	if (ptna_set != NULL)
+	{
+
+		tco_add_list_tmp = *ptna_set;
+	}
+	else
+	{
+
+		tco_add_list_tmp = olsr->recent_add_list;
+	}
+	
+	destination_n* tmp_destination = NULL;
+
+	if (plist_destination_delete != NULL)
+	{
+		tco_add_list_tmp = NULL;
+		tmp_destination = *plist_destination_delete;
+	}
+
+				
+	while (tco_add_list_tmp != NULL || tmp_destination != NULL)
+	{
+
+		Int16 iExpectedHopCnt = MAX_COST;
+		
+
+		rt_entry* prte = NULL;
+		if (tco_add_list_tmp != NULL)
+		{
+			prte = QueryRoutingTableAccordingToNodeId(node, tco_add_list_tmp->nid);
+		}
+		else
+		{
+			prte = tmp_destination->destination;
+		}
+
+		
+			
+		
+		if (_TEST_TIME_COMPLEXITY && puiLookupCntForAddList != NULL)
+		{
+			uiLCFA++;
+		}
+		
+
+		
+
+		if (prte != NULL)
+		{
+
+			iExpectedHopCnt = prte->rt_metric;
+
+			
+			//Peter Comment: need to recognize the already existed route entry with cost 1 caused by neigbor table earlier,
+			//since it may cause discover according to topology set and find new route for its adjacent node with cost 2,
+			//but in fact this adjacent node is not belong to 2hop neigbor set.
+			//do it later, during the update discovery
+			/*
+			if (iExpectedHopCnt == 1)
+			{
+				tco_add_list_tmp = tco_add_list_tmp->next;
+				continue;
+			}
+
+			*/
+
+			//pretmp = prte;
+		}
+
+
+		destination_list* topo_dest = NULL;
+	
+		rt_entry * pretmp = NULL;
+
+		BOOL bSameRoutePrefered = FALSE;
+
+		Address addrTmp;
+		addrTmp.networkType = NETWORK_IPV4;
+
+
+		if (tco_add_list_tmp != NULL)
+		{
+			addrTmp.interfaceAddr.ipv4 = tco_add_list_tmp->nid;
+		}
+		else
+		{
+			addrTmp.interfaceAddr.ipv4 = tmp_destination->destination->rt_entry_infos.rtu_dst.interfaceAddr.ipv4;
+		}
+
+		
+	
+		topology_last_entry * t_last_sym = OlsrLookupLastTopologyTableSYM(node, addrTmp);
+		if (t_last_sym != NULL)
+		{
+			
+			topo_dest = t_last_sym->topology_list_of_destinations;
+
+			while (topo_dest != NULL)
+			{
+				Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+				rt_entry* prteNearby = QueryRoutingTableAccordingToNodeId(node, addrReached.interfaceAddr.ipv4);
+				
+				if (_TEST_TIME_COMPLEXITY && puiLookupCntForAddList != NULL)
+				{
+					uiLCFA++;
+				}
+				
+				if (prteNearby != NULL)
+				{
+
+					//Peter Comment: There is a problem that the topology set shows the connectivety while 2-hop neighbor does not show,
+					//so current just recognize and skip this case according to the 2hop neighbor
+					if (prteNearby->rt_metric == 1)	//addrReached is a neighbor node
+					{
+
+						BOOL b2HopNeighborMismatchCausedDisconnect = TRUE;
+
+						b2HopNeighborMismatchCausedDisconnect = DisconnectivetyCausedBy2HopNeighbor(node, addrTmp, prteNearby->rt_entry_infos.rtu_dst.interfaceAddr.ipv4);
+
+						if (b2HopNeighborMismatchCausedDisconnect)
+						{
+							topo_dest = topo_dest->next;
+							continue;
+						}
+						
+					}
+
+					if (iExpectedHopCnt > prteNearby->rt_metric + 1)
+					{
+												
+						iExpectedHopCnt = prteNearby->rt_metric + 1;
+
+						pretmp = prteNearby;
+					}
+					else //=
+					{
+						if (g_iToAchieveSameRoute == 1)
+						{
+							if (iExpectedHopCnt == prteNearby->rt_metric + 1)
+							{
+								
+								if (pretmp != NULL)	//at least there was one prteNearby had this cost
+								{
+									if (PreferredRouteForNew(prteNearby->rt_entry_infos.rtu_router.interfaceAddr.ipv4, pretmp->rt_entry_infos.rtu_router.interfaceAddr.ipv4))
+									{
+
+										pretmp = prteNearby;
+										bSameRoutePrefered = TRUE;
+									}
+								}
+								else
+								{
+
+									if (prte != NULL)
+									{
+
+										if (PreferredRouteForNew(prteNearby->rt_entry_infos.rtu_router.interfaceAddr.ipv4, prte->rt_entry_infos.rtu_router.interfaceAddr.ipv4))
+										{
+											pretmp = prteNearby;
+											bSameRoutePrefered = TRUE;
+										}										
+									}
+								}	
+							}
+						}
+						else
+						{
+
+						}
+					}
+					
+				}				
+
+				topo_dest = topo_dest->next;
+			}
+		}
+
+
+		BOOL bAlreadyOptimized = FALSE;
+		if (iExpectedHopCnt != MAX_COST)
+		{
+
+			if (pretmp != NULL)
+			{
+
+				if (prte == NULL)
+				{
+
+					double dDgrWRT = 0.0;
+					double dDtsWRT = 0.0; 
+
+
+					if (_OLSR_MULTIPATH)
+					{
+						if (_TEST_TIME_COMPLEXITY)
+						{
+							dDgrWRT = pretmp->rt_entry_infos.related_neighbor->neighbor_infos.dDegreeWRTNode;
+							dDtsWRT = pretmp->rt_entry_infos.related_neighbor->neighbor_infos.dDistanceWRTNode;
+						}
+						else
+						{
+							dDgrWRT = pretmp->rt_entry_infos.rtu_DegreeWRTNode;
+							dDtsWRT = pretmp->rt_entry_infos.rtu_DistanceWRTNode;
+						}
+					}
+
+					
+
+					//create the new route entry
+					prte =
+						OlsrInsertRoutingTablefromTopology(
+						node,
+						pretmp,
+						addrTmp,
+						pretmp->rt_dst,
+						dDgrWRT, dDtsWRT						
+						);
+
+				}
+				else
+				{
+					//the case that this new added topolast entry is already exist wrt to other last_entry,
+					//however the existing ones may not have the least cost since it may not consider the connectivety enough,
+					//since the knowledge of the whole picture is lack.
+					
+					//OlsrDeleteRoutingTable(prte);
+					
+					
+					// Lookup best link to get to the router
+					
+					/*
+					link_entry* link = OlsrGetLinktoNeighbor(node, pretmp->rt_router);
+
+					
+					if (link == NULL)
+					{
+						//Assume this branch will never happen
+						printf(" No link exists to looked up neighbor, assume this branch will never happen \n");
+						//return NULL;
+
+					}
+					else
+					{
+						prte->rt_interface =  RoutingOlsrCheckMyIfaceAddress(
+							node,
+							link->local_iface_addr);
+					}
+					*/
+
+					if (iExpectedHopCnt < prte->rt_metric 
+						|| g_iToAchieveSameRoute == 1 && bSameRoutePrefered)
+					{
+						prte->rt_interface = pretmp->rt_interface;
+
+					
+						//?????????????????????????????????
+						/*
+						if (_OLSR_MULTIPATH)
+						{
+
+							prte->rt_entry_infos.oa_total_routes_count = pretmp->rt_entry_infos.oa_total_routes_count;
+							
+							prte->rt_entry_infos.oa_maximum_allowed_cost = pretmp->rt_entry_infos.oa_maximum_allowed_cost;
+
+							prte->rt_entry_infos.oa_dWeightedDirectionDiffer = pretmp->rt_entry_infos.oa_dWeightedDirectionDiffer;
+						}
+						*/
+
+						/*
+						if (iExpectedHopCnt < prte->rt_metric)
+						{
+							
+						}
+						*/
+						
+						prte->rt_entry_infos.rtu_lasthop = pretmp->rt_entry_infos.rtu_dst;
+						
+						
+						prte->rt_router = pretmp->rt_router;
+						//prte->rt_metric = (UInt16) (pretmp->rt_metric + 1);
+						prte->rt_metric = iExpectedHopCnt;
+						
+
+
+						if (_OLSR_MULTIPATH)
+						{
+
+							prte->rt_entry_infos.rtu_DegreeWRTNode = pretmp->rt_entry_infos.rtu_DegreeWRTNode;
+							prte->rt_entry_infos.rtu_DistanceWRTNode = pretmp->rt_entry_infos.rtu_DistanceWRTNode;
+							prte->rt_entry_infos.related_neighbor = pretmp->rt_entry_infos.related_neighbor;
+						}
+					}
+					else
+					{
+						bAlreadyOptimized = TRUE;
+					}
+
+					
+				}
+
+				
+			}
+			else
+			{
+				//just use prte, since it must exist and it must has the least cost till now
+			}
+
+
+			//if (!bAlreadyOptimized)
+			{
+				destination_n* list_destination_tmp;
+				list_destination_tmp = (destination_n* )
+					MEM_malloc(sizeof(destination_n));
+
+				memset(
+					list_destination_tmp,
+					0,
+					sizeof(destination_n));
+
+				list_destination_tmp->destination = prte;
+				
+				
+				
+				//list_destination_tmp->next = list_destination_n;
+				//list_destination_n = list_destination_tmp;
+			
+			
+				if (list_destination_n == NULL)
+				{
+					list_destination_n = list_destination_tmp;
+					tmp_destination_tail = list_destination_tmp;
+				}
+				else
+				{
+
+					tmp_destination_tail->next = list_destination_tmp;
+					tmp_destination_tail = tmp_destination_tail->next;
+				}			
+			}			
+			
+		}
+		else
+		{
+			//do not need to create this new route entry 
+			//since it is not connected with the whole picture according to the recent topology table
+
+		}
+
+		if (tco_add_list_tmp != NULL)
+		{
+			tco_add_list_tmp = tco_add_list_tmp->next;
+		}
+		else
+		{
+			tmp_destination = tmp_destination->next;
+		}
+
+		
+	}
+
+
+	
+	if (_TEST_TIME_COMPLEXITY && puiLookupCntForAddList != NULL)
+	{
+		*puiLookupCntForAddList = uiLCFA;
+	}
+
+	
+	return list_destination_n;
+}
+
+
+destination_n* ProcessRoutingTableAccordingToRecentAddList(Node* node, UInt32 * puiLookupCntForAddList)
+{
+
+	destination_n* list_destination_n = NULL;
+
+	RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+
+
+	UInt32 uiLCFA = 0;
+
+	tco_node_addr * tco_add_list_tmp = olsr->recent_add_list;			
+	while (tco_add_list_tmp != NULL)
+	{
+
+		Int16 iExpectedHopCnt = MAX_COST;
+		
+		rt_entry* prte = QueryRoutingTableAccordingToNodeId(node, tco_add_list_tmp->nid);
+		
+		if (_TEST_TIME_COMPLEXITY && puiLookupCntForAddList != NULL)
+		{
+			uiLCFA++;
+		}
+		
+
+		if (prte != NULL)
+		{
+
+			iExpectedHopCnt = prte->rt_metric;
+
+			
+			//Peter Comment: need to recognize the already existed route entry with cost 1 caused by neigbor table earlier,
+			//since it may cause discover according to topology set and find new route for its adjacent node with cost 2,
+			//but in fact this adjacent node is not belong to 2hop neigbor set.
+			//do it later, during the update discovery
+			/*
+			if (iExpectedHopCnt == 1)
+			{
+				tco_add_list_tmp = tco_add_list_tmp->next;
+				continue;
+			}
+
+			*/
+		}
+
+
+		destination_list* topo_dest = NULL;
+	
+		rt_entry * pretmp = NULL;
+
+		Address addrTmp;
+		addrTmp.networkType = NETWORK_IPV4;
+		addrTmp.interfaceAddr.ipv4 = tco_add_list_tmp->nid;
+	
+		topology_last_entry * t_last_sym = OlsrLookupLastTopologyTableSYM(node, addrTmp);
+		if (t_last_sym != NULL)
+		{
+			
+			topo_dest = t_last_sym->topology_list_of_destinations;
+
+			while (topo_dest != NULL)
+			{
+				Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+				rt_entry* prteNearby = QueryRoutingTableAccordingToNodeId(node, addrReached.interfaceAddr.ipv4);
+				
+				if (_TEST_TIME_COMPLEXITY && puiLookupCntForAddList != NULL)
+				{
+					uiLCFA++;
+				}
+				
+				if (prteNearby != NULL)
+				{
+
+
+					//Peter Comment: There is a problem that the topology set shows the connectivety while 2-hop neighbor does not show,
+					//so current just recognize and skip this case according to the 2hop neighbor
+					if (prteNearby->rt_metric == 1)	//addrReached is a neighbor node
+					{
+
+						BOOL b2HopNeighborMismatchCausedDisconnect = TRUE;
+
+						neighbor_2_entry *two_hop_neighbor = NULL;
+
+						two_hop_neighbor = OlsrLookup2HopNeighborTable(node, addrTmp);
+						
+						if (two_hop_neighbor)
+						{
+
+							//DebugBreak();
+
+							neighbor_list_entry* list_1 = NULL;
+							list_1 = two_hop_neighbor->neighbor_2_nblist;
+
+							while (list_1 != NULL)
+							{
+								/*
+								IO_ConvertIpAddressToString(
+									&list_1->neighbor->neighbor_main_addr,
+									addrString);
+
+								if (g_iChaseRouteTable == 1)
+								{
+									sprintf(g_szTextRT, "%s%s ", g_szTextRT, addrString);
+								}
+								else
+								{
+									printf("%s ", addrString);
+								}
+								*/
+								if (Address_IsSameAddress(&list_1->neighbor->neighbor_main_addr, &addrReached))
+								{
+									b2HopNeighborMismatchCausedDisconnect = FALSE;
+									break;
+								}																
+
+								list_1 = list_1->neighbor_next;
+							}
+
+						}
+						else
+						{
+							//b2HopNeighborMismatchCausedDisconnect = TRUE;
+						}
+
+						if (b2HopNeighborMismatchCausedDisconnect)
+						{
+							topo_dest = topo_dest->next;
+							continue;
+						}
+						
+					}
+
+					if (iExpectedHopCnt > prteNearby->rt_metric + 1)
+					{
+						
+						
+						iExpectedHopCnt = prteNearby->rt_metric + 1;
+
+						pretmp = prteNearby;
+					}
+					else
+					{
+					}
+					
+				}				
+
+				topo_dest = topo_dest->next;
+			}
+		}
+
+
+		if (iExpectedHopCnt != MAX_COST)
+		{
+
+			if (pretmp != NULL)
+			{
+
+				if (prte == NULL)
+				{
+
+					double dDgrWRT = 0.0;
+					double dDtsWRT = 0.0; 
+
+
+
+					if (_OLSR_MULTIPATH)
+					{
+						if (_TEST_TIME_COMPLEXITY)
+						{
+							dDgrWRT = pretmp->rt_entry_infos.related_neighbor->neighbor_infos.dDegreeWRTNode;
+							dDtsWRT = pretmp->rt_entry_infos.related_neighbor->neighbor_infos.dDistanceWRTNode;
+						}
+						else
+						{
+							dDgrWRT = pretmp->rt_entry_infos.rtu_DegreeWRTNode;
+							dDtsWRT = pretmp->rt_entry_infos.rtu_DistanceWRTNode;
+						}
+					}
+
+
+					
+
+					//create the new route entry
+					prte =
+						OlsrInsertRoutingTablefromTopology(
+						node,
+						pretmp,
+						addrTmp,
+						pretmp->rt_dst,
+						dDgrWRT, dDtsWRT						
+						);
+
+				}
+				else
+				{
+					//the case that this new added topolast entry is already exist wrt to other last_entry,
+					//however the existing ones may not have the least cost since it may not consider the connectivety enough,
+					//since the knowledge of the whole picture is lack.
+					
+					//OlsrDeleteRoutingTable(prte);
+					
+					
+					// Lookup best link to get to the router
+					
+					/*
+					link_entry* link = OlsrGetLinktoNeighbor(node, pretmp->rt_router);
+
+					
+					if (link == NULL)
+					{
+						//Assume this branch will never happen
+						printf(" No link exists to looked up neighbor, assume this branch will never happen \n");
+						//return NULL;
+
+					}
+					else
+					{
+						prte->rt_interface =  RoutingOlsrCheckMyIfaceAddress(
+							node,
+							link->local_iface_addr);
+					}
+					*/
+
+					prte->rt_interface = pretmp->rt_interface;
+
+					
+					//?????????????????????????????????
+					/*
+					if (_OLSR_MULTIPATH)
+					{
+
+						prte->rt_entry_infos.oa_total_routes_count = pretmp->rt_entry_infos.oa_total_routes_count;
+						
+						prte->rt_entry_infos.oa_maximum_allowed_cost = pretmp->rt_entry_infos.oa_maximum_allowed_cost;
+
+						prte->rt_entry_infos.oa_dWeightedDirectionDiffer = pretmp->rt_entry_infos.oa_dWeightedDirectionDiffer;
+					}
+					*/
+
+					prte->rt_entry_infos.rtu_lasthop = pretmp->rt_dst;
+					prte->rt_router = pretmp->rt_router;
+					prte->rt_metric = (UInt16) (pretmp->rt_metric + 1);
+					
+
+					prte->rt_entry_infos.rtu_DegreeWRTNode = pretmp->rt_entry_infos.rtu_DegreeWRTNode;
+					prte->rt_entry_infos.rtu_DistanceWRTNode = pretmp->rt_entry_infos.rtu_DistanceWRTNode;
+					prte->rt_entry_infos.related_neighbor = pretmp->rt_entry_infos.related_neighbor;
+				}
+
+				
+			}
+			else
+			{
+				//just use prte, since it must exist and it must has the least cost till now
+			}
+
+			
+			destination_n* list_destination_tmp;
+			list_destination_tmp = (destination_n* )
+				MEM_malloc(sizeof(destination_n));
+
+			memset(
+				list_destination_tmp,
+				0,
+				sizeof(destination_n));
+
+			list_destination_tmp->destination = prte;
+			list_destination_tmp->next = list_destination_n;
+			list_destination_n = list_destination_tmp;
+		}
+		else
+		{
+			//do not need to create this new route entry 
+			//since it is not connected with the whole picture according to the recent topology table
+
+		}
+
+
+		tco_add_list_tmp = tco_add_list_tmp->next;
+	}
+
+
+	/*
+	tco_node_addr * tco_delete_list_tmp = olsr->recent_delete_list;
+	while (tco_delete_list_tmp != NULL)
+	{
+
+		//currently just skip this case
+
+		tco_delete_list_tmp = tco_delete_list_tmp->next;
+
+	}
+	*/
+	if (_TEST_TIME_COMPLEXITY && puiLookupCntForAddList != NULL)
+	{
+		*puiLookupCntForAddList = uiLCFA;
+	}
+
+	
+	return list_destination_n;
+}
+
+
+destination_n* ProcessRoutingTableAccordingToRecentAddListMP(Node* node, UInt32 * puiLookupCntForAddList)
+{
+
+	destination_n* list_destination_n = NULL;
+
+	RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+
+
+	UInt32 uiLCFA = 0;
+
+	tco_node_addr * tco_add_list_tmp = olsr->recent_add_list;			
+	while (tco_add_list_tmp != NULL)
+	{
+
+		//Int16 iExpectedHopCnt = MAX_COST;
+		
+		rthash * rhRetrieve = NULL;
+		rt_entry* prte = QueryRoutingTableAccordingToNodeId(node, tco_add_list_tmp->nid, NULL, &rhRetrieve);
+		
+		if (_TEST_TIME_COMPLEXITY && puiLookupCntForAddList != NULL)
+		{
+			uiLCFA++;
+		}
+		
+		if (prte != NULL)
+		{
+
+			for ( ; prte != (rt_entry* ) rhRetrieve; prte = prte->rt_back)
+			{
+
+				Int16 iExpectedHopCnt = MAX_COST;
+
+				if (prte != NULL)
+				{
+
+					iExpectedHopCnt = prte->rt_metric;
+				}
+
+
+				destination_list* topo_dest = NULL;
+
+				rt_entry * pretmp = NULL;
+
+				Address addrTmp;
+				addrTmp.networkType = NETWORK_IPV4;
+				addrTmp.interfaceAddr.ipv4 = tco_add_list_tmp->nid;
+
+				topology_last_entry * t_last_sym = OlsrLookupLastTopologyTableSYM(node, addrTmp);
+				if (t_last_sym != NULL)
+				{
+
+					topo_dest = t_last_sym->topology_list_of_destinations;
+
+					while (topo_dest != NULL)
+					{
+						Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+						NodeAddress naRoute = prte->rt_entry_infos.rtu_router.interfaceAddr.ipv4;
+						rt_entry* prteNearby = QueryRoutingTableAccordingToNodeId(node, addrReached.interfaceAddr.ipv4, &naRoute, NULL);
+
+						if (_TEST_TIME_COMPLEXITY && puiLookupCntForAddList != NULL)
+						{
+							uiLCFA++;
+						}
+
+						if (prteNearby != NULL)
+						{
+
+							if (iExpectedHopCnt > prteNearby->rt_metric + 1)
+							{
+
+								iExpectedHopCnt = prteNearby->rt_metric + 1;
+
+								pretmp = prteNearby;
+							}
+							else
+							{
+							}
+
+						}				
+
+						topo_dest = topo_dest->next;
+					}
+				
+				
+				}
+
+			
+				
+				if (iExpectedHopCnt != MAX_COST)
+				{
+
+					if (pretmp != NULL)
+					{
+
+						
+						{
+							//the case that this new added topolast entry is already exist wrt to other last_entry,
+							//however the existing ones may not have the least cost since it may not consider the connectivety enough,
+							//since the knowledge of the whole picture is lack.
+							
+							//OlsrDeleteRoutingTable(prte);
+							
+							
+							// Lookup best link to get to the router
+							
+							
+
+							prte->rt_interface = pretmp->rt_interface;
+
+							
+							//?????????????????????????????????
+							/*
+							if (_OLSR_MULTIPATH)
+							{
+
+								prte->rt_entry_infos.oa_total_routes_count = pretmp->rt_entry_infos.oa_total_routes_count;
+								
+								prte->rt_entry_infos.oa_maximum_allowed_cost = pretmp->rt_entry_infos.oa_maximum_allowed_cost;
+
+								prte->rt_entry_infos.oa_dWeightedDirectionDiffer = pretmp->rt_entry_infos.oa_dWeightedDirectionDiffer;
+							}
+							*/
+
+							prte->rt_entry_infos.rtu_lasthop = pretmp->rt_dst;
+							prte->rt_router = pretmp->rt_router;
+							prte->rt_metric = (UInt16) (pretmp->rt_metric + 1);
+							
+
+							prte->rt_entry_infos.rtu_DegreeWRTNode = pretmp->rt_entry_infos.rtu_DegreeWRTNode;
+							prte->rt_entry_infos.rtu_DistanceWRTNode = pretmp->rt_entry_infos.rtu_DistanceWRTNode;
+							prte->rt_entry_infos.related_neighbor = pretmp->rt_entry_infos.related_neighbor;
+						}
+
+						
+					}
+					else
+					{
+						//just use prte, since it must exist and it must has the least cost till now
+					}
+
+					/*
+					destination_n* list_destination_tmp;
+					list_destination_tmp = (destination_n* )
+						MEM_malloc(sizeof(destination_n));
+
+					memset(
+						list_destination_tmp,
+						0,
+						sizeof(destination_n));
+
+					list_destination_tmp->destination = prte;
+					list_destination_tmp->next = list_destination_n;
+					list_destination_n = list_destination_tmp;
+					*/
+				}
+				else
+				{
+					//do not need to create this new route entry 
+					//since it is not connected with the whole picture according to the recent topology table
+
+				}
+
+
+			}
+
+		}
+		else
+		{
+			
+			Int16 iExpectedHopCnt = MAX_COST;
+
+			destination_list* topo_dest = NULL;
+
+			rt_entry * pretmp = NULL;
+
+			Address addrTmp;
+			addrTmp.networkType = NETWORK_IPV4;
+			addrTmp.interfaceAddr.ipv4 = tco_add_list_tmp->nid;
+
+			topology_last_entry * t_last_sym = OlsrLookupLastTopologyTableSYM(node, addrTmp);
+			if (t_last_sym != NULL)
+			{
+
+				topo_dest = t_last_sym->topology_list_of_destinations;
+
+				while (topo_dest != NULL)
+				{
+					Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+					//NodeAddress naRoute = prte->rt_entry_infos.rtu_router.interfaceAddr.ipv4;
+					rthash * rhRetrieve = NULL;
+								
+					rt_entry* prteNearby = QueryRoutingTableAccordingToNodeId(node, addrReached.interfaceAddr.ipv4, NULL, &rhRetrieve);
+
+					if (_TEST_TIME_COMPLEXITY && puiLookupCntForAddList != NULL)
+					{
+						uiLCFA++;
+					}
+
+					if (prteNearby != NULL)
+					{
+
+						for ( ; prteNearby != (rt_entry* ) rhRetrieve; prteNearby = prteNearby->rt_back)
+						{
+
+							NodeAddress naRoute = prteNearby->rt_entry_infos.rtu_router.interfaceAddr.ipv4;
+							rt_entry* prte2 = QueryRoutingTableAccordingToNodeId(node, tco_add_list_tmp->nid, &naRoute, NULL);
+
+							if (_TEST_TIME_COMPLEXITY && puiLookupCntForAddList != NULL)
+							{
+								uiLCFA++;
+							}
+
+							if (prte2 != NULL)
+							{
+
+								if (prte2->rt_metric > prteNearby->rt_metric + 1)
+								{
+
+									
+									//update
+									
+									{
+
+										{
+
+											
+											{
+												
+
+												prte2->rt_interface = prteNearby->rt_interface;
+
+												
+												//?????????????????????????????????
+												/*
+												if (_OLSR_MULTIPATH)
+												{
+
+													prte2->rt_entry_infos.oa_total_routes_count = prteNearby->rt_entry_infos.oa_total_routes_count;
+													
+													prte2->rt_entry_infos.oa_maximum_allowed_cost = prteNearby->rt_entry_infos.oa_maximum_allowed_cost;
+
+													prte2->rt_entry_infos.oa_dWeightedDirectionDiffer = prteNearby->rt_entry_infos.oa_dWeightedDirectionDiffer;
+												}
+												*/
+
+												prte2->rt_entry_infos.rtu_lasthop = prteNearby->rt_dst;
+												prte2->rt_router = prteNearby->rt_router;
+												prte2->rt_metric = (UInt16) (prteNearby->rt_metric + 1);
+												
+
+												prte2->rt_entry_infos.rtu_DegreeWRTNode = prteNearby->rt_entry_infos.rtu_DegreeWRTNode;
+												prte2->rt_entry_infos.rtu_DistanceWRTNode = prteNearby->rt_entry_infos.rtu_DistanceWRTNode;
+												prte2->rt_entry_infos.related_neighbor = prteNearby->rt_entry_infos.related_neighbor;
+											}
+
+											
+										}
+										//else
+										{
+											//just use prte, since it must exist and it must has the least cost till now
+										}
+
+										/*
+										destination_n* list_destination_tmp;
+										list_destination_tmp = (destination_n* )
+											MEM_malloc(sizeof(destination_n));
+
+										memset(
+											list_destination_tmp,
+											0,
+											sizeof(destination_n));
+
+										list_destination_tmp->destination = prte;
+										list_destination_tmp->next = list_destination_n;
+										list_destination_n = list_destination_tmp;
+										*/
+									}
+									//else
+									{
+										//do not need to create this new route entry 
+										//since it is not connected with the whole picture according to the recent topology table
+
+									}
+								}
+								else
+								{
+									//skip
+								}
+							
+							}
+							else
+							{
+							
+								double dDgrWRT = 0.0;
+								double dDtsWRT = 0.0; 
+
+								if (_TEST_TIME_COMPLEXITY)
+								{
+									dDgrWRT = prteNearby->rt_entry_infos.related_neighbor->neighbor_infos.dDegreeWRTNode;
+									dDtsWRT = prteNearby->rt_entry_infos.related_neighbor->neighbor_infos.dDistanceWRTNode;
+								}
+								else
+								{
+									dDgrWRT = prteNearby->rt_entry_infos.rtu_DegreeWRTNode;
+									dDtsWRT = prteNearby->rt_entry_infos.rtu_DistanceWRTNode;
+								}
+
+
+								RouteEntryType ret = OlsrAdvancedLookupRoutingTable(node, addrTmp, 
+									prteNearby->rt_router, 
+									(UInt16)(prteNearby->rt_metric + 1), dDgrWRT, 
+									_OLSR_TEMP_ROUTES_LIMIT, prteNearby->rt_dst);
+
+
+								if (ret != NOT_ALLOWED)
+								{
+
+									//create the new route entry
+									prte2 =
+										OlsrInsertRoutingTablefromTopology(
+										node,
+										prteNearby,
+										addrTmp,
+										prteNearby->rt_dst,
+										dDgrWRT, dDtsWRT						
+										);
+								}
+
+								
+
+
+							}
+							
+
+						
+						}
+
+
+						
+
+					}				
+
+					topo_dest = topo_dest->next;
+				}
+			
+			
+			}
+
+		
+		}
+
+
+
+
+		rhRetrieve = NULL;
+		prte = NULL;
+		
+		prte = QueryRoutingTableAccordingToNodeId(node, tco_add_list_tmp->nid, NULL, &rhRetrieve);
+
+		if (_TEST_TIME_COMPLEXITY && puiLookupCntForAddList != NULL)
+		{
+			uiLCFA++;
+		}
+
+		if (prte != NULL)
+		{
+
+			for ( ; prte != (rt_entry* ) rhRetrieve; prte = prte->rt_back)
+			{  
+
+				destination_n* list_destination_tmp;
+				list_destination_tmp = (destination_n* )
+					MEM_malloc(sizeof(destination_n));
+
+				memset(
+					list_destination_tmp,
+					0,
+					sizeof(destination_n));
+
+				list_destination_tmp->destination = prte;
+				list_destination_tmp->next = list_destination_n;
+				list_destination_n = list_destination_tmp;
+
+			}
+		
+		}
+
+
+
+
+		tco_add_list_tmp = tco_add_list_tmp->next;
+	}
+
+
+	/*
+	tco_node_addr * tco_delete_list_tmp = olsr->recent_delete_list;
+	while (tco_delete_list_tmp != NULL)
+	{
+
+		//currently just skip this case
+
+		tco_delete_list_tmp = tco_delete_list_tmp->next;
+
+	}
+	*/
+	if (_TEST_TIME_COMPLEXITY && puiLookupCntForAddList != NULL)
+	{
+		*puiLookupCntForAddList = uiLCFA;
+	}
+
+	
+	return list_destination_n;
+}
+
+
+void ProcessRoutingTableAccordingToSpecificRoute(Node* node, NodeAddress naRoute, destination_n** plist_destination_delete)
+{
+
+	destination_n* list_destination_n = NULL;
+
+	RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+
+	rt_entry* destination;
+	rt_entry* destination_tmp;
+	rthash* routing_hash;
+
+	unsigned char index;
+
+	for (index = 0; index < HASHSIZE; index++)
+	{
+
+		routing_hash = &olsr->routingtable[index];
+
+		destination = routing_hash->rt_forw;
+		while (destination != (rt_entry *) routing_hash)
+		{
+
+			destination_tmp = destination;
+			destination = destination->rt_forw;
+
+			// deletes each routing entry from the table
+
+			if (destination_tmp->rt_entry_infos.rtu_router.interfaceAddr.ipv4 == naRoute)
+			{
+
+				BOOL bAvoidMaxFor2HopExchangeYet = FALSE;
+				
+				if (g_iAccumulativeRouteCalculation == 2 || g_iAccumulativeRouteCalculation == 1)
+				{
+					if (destination_tmp->rt_entry_infos.rtu_metric == 2 || destination_tmp->rt_entry_infos.rtu_dst.interfaceAddr.ipv4 == naRoute)
+					{
+
+
+						//BOOL b2HopReplaceFound = FALSE;
+						neighbor_2_entry* two_hop_neighbor = OlsrLookup2HopNeighborTable(node, destination_tmp->rt_entry_infos.rtu_dst);
+
+						if (two_hop_neighbor != NULL)
+						{
+
+							neighbor_list_entry* list_1 = NULL;
+							list_1 = two_hop_neighbor->neighbor_2_nblist;
+
+							neighbor_entry * pneTmp = NULL;
+
+							while (list_1 != NULL)
+							{
+
+								if (g_iToAchieveSameRoute != 1)
+								{
+
+									if (list_1->neighbor->neighbor_status == SYM)
+									{
+										pneTmp = list_1->neighbor;
+										break;
+									}								
+								}
+								else
+								{
+
+									if (list_1->neighbor->neighbor_status == SYM)
+									{
+										if (pneTmp == NULL)
+										{
+											pneTmp = list_1->neighbor;
+										}
+										else
+										{
+											if (PreferredRouteForNew(list_1->neighbor->neighbor_main_addr.interfaceAddr.ipv4, pneTmp->neighbor_main_addr.interfaceAddr.ipv4))
+											{
+												pneTmp = list_1->neighbor;
+											}
+										}
+									}
+
+								}
+
+								list_1 = list_1->neighbor_next;
+							}
+
+							if (pneTmp != NULL)
+							{
+								link_entry* link = OlsrGetBestLinktoNeighbor(
+									node,
+									pneTmp->neighbor_main_addr);
+
+								if (link)
+								{
+
+
+									//rt_entry* new_route_entry = NULL;
+
+
+									{
+										//new_route_entry = destination_tmp;
+									}
+
+
+
+									destination_tmp->rt_router =
+										link->neighbor_iface_addr;
+
+									destination_tmp->rt_entry_infos.rtu_lasthop = link->neighbor_iface_addr;
+
+
+									if (_OLSR_MULTIPATH)
+									{
+										if (_TEST_TIME_COMPLEXITY)
+										{
+											destination_tmp->rt_entry_infos.related_neighbor = pneTmp;					
+
+										}
+										else
+										{
+											//new_route_entry->rt_entry_infos.rtu_DegreeWRTNode = dRWON;
+
+											//new_route_entry->rt_entry_infos.rtu_DistanceWRTNode = dDistance;
+
+										}
+									}
+
+
+									// The next router is the neighbor itself
+									destination_tmp->rt_metric = 2;
+
+									destination_tmp->rt_interface =
+										RoutingOlsrCheckMyIfaceAddress(
+										node,
+										link->local_iface_addr);
+
+								}
+								else
+								{
+									//should never happen
+								}
+
+
+								if (g_iToAchieveSameRoute == 1)
+								{
+									//should goes to the delete list, 
+									//since its adjacent nodes may not be deleted as well,
+									//so the change of route has to be updated to them by update&discovery
+
+									bAvoidMaxFor2HopExchangeYet = TRUE;
+								}
+								else
+								{
+									continue;
+								}							
+							}
+						}
+					}
+				}
+				else //g_iAccumulativeRouteCalculation == 0
+				{
+					//never happen
+				}
+
+				insert_into_tco_node_addr_set(&olsr->recent_add_list, destination_tmp->rt_entry_infos.rtu_dst.interfaceAddr.ipv4); 
+
+				if (plist_destination_delete != NULL)	//g_iAccumulativeRouteCalculation == 2
+				{
+
+					destination_n* list_destination_tmp;
+					list_destination_tmp = (destination_n*)
+						MEM_malloc(sizeof(destination_n));
+
+					memset(
+						list_destination_tmp,
+						0,
+						sizeof(destination_n));
+
+					if (bAvoidMaxFor2HopExchangeYet && g_iToAchieveSameRoute == 1)
+					{
+
+					}
+					else
+					{
+						destination_tmp->rt_entry_infos.rtu_metric = MAX_COST;
+					}
+					
+
+
+					list_destination_tmp->destination = destination_tmp;
+
+					list_destination_tmp->next = *plist_destination_delete;
+					*plist_destination_delete = list_destination_tmp;
+				}
+				else	////g_iAccumulativeRouteCalculation == 1
+				{
+					if (bAvoidMaxFor2HopExchangeYet && g_iToAchieveSameRoute == 1)
+					{
+
+					}
+					else
+					{
+						OlsrDeleteRoutingTable(destination_tmp);
+					}					
+					
+				}
+			}			
+		}
+	}
+
+	//return list_destination_n;
+}
+
+destination_n* ProcessRoutingTableAccordingToConfidentCost(Node* node, UInt16 uiConfidentCost)
+{
+
+	destination_n* list_destination_n = NULL;
+
+	RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+
+	rt_entry* destination;
+	rt_entry* destination_tmp;
+	rthash* routing_hash;
+
+	unsigned char index;
+
+	for (index = 0; index < HASHSIZE; index++)
+	{
+		
+		routing_hash = &olsr->routingtable[index];
+				
+		destination = routing_hash->rt_forw;
+		while (destination != (rt_entry *) routing_hash)
+		{
+		
+			destination_tmp = destination;
+			destination = destination->rt_forw;
+
+			// deletes each routing entry from the table
+
+			if (destination_tmp->rt_entry_infos.rtu_metric > uiConfidentCost)
+			{
+				OlsrDeleteRoutingTable(destination_tmp);
+			}
+			else if (destination_tmp->rt_entry_infos.rtu_metric == uiConfidentCost)
+			{
+
+				//try to add generate the work set here	
+			
+				destination_n* list_destination_tmp;
+				list_destination_tmp = (destination_n* )
+					MEM_malloc(sizeof(destination_n));
+
+				memset(
+					list_destination_tmp,
+					0,
+					sizeof(destination_n));
+
+				list_destination_tmp->destination = destination_tmp;
+				list_destination_tmp->next = list_destination_n;
+				list_destination_n = list_destination_tmp;
+			
+			}
+			else	// <
+			{
+				
+				
+				//assume that the route entries are sorted by cost,
+				//because of the principle that later added entry will have larger cost.
+				
+				
+				//??????????
+				//Since different nodes may be assigned into same hase  
+				//break;
+			}
+		}
+	}
+
+	return list_destination_n;
+}
+
+BOOL CheckCachedRoute(Node *node, Message *msg, int * iInterface, NodeAddress * naNextHop)
+{
+
+
+	RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+
+	RouteCacheItem * pRCI = &(olsr->rci);
+
+	if (pRCI->bIsUseful)
+	{
+		
+
+		*iInterface = pRCI->interfaceIndexCache;
+
+		*naNextHop = pRCI->nextHopAddressCache;
+
+
+		msg->dDegreeDiffForThirdPartyNode = pRCI->dDegreeDiffForThirdPartyNodeCache;
+
+		msg->TestNorthSouthNodeId = pRCI->TestNorthSouthNodeIdCache;
+
+		msg->dExpectedDistanceInOneHop = pRCI->dExpectedDistanceInOneHopCache;
+
+		msg->dDeltaDegree = pRCI->dDeltaDegreeCache;
+
+			
+		msg->numberOfLeastHops = pRCI->numberOfLeastHopsCache;
+
+		msg->numberOfExperiencedHops = pRCI->numberOfExperiencedHopsCache;
+
+		msg->numberOfTotalHops = pRCI->numberOfTotalHopsCache;
+
+		msg->dEstimatedCurrentDistanceInOneHop = pRCI->dEstimatedCurrentDistanceInOneHopCache;
+
+		msg->dEstimatedCurrentWidthInOneHop = pRCI->dEstimatedCurrentWidthInOneHopCache;
+
+		msg->dRecentRelativeDegree = pRCI->dRecentRelativeDegreeCache;
+
+		msg->dRecentRelativeDistance = pRCI->dRecentRelativeDistanceCache;
+	
+	}
+	else
+	{
+		return FALSE;
+	}
+	
+	return TRUE;
+}
+
+void UpdateRoouteCache(Node *node, Message *msg, int iInterface, NodeAddress naNextHop)
+{
+
+	RoutingOlsr* olsr = (RoutingOlsr* ) node->appData.olsr;
+
+	RouteCacheItem * pRCI = &(olsr->rci);
+
+
+	pRCI->interfaceIndexCache = iInterface;
+
+	pRCI->nextHopAddressCache = naNextHop;
+
+
+	pRCI->dDegreeDiffForThirdPartyNodeCache = msg->dDegreeDiffForThirdPartyNode;
+
+	pRCI->TestNorthSouthNodeIdCache = msg->TestNorthSouthNodeId;
+		
+	pRCI->dExpectedDistanceInOneHopCache = msg->dExpectedDistanceInOneHop;
+
+	pRCI->dDeltaDegreeCache = msg->dDeltaDegree;
+
+	pRCI->numberOfLeastHopsCache = msg->numberOfLeastHops;
+
+	pRCI->numberOfExperiencedHopsCache = msg->numberOfExperiencedHops;
+
+	pRCI->numberOfTotalHopsCache = msg->numberOfTotalHops;
+
+	pRCI->dEstimatedCurrentDistanceInOneHopCache = msg->dEstimatedCurrentDistanceInOneHop;
+
+	pRCI->dEstimatedCurrentWidthInOneHopCache = msg->dEstimatedCurrentWidthInOneHop;
+
+	pRCI->dRecentRelativeDegreeCache = msg->dRecentRelativeDegree;
+
+	pRCI->dRecentRelativeDistanceCache = msg->dRecentRelativeDistance;
+
+	
+	pRCI->bIsUseful = TRUE;
+
+	return;
+}
+
+
+void RelatedTimeTrace(Node *node, char * pszDesc)
+{
+
+
+	/*
+	char timeStr[MAX_STRING_LENGTH];
+
+	TIME_PrintClockInSecond(getSimTime(node), timeStr, node);
+
+	double dSimTime = atof(timeStr);
+	*/
+
+	
+	/*
+	if (dSimTime > 19 && dSimTime < 25)
+	{
+		char timeStr2[MAX_STRING_LENGTH];
+
+		TIME_PrintClockInSecond(EXTERNAL_QueryRealTime(), timeStr2, node);
+		double dRealTime = atof(timeStr2);
+
+		
+		printf("%s for node no. %d at Sim Time %f, and Real Time %f \n", pszDesc, node->nodeId, dSimTime, dRealTime);
+
+	}
+	*/
+
+	
+}
+
+
+void CompareRTPre(Node *node)
+{
+
+	//CmpBreakPoint(node);
+
+	
+
+	RoutingOlsr* olsr = (RoutingOlsr *) node->appData.olsr;
+
+	RelatedTimeTrace(node, "CompareRTPre start");
+	
+
+
+
+	memset(olsr->pszOrigRT, 0, RT_SIZE * sizeof(char));
+	OlsrPrintRoutingTable(olsr->routingtable, olsr->pszOrigRT);
+
+	if (g_iSpecailDebug == 1)
+	{
+		printf("\n\n++++++++++++++++++++++++++++++ Special Debug Section Start +++++++++++++++++++++++\n");
+
+
+
+		SpecialDebug(node, DEBUG_NODE_ID, DEBUG_ENTRY_ID);
+
+	}
+
+
+	RelatedTimeTrace(node, "CompareRTPre end");
+
+
+
+}
+
+//pszMiddleRT: for the state between add and delete when both exists
+void CompareRTMiddle(Node *node)
+{
+
+
+	RoutingOlsr* olsr = (RoutingOlsr *) node->appData.olsr;
+
+	memset(olsr->pszMiddleRT, 0, RT_SIZE * sizeof(char));
+	OlsrPrintRoutingTable(olsr->routingtable, olsr->pszMiddleRT);
+
+	if (g_iSpecailDebug == 1)
+	{
+		printf("\n\n++++++++++++++++++++++++++++++ Special Debug Section Middle +++++++++++++++++++++++\n");
+
+
+		SpecialDebug(node, DEBUG_NODE_ID, DEBUG_ENTRY_ID);
+
+	}
+
+}
+
+void CompareRT(Node *node, int iRTAddOrDelete)
+{
+
+	
+	char szTextRT_w[RT_SIZE_THIN];
+
+	char szTextRT_wo[RT_SIZE_THIN];
+
+
+	RoutingOlsr* olsr = (RoutingOlsr *) node->appData.olsr;
+
+
+	RelatedTimeTrace(node, "CompareRT start");
+
+
+	memset(szTextRT_w, 0, RT_SIZE_THIN * sizeof(char));	
+	OlsrPrintRoutingTable(olsr->routingtable, szTextRT_w, FALSE);
+
+
+	memset(olsr->pszRTWithARC, 0, RT_SIZE * sizeof(char));
+	OlsrPrintRoutingTable(olsr->routingtable, olsr->pszRTWithARC);
+
+
+	if (g_iSpecailDebug == 1)
+	{
+
+		printf("\n-------------------------------- Special Debug After ARC ----------------------------\n");
+
+		SpecialDebug(node, DEBUG_NODE_ID, DEBUG_ENTRY_ID);
+
+		
+
+	}
+
+	
+
+	//execute the classic RC for compare	
+	OlsrCalculateRoutingTableForCompare(node);
+
+
+	if (g_iSpecailDebug == 1)
+	{
+
+		printf("\n-------------------------------- Special Debug After classic RC ----------------------------\n");
+
+		SpecialDebug(node, DEBUG_NODE_ID, DEBUG_ENTRY_ID);
+
+		printf("\n-------------------------------- Special Debug Section End ----------------------------\n\n");
+
+	}
+
+
+	memset(szTextRT_wo, 0, RT_SIZE_THIN * sizeof(char));
+	OlsrPrintRoutingTable(olsr->mirror_table, szTextRT_wo, FALSE);
+
+
+	int iRet = strcmp(szTextRT_w, szTextRT_wo);
+
+	if (iRet != 0)
+	{
+
+		memset(olsr->pszRTWithoutARC, 0, RT_SIZE * sizeof(char));
+		OlsrPrintRoutingTable(olsr->mirror_table, olsr->pszRTWithoutARC);
+
+
+		//start to print out
+
+		printf("********************** There is difference between resulted route tables ********************** \n");
+
+
+		printf(olsr->pszInfo);
+
+
+		printf("\nOrig RT: \n");
+
+		printf(olsr->pszOrigRT);
+		
+
+		//g_iChaseRouteTable = 1;
+		
+		memset(olsr->pszOtherTables, 0, RT_SIZE * sizeof(char));
+		OlsrPrintNeighborTable(node);
+
+		printf("%s \n", olsr->pszOtherTables);
+
+		
+
+		memset(olsr->pszOtherTables, 0, RT_SIZE * sizeof(char));
+		OlsrPrint2HopNeighborTable(node);
+
+		printf("%s \n", olsr->pszOtherTables);
+
+
+		memset(olsr->pszOtherTables, 0, RT_SIZE * sizeof(char));
+		OlsrPrintTopologyTableSYM(node);
+
+		printf("%s \n", olsr->pszOtherTables);
+
+
+		//g_iChaseRouteTable = 0;
+
+		//sprintf(szTextRT, "%s%s", szTextRT, g_szTextRT);
+
+		if (iRTAddOrDelete == 3)
+		{
+			printf("\nMiddle RT: \n");
+
+			printf(olsr->pszMiddleRT);
+
+			printf("\n\n");
+		}
+
+
+		printf("RT with ARC: \n");
+
+		printf(olsr->pszRTWithARC);
+
+		printf("\n\n");
+
+
+		printf("RT without ARC: \n");
+
+		printf(olsr->pszRTWithoutARC);
+
+		printf("\n\n\n\n");
+	}
+
+	RelatedTimeTrace(node, "CompareRT end");
+
+
+}
+
+void SpecialDebug(Node *node, NodeAddress naId, NodeAddress naEntryId)
+{
+		
+	if (node->nodeId == naId)
+	{
+		rt_entry* prt_tmp = QueryRoutingTableAccordingToNodeId(node, naEntryId);
+
+		if (prt_tmp != NULL)
+		{
+			char szTmp[INFO_SIZE];
+			memset(szTmp, 0, INFO_SIZE * sizeof(char));
+
+			PrintRoutingTableForAEntry(prt_tmp, szTmp);
+
+			printf(szTmp);
+		}
+	}
+		
+}
+
+
+BOOL PreferredRouteForNew(NodeAddress naNew, NodeAddress naCurrent)
+{
+
+	BOOL bNewPreferred = FALSE;
+
+
+	if (naCurrent == naNew)
+	{
+		//nothing happen
+	}
+	else
+	{
+
+		UInt16 uiNew = naNew % HASHSIZE;
+		UInt16 uiCurrent = naCurrent % HASHSIZE;
+
+
+		if (uiNew == uiCurrent)
+		{
+			if (naNew < naCurrent)
+			{
+				bNewPreferred = TRUE;
+			}
+		}
+		else
+		{
+
+			if (uiNew < uiCurrent)
+			{
+
+				bNewPreferred = TRUE;
+			}
+		}
+
+	}
+
+	return bNewPreferred;
+	
+}
+
+
+void DeleteListProgress(Node* node, e2_s* pe2_n, e2_s* pe2_n_1, tco_node_addr ** ptna_delete_set, destination_n** plist_destination_delete)
+{
+
+
+	if (pe2_n->list_delete)
+	{
+
+		while (pe2_n->list_delete != NULL)
+		{
+			//DebugBreak();
+			destination_n* destination_n_1 = NULL;
+			destination_list* topo_dest = NULL;
+			
+			if (pe2_n->list_delete->bChildrenDetermined)
+			{
+				destination_n * dst_child = pe2_n->list_delete->children;
+				while (dst_child != NULL)
+				{
+
+					//Address addrReached = dst_child->destination->rt_entry_infos.rtu_dst;							
+
+					//UInt32 uiInnerExchangeLUCnt = 0;
+					rt_entry* prteNearby = dst_child->destination;
+					if (prteNearby != NULL)
+					{
+
+						if (prteNearby->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == pe2_n->list_delete->destination->rt_entry_infos.rtu_dst.interfaceAddr.ipv4)
+						{
+
+
+							prteNearby->rt_metric = MAX_COST;
+
+							destination_n* list_destination_tmp;
+							list_destination_tmp = (destination_n* )
+								MEM_malloc(sizeof(destination_n));
+
+							memset(
+								list_destination_tmp,
+								0,
+								sizeof(destination_n));
+
+							list_destination_tmp->destination = prteNearby;
+
+
+							{
+								list_destination_tmp->children = dst_child->children;
+								list_destination_tmp->bChildrenDetermined = dst_child->bChildrenDetermined;
+
+								dst_child->children = NULL;
+							}
+
+
+
+							list_destination_tmp->next = pe2_n_1->list_delete;
+							pe2_n_1->list_delete = list_destination_tmp;
+
+
+
+						}
+						
+
+					}
+
+					
+					dst_child = dst_child->next;
+				}
+
+				insert_into_tco_node_addr_set(ptna_delete_set, pe2_n->list_delete->destination->rt_entry_infos.rtu_dst.interfaceAddr.ipv4);
+			}
+			else
+			{
+				topology_last_entry* topo_last = OlsrLookupLastTopologyTableSYM(node, pe2_n->list_delete->destination->rt_dst);
+
+				/*
+				if (_TEST_TIME_COMPLEXITY && puiLookupCntForAddList)
+				{
+
+					uiLCFA ++;
+
+				}
+				*/
+
+				BOOL bInsideNode = TRUE;
+
+				if (NULL != topo_last)
+				{
+					topo_dest = topo_last->topology_list_of_destinations;
+
+					while (topo_dest != NULL)
+					{
+
+						Address addrReached = topo_dest->destination_node->topology_destination_dst;
+
+
+						UInt32 uiInnerExchangeLUCnt = 0;
+
+						rt_entry* prteNearby = QueryRoutingTableAccordingToNodeId(node, addrReached.interfaceAddr.ipv4);
+						if (prteNearby != NULL)
+						{
+
+							if (prteNearby->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == pe2_n->list_delete->destination->rt_entry_infos.rtu_dst.interfaceAddr.ipv4)
+							{
+
+
+								prteNearby->rt_metric = MAX_COST;
+
+								destination_n* list_destination_tmp;
+								list_destination_tmp = (destination_n* )
+									MEM_malloc(sizeof(destination_n));
+
+								memset(
+									list_destination_tmp,
+									0,
+									sizeof(destination_n));
+
+								list_destination_tmp->destination = prteNearby;
+
+
+								list_destination_tmp->next = pe2_n_1->list_delete;
+								pe2_n_1->list_delete = list_destination_tmp;
+
+
+
+							}
+							else
+							{
+								if (pe2_n->list_delete->destination->rt_entry_infos.rtu_lasthop.interfaceAddr.ipv4 == prteNearby->rt_entry_infos.rtu_dst.interfaceAddr.ipv4)
+								{
+
+
+								}
+								else
+								{
+
+									//if there is any other adjacent nodes outside the tree, then 
+
+									bInsideNode = FALSE;
+
+								}
+							}
+
+						}
+
+						
+						topo_dest = topo_dest->next;
+					}
+
+					if (!bInsideNode)
+					{
+
+						insert_into_tco_node_addr_set(ptna_delete_set, pe2_n->list_delete->destination->rt_entry_infos.rtu_dst.interfaceAddr.ipv4);
+
+					}
+				}
+			}
+
+			
+
+			destination_n_1 = pe2_n->list_delete;
+			pe2_n->list_delete =  pe2_n->list_delete->next;
+
+			
+
+			destination_n_1->next = *plist_destination_delete;
+			*plist_destination_delete = destination_n_1;	
+		}
+	}
+
+}
 

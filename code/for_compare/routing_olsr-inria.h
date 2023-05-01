@@ -24,17 +24,17 @@
  *                          Anis.Laouiti@inria.fr, INRIA Rocquencourt.
  *
  * Ce logiciel informatique est disponible aux conditions
- * usuelles dans la recherche, c'est-à-dire qu'il peut
- * être utilisé, copié, modifié, distribué à l'unique
- * condition que ce texte soit conservé afin que
+ * usuelles dans la recherche, c'est-?dire qu'il peut
+ * être utilis? copi? modifi? distribu??l'unique
+ * condition que ce texte soit conserv?afin que
  * l'origine de ce logiciel soit reconnue.
  * Le nom de l'Institut National de Recherche en Informatique
  * et en Automatique (INRIA), ou d'une personne morale
- * ou physique ayant participé à l'élaboration de ce logiciel ne peut
- * être utilisé sans son accord préalable explicite.
+ * ou physique ayant particip??l'élaboration de ce logiciel ne peut
+ * être utilis?sans son accord préalable explicite.
  *
  * Ce logiciel est fourni tel quel sans aucune garantie,
- * support ou responsabilité d'aucune sorte.
+ * support ou responsabilit?d'aucune sorte.
  * Certaines parties de ce logiciel sont dérivées de sources developpees par
  * University of California, Berkeley et ses contributeurs couvertes
  * par des copyrights.
@@ -135,6 +135,8 @@
 #ifndef _OLSR_H_
 #define _OLSR_H_
 
+//Peter Modified to support more than 32 nodes topology
+//#define HASHSIZE     64// must be a power of 2
 #define HASHSIZE     32// must be a power of 2
 #define HASHMASK     HASHSIZE
 
@@ -227,6 +229,52 @@
 #define SEQNO_GREATER_THAN(s1, s2)                \
         (((s1 > s2) && (s1 - s2 <= (MAXVALUE/2))) \
         || ((s2 > s1) && (s2 - s1 > (MAXVALUE/2))))
+
+
+//#define  _OLSR_DISJOINTPATH_UNRECOMENDED_LIMIT  5
+
+
+
+// Peter Added to support route cache
+typedef struct RouteCacheItem   
+{   
+
+
+	BOOL bIsUseful;
+
+
+
+	NodeAddress nextHopAddressCache;
+	int interfaceIndexCache;
+
+	double dDegreeDiffForThirdPartyNodeCache;
+
+	NodeAddress TestNorthSouthNodeIdCache;
+
+	double dExpectedDistanceInOneHopCache;
+	
+	double dDeltaDegreeCache;
+
+	int numberOfExperiencedHopsCache;
+
+	int numberOfLeastHopsCache;
+
+
+
+
+
+
+	int numberOfTotalHopsCache;
+	double dEstimatedCurrentDistanceInOneHopCache;
+	double dEstimatedCurrentWidthInOneHopCache;
+
+
+	double dRecentRelativeDegreeCache;
+	double dRecentRelativeDistanceCache;
+
+
+
+}RouteCacheItem;
 
 
 // /**
@@ -536,6 +584,13 @@ typedef struct _neighbor_info
     bool                   neighbor_was_mpr;
     bool                   neighbor_skip;
     neighbor_2_list_entry* neighbor_2_list;
+
+	//Peter added to support Angle and Degree WRT to source node.
+	double dDegreeWRTNode;
+	double dDistanceWRTNode;
+
+
+
 } neighbor_info;
 
 // /**
@@ -606,6 +661,9 @@ typedef struct _link_entry
 } link_entry;
 
 
+// Peter added to support Multi-Path _OLSR_DISJOINTPATH
+#define _OLSR_TEMP_ROUTES_LIMIT 5
+
 // /**
 // STRUCT      :: rt_entry_info
 // DESCRIPTION :: structure to hold route table entry
@@ -616,6 +674,46 @@ typedef struct _rt_entry_info
     UInt32     rtu_hash;
     Address    rtu_dst;
     Address    rtu_router;
+
+
+	//Peter Modified to support disjoint path	
+	//_OLSR_DISJOINTPATH
+	//Address    rtu_recommended_2hop;
+	//NodeAddress	rtu_All_lasthop[_OLSR_TEMP_ROUTES_LIMIT];
+	Address rtu_lasthop;
+
+	//Peter added to support accumulative re-discovery
+	// for the delete entry limited region broadcast
+
+	//when this value is true, means that exchange with same cost but different route, 
+	//or different cost, use the  bCostChanged to further determine which is the case of these two.
+	BOOL bDescendentRequireFurtherUpdate;
+	BOOL bCostChanged;
+
+	UInt16 uiCostChg;
+
+	BOOL bRequireDelete;
+	//BOOL bRequireUpdate;
+
+
+
+
+	//overall condition for a specific dest
+	UInt16 oa_total_routes_count;
+	//UInt16 rtu_least_route_cost;
+	UInt16 oa_maximum_allowed_cost;
+
+	//double oa_dWeightedDirection;
+
+	double oa_dWeightedDirectionDiffer;
+
+
+    struct _neighbor_entry* related_neighbor;
+
+	double rtu_DegreeWRTNode;
+	double rtu_DistanceWRTNode;
+
+	
     UInt16     rtu_metric;
     Int32      rtu_interface;
 } rt_entry_info;
@@ -653,10 +751,16 @@ typedef struct _rthash
 // DESCRIPTION :: structure to hold destination wise route information
 // **/
 
+//TO_IMPROVE_PERFORMANCE
+
 typedef struct _destination_n
 {
     rt_entry*              destination;
     struct _destination_n* next;
+	
+	//TO_IMPROVE_PERFORMANCE
+	struct _destination_n* children;
+	BOOL bChildrenDetermined;
 } destination_n;
 
 // /**
@@ -701,6 +805,11 @@ typedef struct _topology_destination_infos
 {
     UInt32     topologydestination_hash;
     Address    topology_dst;
+
+//SYMMETRIC TOPOLOGY TABLE
+	BOOL bAddForSymmetric;
+	BOOL bAddForNormal;
+
     last_list* list_of_last;
 } topology_destination_infos;
 
@@ -809,6 +918,14 @@ typedef struct _tc_mpr_addr
     Address              address;
     struct _tc_mpr_addr* next;
 } tc_mpr_addr;
+
+//Peter added
+typedef struct _tco_node_addr
+{
+    NodeAddress  nid;
+	BOOL bExchanged;
+    struct _tco_node_addr* next;
+} tco_node_addr;
 
 // /**
 // STRUCT      :: tc_message
@@ -1067,6 +1184,31 @@ typedef struct struct_routing_olsr_stat
     Int32 numHnaRelayed;           // number of HNA relayed
 } RoutingOlsrStat;
 
+
+
+
+#define TC_DEFAULT_SIZE 10
+typedef struct tc_trace_item
+{
+	double dCurrentSimTime;
+	double dRealTimeDuration;
+	//int iLookupCnt;
+	//int iLookupCntFor2Hop;
+	int iCombinedCnt;
+	bool bIsAdvOrNot;
+};
+
+
+typedef struct e2_s
+{
+	destination_n * list_p0;
+	destination_n * list_p1;
+	destination_n * list_p2;
+	destination_n * list_delete;
+
+};
+
+
 // /**
 // STRUCT      :: RoutingOlsr
 // DESCRIPTION :: node-level olsr related information
@@ -1096,14 +1238,39 @@ typedef struct struct_routing_olsr
     duplicatehash             duplicatetable[HASHSIZE]; // duplicate table
     neighbor_table            neighbortable;            // neighbor table
     neighbor2_hash            neighbor2table[HASHSIZE]; // neighbor 2 table
+	
+	//Peter Modified for disjoint path
+	//neighbor2_hash            exact_neighbor2table[HASHSIZE]; // neighbor 2 table
+
     mid_table                 midtable;                 // mid table
     hna_entry                 hna_table[HASHSIZE];      // hna table
 
     rthash                    routingtable[HASHSIZE];   // routing table
     rthash                    mirror_table[HASHSIZE];   // routing mirror
                                                         // table
-    topology_destination_hash topologytable[HASHSIZE];  // topology table
-    topology_last_hash        topologylasttable[HASHSIZE]; // topo last
+    //Peter Comment:
+	//topologytable has different meaning
+	//such that for any specific dest may have several entry arrive it.
+	//while topologylasttable means for some specific nodes can reach others
+	topology_destination_hash topologytable[HASHSIZE];  // topology table
+    
+
+	//Peter added for support symmetric last topology table
+
+//SYMMETRIC TOPOLOGY TABLE
+
+	topology_last_hash        sym_topologylasttable[HASHSIZE]; // symmetric topo last
+
+
+
+
+	topology_last_hash        topologylasttable[HASHSIZE]; // topo last
+
+
+	
+	//Peter added for combine the topologytable and topologylasttable
+	topology_destination_hash combined_topologytable[HASHSIZE];
+
                                                            // table
     UInt16                    message_seqno; // message seq number
     BOOL                      changes_neighborhood; // neighborhood changed
@@ -1116,6 +1283,56 @@ typedef struct struct_routing_olsr
                                              // of the last tc sent
     link_entry*               link_set;                 // Link Set
     RandomSeed                seed;                     // for random jitter
+
+
+	//Peter added for support angle sector when route choosing
+	double dSectorDegree;
+
+    //Peter comment: use it for neighbor as well    
+	NodeAddress naRecentChangedAddressByTC;
+
+	//this param used for both RemoveFrom2Hop as well as remove from higher hop,
+	//since both these two case may cause disconnect
+	BOOL bNeighborChgCausedRemoveFromHigherHop; 
+	//BOOL bUpdateOldOrAddNew;
+
+	BOOL bDeleteOld;
+	BOOL bAddNew;
+
+	tco_node_addr * recent_add_list;
+	tco_node_addr * recent_delete_list;
+
+	UInt16 uiConfidentCost;
+	
+	tc_trace_item * pvt_TTIs;
+	int iTcItemCnt;
+	int iTcItemSize;
+
+	RouteCacheItem rci;
+
+
+	//Peter added for route table run time chase
+	//g_iRunTimeCompare has to be 1
+	
+
+	char * pszInfo;
+	char * pszOtherTables;
+	char * pszOrigRT;
+	char * pszMiddleRT;
+	char * pszRTWithARC;
+	char * pszRTWithoutARC;
+
+
+
+	//add for run time test
+	double dRCRealRuntime;
+	//UInt32 uiRCCount;
+	UInt32 uiRCNormalCount;
+	UInt32 uiRCAdvCount;
+
+	double dRecentRCStartTime;
+	double dRecentRCEndTime;
+	
 } RoutingOlsr;
 
 
@@ -1164,5 +1381,139 @@ void RoutingOlsrInriaLayer(
     Node* node,
     Message* msg);
 
+
+//BOOL OlsrTwoRoutersAreNeighbour(Node* node, Address route1, Address route2);
+
+// Peter added for declare this function (which is already exist in original code) in head file 
+static
+void OlsrDeleteRoutingTable(rt_entry* destination);
+
+double RetrieveSourceToDestDirection(Node* node, NodeAddress na_dest);
+
+//
+BOOL CheckCachedRoute(Node *node, Message *msg, int * iInterface, NodeAddress * naNextHop);
+
+void UpdateRoouteCache(Node *node, Message *msg, int iInterface, NodeAddress naNextHop);
+
+
+Int16 ProcessRoutingTableAccordingToTC(Node* node, NodeAddress na_tc, BOOL bRemove = FALSE);
+
+double LookupSpecificHopDegreeWRTNodeFromNeighborTable(Node* node, NodeAddress specificHop);
+
+NodeAddress GetSuitableThirdPartyNodeForDirectionAdjust(Node* node, NodeAddress ExpectedNextHop, double * dDiff);
+
+//double Compute(Node* node, NodeAddress ExpectedNextHop, double * dDiff);
+destination_n* ProcessRoutingTableAccordingToConfidentCost(Node* node, UInt16 uiConfidentCost);
+void ProcessRoutingTableAccordingToSpecificRoute(Node* node, NodeAddress naRoute, destination_n** plist_destination_delete);
+
+destination_n* ProcessRoutingTableAccordingToRecentAddList(Node* node, UInt32 * puiLookupCntForAddList = NULL);
+destination_n* ProcessRoutingTableAccordingToRecentAddListV2(Node* node, UInt32 * puiLookupCntForAddList = NULL, tco_node_addr ** ptna_set = NULL, destination_n** plist_destination_delete = NULL);
+
+
+//for neighbor table add operation
+destination_n* ProcessRoutingTableAccordingToRecentAddListV42(Node* node, UInt32 * puiLookupCntForAddList = NULL);
+
+destination_n* ProcessRoutingTableAccordingToRecentAddListV43(Node* node, UInt32 * puiLookupCntForAddList = NULL);
+
+destination_n* ProcessRoutingTableAccordingToRecentAddListV44(Node* node, UInt32 * puiLookupCntForAddList = NULL);
+
+destination_n* ProcessRoutingTableAccordingToRecentAddListV45(Node* node, UInt32 * puiLookupCntForAddList = NULL);
+
+destination_n* ProcessRoutingTableAccordingToRecentAddListV46(Node* node, destination_n ** plist_destination_delete, UInt32 * puiLookupCntForAddList = NULL);
+
+
+destination_n* ProcessRoutingTableAccordingToRecentAddListMP(Node* node, UInt32 * puiLookupCntForAddList = NULL);
+
+destination_n* ProcessRoutingTableAccordingToRecentDeleteList(Node* node, BOOL * pbFurtherUpdateIsRequired);
+destination_n* ProcessRoutingTableAccordingToRecentDeleteListV2(Node* node, BOOL * pbFurtherUpdateIsRequired, UInt32 * puiLookupCntForDeleteList = NULL);
+destination_n* ProcessRoutingTableAccordingToRecentDeleteListV3(Node* node, BOOL * pbFurtherUpdateIsRequired, UInt32 * puiLookupCntForDeleteList = NULL);
+
+
+
+//allow only same cost (allow different route)
+destination_n* ProcessRoutingTableAccordingToRecentDeleteListV20(Node* node, BOOL * pbFurtherUpdateIsRequired, UInt32 * puiLookupCntForDeleteList = NULL);
+
+//allow only cost plus 1 (allow different route, but not cost plus 2)
+destination_n* ProcessRoutingTableAccordingToRecentDeleteListV21(Node* node, UInt32 * pbFurtherUpdateIsRequired, UInt32 * puiLookupCntForDeleteList = NULL);
+
+//allow cost plus 2 (allow different route, and different cost with the limit of plus 2)
+//destination_n* ProcessRoutingTableAccordingToRecentDeleteListV22(Node* node, UInt32 * pbFurtherUpdateIsRequired, UInt32 * puiLookupCntForDeleteList = NULL);
+destination_n* ProcessRoutingTableAccordingToRecentDeleteListV23(Node* node, UInt32 * pbFurtherUpdateIsRequired, UInt32 * puiLookupCntForDeleteList = NULL);
+
+destination_n* ProcessRoutingTableAccordingToRecentDeleteListV33(Node* node, BOOL * pbFurtherUpdateIsRequired, UInt32 * puiLookupCntForDeleteList = NULL);
+
+
+
+destination_n* ProcessRoutingTableAccordingToRecentDeleteListV53(Node* node, tco_node_addr ** tna_to_delete, UInt32 * puiLookupCntForDeleteList = NULL, destination_n * p_list_delete = NULL);
+ 
+
+//for neighbor table hello msg caused delete
+destination_n* ProcessRoutingTableAccordingToRecentDeleteListV43(Node* node, BOOL * pbRequireRediscovery, destination_n ** plist_destination_delete = NULL, UInt32 * puiLookupCntForDeleteList = NULL);
+
+//for the special case that hello msg caused add with bNeighborChgCausedRemoveFromHigherHop case, so the recent delete list is made use of.
+destination_n* ProcessRoutingTableAccordingToRecentDeleteListV44(Node* node, BOOL * pbRequireRediscovery, destination_n ** plist_destination_delete = NULL, UInt32 * puiLookupCntForDeleteList = NULL);
+
+
+BOOL ConnectivetyCausedBy2HopNeighbor(Node* node, Address addrExpected2Hop, NodeAddress naExpectedNeighbor);
+BOOL DisconnectivetyCausedBy2HopNeighbor(Node* node, Address addrExpected2Hop, NodeAddress naExpectedNeighbor);
+
+destination_n* ProcessRoutingTableAccordingToRecentDeleteListMP(Node* node, BOOL * pbFurtherUpdateIsRequired, UInt32 * puiLookupCntForDeleteList = NULL);
+
+
+BOOL FindRouteExchange(Node* node, rt_entry* reTBExchanged, BOOL bIncludeOldLastHop = FALSE, UInt32 * puiLookupCntForRE = NULL, BOOL bRequireSameRouter = FALSE);
+BOOL FindRouteExchangeV2(Node* node, rt_entry* reTBExchanged, BOOL bIncludeOldLastHop = FALSE, UInt32 * puiLookupCntForRE = NULL, BOOL bRequireSameRouter = FALSE, tco_node_addr ** ptna_set = NULL, BOOL * pbPossibleToFound = NULL);
+
+
+BOOL FindRouteExchangeV20(Node* node, destination_n * dTBExchanged, rt_entry* reTBExchanged, BOOL bIncludeOldLastHop = FALSE, UInt32 * puiLookupCntForRE = NULL, BOOL bRequireSameRouter = FALSE, tco_node_addr ** ptna_set = NULL, tco_node_addr ** ptna_set2 = NULL, BOOL * pbPossibleToFound = NULL);
+BOOL FindRouteExchangeV21(Node* node, destination_n * dTBExchanged, rt_entry* reTBExchanged, BOOL bIncludeOldLastHop = FALSE, rt_entry* reOldLast = NULL, UInt32 * puiLookupCntForRE = NULL, BOOL bRequireSameRouter = FALSE, tco_node_addr ** ptna_set = NULL, tco_node_addr ** ptna_set2 = NULL, tco_node_addr ** ptna_set3 = NULL, tco_node_addr ** ptna_set_fore = NULL, tco_node_addr ** ptna_set_fore2 = NULL, BOOL * pbPossibleToFound = NULL);
+BOOL FindRouteExchangeV22(Node* node, destination_n * dTBExchanged, rt_entry* reTBExchanged, BOOL bIncludeOldLastHop = FALSE, rt_entry* reOldLast = NULL, UInt32 * puiLookupCntForRE = NULL, BOOL bRequireSameRouter = FALSE, tco_node_addr ** ptna_set = NULL, tco_node_addr ** ptna_set2 = NULL, tco_node_addr ** ptna_set_fore = NULL, tco_node_addr ** ptna_set_fore2 = NULL, BOOL * pbPossibleToFound = NULL);
+
+
+
+BOOL FindLastExchange(Node* node, rt_entry* reTBExchanged, tco_node_addr ** ptna_source_set, UInt32 * puiLookupCntForRE = NULL);
+
+void DeleteListProgress(Node* node, e2_s* pe2_n, e2_s* pe2_n_1, tco_node_addr ** ptna_delete_set, destination_n** plist_destination_delete);
+
+
+static
+void OlsrCalculateRoutingTableForMultiPath(Node *node, BOOL bDisableTimeEstimate = FALSE, UInt32 * uiTotalLookupCnt = NULL);
+
+
+//rt_entry* QueryRoutingTableAccordingToNodeId(Node* node, NodeAddress na_tc, NodeAddress * pnaRoute, rthash** prhRetrieve, rt_entry** ppre);
+
+rt_entry* QueryRoutingTableAccordingToNodeId(Node* node, NodeAddress na_tc, NodeAddress * pnaRoute = NULL, rthash** prhRetrieve = NULL, rt_entry** ppre = NULL);
+
+//SYMMETRIC TOPOLOGY TABLE
+
+void PeterChaseTableChg(Node* node, char * szTextRT, BOOL bNotPartialPrint = TRUE);
+
+static
+topology_last_entry* OlsrLookupLastTopologyTableSYM(
+	Node* node,
+	Address last);
+
+
+
+static
+destination_list* OlsrinListDestTopology(
+	topology_last_entry* last_entry,
+	Address address);
+
+static
+void OlsrPrintTopologyTableSYM(Node* node);
+
+
+
+void ProcessRecurrentPlus2(Node* node, UInt16 uiStartCost, tco_node_addr ** ptco_avoid_consider_list, tco_node_addr ** ptna_delete, e2_s e2_plus_three, destination_n ** plist_avoid_consider_for_p2, destination_n ** list_destination_delete, UInt32 * puiLookupCntForDeleteList = NULL);
+
+
+void CompareRTPre(Node *node);
+void CompareRT(Node *node, int iRTAddOrDelete);
+int CmpBreakPoint(Node *node);
+void CompareRTMiddle(Node *node);
+
+void SpecialDebug(Node *node, NodeAddress naId, NodeAddress naEntryId);
+
+BOOL PreferredRouteForNew(NodeAddress naNew, NodeAddress naCurrent);
 
 #endif /* _OLSR_H_ */
